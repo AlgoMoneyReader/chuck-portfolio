@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { href: "/", label: "대시보드", icon: "◈" },
+  { href: "/", label: "홈", icon: "◈" },
   { href: "/portfolio", label: "포트폴리오", icon: "◉" },
   { href: "/analyze", label: "종목 분석", icon: "◎" },
+  { href: "/admin", label: "운영자", icon: "🔒", adminOnly: true },
 ];
 
 export default function Navbar() {
@@ -23,13 +24,18 @@ export default function Navbar() {
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const isAdmin = "adminOnly" in item && item.adminOnly;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   active
-                    ? "bg-gold/15 text-gold border border-gold/30"
+                    ? isAdmin
+                      ? "bg-gold/20 text-gold border border-gold/50"
+                      : "bg-gold/15 text-gold border border-gold/30"
+                    : isAdmin
+                    ? "text-gold/50 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20"
                     : "text-gray-400 hover:text-gray-200 hover:bg-navy-card"
                 }`}
               >

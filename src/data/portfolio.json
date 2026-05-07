@@ -8,37 +8,222 @@
   "cashUSDRia": 32886.38,
   "usdKrwRate": 1385.0,
   "marketPulse": {
-    "kospi": { "value": 7394.78, "change": 10.32, "changePct": 0.14 },
-    "kosdaq": { "value": 1206.22, "change": -3.98, "changePct": -0.33 },
-    "usdKrw": { "value": 1385.0, "change": -2.5, "changePct": -0.18 },
-    "semiWeight": { "value": 40.96, "change": 0.42 }
+    "kospi": {
+      "value": 7394.78,
+      "change": 10.32,
+      "changePct": 0.14
+    },
+    "kosdaq": {
+      "value": 1206.22,
+      "change": -3.98,
+      "changePct": -0.33
+    },
+    "usdKrw": {
+      "value": 1385.0,
+      "change": -2.5,
+      "changePct": -0.18
+    },
+    "semiWeight": {
+      "value": 40.96,
+      "change": 0.42
+    }
   },
   "domesticHoldings": [
-    { "ticker": "005930", "name": "삼성전자", "qty": 275, "avgPrice": 175572, "currentPrice": 262500, "sector": "반도체" },
-    { "ticker": "000660", "name": "SK하이닉스", "qty": 34, "avgPrice": 664654, "currentPrice": 1572000, "sector": "반도체" },
-    { "ticker": "316140", "name": "우리금융", "qty": 1300, "avgPrice": 13098, "currentPrice": 33050, "sector": "금융" },
-    { "ticker": "000720", "name": "현대건설", "qty": 170, "avgPrice": 163827, "currentPrice": 168200, "sector": "건설" },
-    { "ticker": "396270", "name": "INVENI", "qty": 1420, "avgPrice": 10443, "currentPrice": 16070, "sector": "바이오" },
-    { "ticker": "005380", "name": "현대차", "qty": 40, "avgPrice": 540400, "currentPrice": 570000, "sector": "자동차" },
-    { "ticker": "267260", "name": "HD현대일렉", "qty": 15, "avgPrice": 923600, "currentPrice": 1359000, "sector": "중공업" },
-    { "ticker": "039490", "name": "키움증권", "qty": 44, "avgPrice": 417886, "currentPrice": 457000, "sector": "금융" },
-    { "ticker": "047810", "name": "한국항공우주", "qty": 98, "avgPrice": 167961, "currentPrice": 171200, "sector": "방산" },
-    { "ticker": "105560", "name": "KB금융", "qty": 103, "avgPrice": 160805, "currentPrice": 160100, "sector": "금융" },
-    { "ticker": "240810", "name": "한미반도체", "qty": 30, "avgPrice": 303000, "currentPrice": 385000, "sector": "반도체" },
-    { "ticker": "055550", "name": "신한지주", "qty": 100, "avgPrice": 52833, "currentPrice": 98900, "sector": "금융" },
-    { "ticker": "034020", "name": "두산에너빌리티", "qty": 61, "avgPrice": 89400, "currentPrice": 135200, "sector": "에너지" },
-    { "ticker": "035420", "name": "NAVER", "qty": 4, "avgPrice": 209000, "currentPrice": 207500, "sector": "IT" }
+    {
+      "ticker": "005930",
+      "name": "삼성전자",
+      "qty": 275,
+      "avgPrice": 175572,
+      "currentPrice": 262500,
+      "sector": "반도체"
+    },
+    {
+      "ticker": "000660",
+      "name": "SK하이닉스",
+      "qty": 34,
+      "avgPrice": 664654,
+      "currentPrice": 1572000,
+      "sector": "반도체"
+    },
+    {
+      "ticker": "316140",
+      "name": "우리금융",
+      "qty": 1300,
+      "avgPrice": 13098,
+      "currentPrice": 33050,
+      "sector": "금융"
+    },
+    {
+      "ticker": "000720",
+      "name": "현대건설",
+      "qty": 170,
+      "avgPrice": 163827,
+      "currentPrice": 168200,
+      "sector": "건설"
+    },
+    {
+      "ticker": "396270",
+      "name": "INVENI",
+      "qty": 1420,
+      "avgPrice": 10443,
+      "currentPrice": 16070,
+      "sector": "바이오"
+    },
+    {
+      "ticker": "005380",
+      "name": "현대차",
+      "qty": 40,
+      "avgPrice": 540400,
+      "currentPrice": 570000,
+      "sector": "자동차"
+    },
+    {
+      "ticker": "267260",
+      "name": "HD현대일렉",
+      "qty": 15,
+      "avgPrice": 923600,
+      "currentPrice": 1359000,
+      "sector": "중공업"
+    },
+    {
+      "ticker": "039490",
+      "name": "키움증권",
+      "qty": 44,
+      "avgPrice": 417886,
+      "currentPrice": 457000,
+      "sector": "금융"
+    },
+    {
+      "ticker": "047810",
+      "name": "한국항공우주",
+      "qty": 98,
+      "avgPrice": 167961,
+      "currentPrice": 171200,
+      "sector": "방산"
+    },
+    {
+      "ticker": "105560",
+      "name": "KB금융",
+      "qty": 103,
+      "avgPrice": 160805,
+      "currentPrice": 160100,
+      "sector": "금융"
+    },
+    {
+      "ticker": "240810",
+      "name": "한미반도체",
+      "qty": 30,
+      "avgPrice": 303000,
+      "currentPrice": 385000,
+      "sector": "반도체"
+    },
+    {
+      "ticker": "055550",
+      "name": "신한지주",
+      "qty": 100,
+      "avgPrice": 52833,
+      "currentPrice": 98900,
+      "sector": "금융"
+    },
+    {
+      "ticker": "034020",
+      "name": "두산에너빌리티",
+      "qty": 61,
+      "avgPrice": 89400,
+      "currentPrice": 135200,
+      "sector": "에너지"
+    },
+    {
+      "ticker": "035420",
+      "name": "NAVER",
+      "qty": 4,
+      "avgPrice": 209000,
+      "currentPrice": 207500,
+      "sector": "IT"
+    }
   ],
   "overseasHoldings": [
-    { "ticker": "GOOGL", "name": "알파벳A", "qty": 77, "avgPrice": 311.40, "currentPrice": 397.52, "currency": "USD", "sector": "빅테크" },
-    { "ticker": "T", "name": "AT&T", "qty": 696, "avgPrice": 20.26, "currentPrice": 25.66, "currency": "USD", "sector": "통신" },
-    { "ticker": "SCHD", "name": "SCHD", "qty": 299, "avgPrice": 26.77, "currentPrice": 31.67, "currency": "USD", "sector": "배당ETF" },
-    { "ticker": "SPY", "name": "SPY", "qty": 9, "avgPrice": 684.97, "currentPrice": 733.70, "currency": "USD", "sector": "지수ETF" },
-    { "ticker": "MU", "name": "마이크론", "qty": 9, "avgPrice": 404.88, "currentPrice": 655.67, "currency": "USD", "sector": "반도체" },
-    { "ticker": "NVDA", "name": "엔비디아", "qty": 23, "avgPrice": 184.95, "currentPrice": 207.00, "currency": "USD", "sector": "반도체" },
-    { "ticker": "QQQM", "name": "QQQM", "qty": 13, "avgPrice": 251.82, "currentPrice": 285.94, "currency": "USD", "sector": "지수ETF" },
-    { "ticker": "VOO", "name": "VOO", "qty": 3, "avgPrice": 627.46, "currentPrice": 674.55, "currency": "USD", "sector": "지수ETF" },
-    { "ticker": "QLD", "name": "QLD", "qty": 20, "avgPrice": 69.61, "currentPrice": 87.58, "currency": "USD", "sector": "레버리지ETF" }
+    {
+      "ticker": "GOOGL",
+      "name": "알파벳A",
+      "qty": 77,
+      "avgPrice": 311.4,
+      "currentPrice": 397.52,
+      "currency": "USD",
+      "sector": "빅테크"
+    },
+    {
+      "ticker": "T",
+      "name": "AT&T",
+      "qty": 696,
+      "avgPrice": 20.26,
+      "currentPrice": 25.66,
+      "currency": "USD",
+      "sector": "통신"
+    },
+    {
+      "ticker": "SCHD",
+      "name": "SCHD",
+      "qty": 299,
+      "avgPrice": 26.77,
+      "currentPrice": 31.67,
+      "currency": "USD",
+      "sector": "배당ETF"
+    },
+    {
+      "ticker": "SPY",
+      "name": "SPY",
+      "qty": 9,
+      "avgPrice": 684.97,
+      "currentPrice": 733.7,
+      "currency": "USD",
+      "sector": "지수ETF"
+    },
+    {
+      "ticker": "MU",
+      "name": "마이크론",
+      "qty": 9,
+      "avgPrice": 404.88,
+      "currentPrice": 655.67,
+      "currency": "USD",
+      "sector": "반도체"
+    },
+    {
+      "ticker": "NVDA",
+      "name": "엔비디아",
+      "qty": 23,
+      "avgPrice": 184.95,
+      "currentPrice": 207.0,
+      "currency": "USD",
+      "sector": "반도체"
+    },
+    {
+      "ticker": "QQQM",
+      "name": "QQQM",
+      "qty": 13,
+      "avgPrice": 251.82,
+      "currentPrice": 285.94,
+      "currency": "USD",
+      "sector": "지수ETF"
+    },
+    {
+      "ticker": "VOO",
+      "name": "VOO",
+      "qty": 3,
+      "avgPrice": 627.46,
+      "currentPrice": 674.55,
+      "currency": "USD",
+      "sector": "지수ETF"
+    },
+    {
+      "ticker": "QLD",
+      "name": "QLD",
+      "qty": 20,
+      "avgPrice": 69.61,
+      "currentPrice": 87.58,
+      "currency": "USD",
+      "sector": "레버리지ETF"
+    }
   ],
   "milestones": [
     {
@@ -193,34 +378,101 @@
     }
   ],
   "riaStrategy": {
-    "currentRiaUSD": 32886.38,
-    "targetReinvestUSD": 25000,
+    "currentRiaKRW": 47750000,
+    "note": "해외주식(JEPI/JEPQ) 매도 자금 → 국내주식 재투자 (1년 락업, 양도세 면제)",
     "conservative": {
-      "label": "안정형 (연 6~8% 목표)",
+      "label": "안정형 — 배당+인덱스 중심 (연 8~12% 목표)",
       "allocations": [
-        { "name": "SCHD 추가매수", "ticker": "SCHD", "pct": 40, "color": "#1D9E75" },
-        { "name": "VOO 적립", "ticker": "VOO", "pct": 30, "color": "#4A90E2" },
-        { "name": "AT&T 유지", "ticker": "T", "pct": 20, "color": "#00C8C8" },
-        { "name": "현금 유지", "ticker": "CASH", "pct": 10, "color": "#C8A840" }
+        {
+          "name": "삼성전자",
+          "ticker": "005930",
+          "pct": 35,
+          "currentPrice": 271500,
+          "color": "#1D9E75",
+          "shares": 61,
+          "amount": 16552500
+        },
+        {
+          "name": "신한지주",
+          "ticker": "055550",
+          "pct": 30,
+          "currentPrice": 98900,
+          "color": "#4A90E2",
+          "shares": 144,
+          "amount": 14235000
+        },
+        {
+          "name": "KODEX 200",
+          "ticker": "069500",
+          "pct": 25,
+          "currentPrice": 115620,
+          "color": "#00C8C8",
+          "shares": 103,
+          "amount": 11908860
+        },
+        {
+          "name": "두산에너빌리티",
+          "ticker": "034020",
+          "pct": 10,
+          "currentPrice": 136400,
+          "color": "#C8A840",
+          "shares": 35,
+          "amount": 4774000
+        }
       ]
     },
     "aggressive": {
-      "label": "공격형 (연 15%+ 목표)",
+      "label": "공격형 — 반도체+방산 집중 (연 20%+ 목표)",
       "allocations": [
-        { "name": "NVDA 추가매수", "ticker": "NVDA", "pct": 35, "color": "#76B900" },
-        { "name": "QQQM 적립", "ticker": "QQQM", "pct": 25, "color": "#4A90E2" },
-        { "name": "QLD 유지", "ticker": "QLD", "pct": 25, "color": "#EF9F27" },
-        { "name": "GOOGL 추가", "ticker": "GOOGL", "pct": 15, "color": "#00C8C8" }
+        {
+          "name": "SK하이닉스",
+          "ticker": "000660",
+          "pct": 40,
+          "currentPrice": 1648000,
+          "color": "#EF9F27",
+          "shares": 11,
+          "amount": 18128000
+        },
+        {
+          "name": "한미반도체",
+          "ticker": "042700",
+          "pct": 30,
+          "currentPrice": 393000,
+          "color": "#76B900",
+          "shares": 36,
+          "amount": 14148000
+        },
+        {
+          "name": "두산에너빌리티",
+          "ticker": "034020",
+          "pct": 30,
+          "currentPrice": 136400,
+          "color": "#00C8C8",
+          "shares": 105,
+          "amount": 14322000
+        }
       ]
     }
   },
   "finalVerdict": {
     "summary": "7월 자납까지 D-69일. 현금 6400만 + SK하이닉스·우리금융 매도로 1.5억 확보 가능. 코어 자산은 유지하며 현금흐름 최적화.",
     "badges": [
-      { "label": "5/11 준비완료", "color": "green" },
-      { "label": "7월 전략 필요", "color": "amber" },
-      { "label": "반도체 비중 ↑", "color": "cyan" },
-      { "label": "총수익 +40%", "color": "gold" }
+      {
+        "label": "5/11 준비완료",
+        "color": "green"
+      },
+      {
+        "label": "7월 전략 필요",
+        "color": "amber"
+      },
+      {
+        "label": "반도체 비중 ↑",
+        "color": "cyan"
+      },
+      {
+        "label": "총수익 +40%",
+        "color": "gold"
+      }
     ]
   }
 }

@@ -58,17 +58,21 @@ export interface SellCandidate {
   reason: string;
 }
 
+export interface RiaAllocation {
+  name: string;
+  ticker: string;
+  pct: number;
+  currentPrice: number;
+  color: string;
+  shares: number;
+  amount: number;
+}
+
 export interface RiaStrategy {
-  conservative: {
-    label: string;
-    allocations: { name: string; ticker: string; pct: number; color: string }[];
-  };
-  aggressive: {
-    label: string;
-    allocations: { name: string; ticker: string; pct: number; color: string }[];
-  };
-  currentRiaUSD: number;
-  targetReinvestUSD: number;
+  currentRiaKRW: number;
+  note: string;
+  conservative: { label: string; allocations: RiaAllocation[] };
+  aggressive: { label: string; allocations: RiaAllocation[] };
 }
 
 export interface PortfolioData {
