@@ -5,7 +5,8 @@
       "Bash(rm -rf /Users/1111857/projects/chuck-portfolio/node_modules)",
       "Bash(npm install *)",
       "Bash(npm run *)",
-      "Bash(curl -s http://localhost:3001)"
+      "Bash(curl -s http://localhost:3001)",
+      "Bash(gh repo *)"
     ]
   }
 }
