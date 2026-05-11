@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { KR_NAMES as _KR_NAMES } from "@/lib/stockList";
 
-// 한국어 종목명 매핑
+// 한국어 종목명 매핑 (lib/stockList.ts와 동기화)
 const KR_NAMES: Record<string, string> = {
   "005930.KS": "삼성전자", "000660.KS": "SK하이닉스", "005380.KS": "현대차",
   "035420.KS": "NAVER", "051910.KS": "LG화학", "207940.KS": "삼성바이오로직스",

@@ -8,6 +8,7 @@ import RiaStrategy from "@/components/RiaStrategy";
 import FinalVerdict from "@/components/FinalVerdict";
 import LiveMarketPulse from "@/components/LiveMarketPulse";
 import AdminLogout from "@/components/AdminLogout";
+import DeadlineCountdown from "@/components/DeadlineCountdown";
 
 const data = portfolioData as unknown as PortfolioData;
 
@@ -26,6 +27,7 @@ export default function AdminPage() {
       </div>
 
       <LiveMarketPulse />
+      <DeadlineCountdown />
       <PortfolioStatus data={data} />
       <HoldingsHeatmap domestic={data.domesticHoldings} overseas={data.overseasHoldings} />
       <ActionPlan actions={data.actions} />

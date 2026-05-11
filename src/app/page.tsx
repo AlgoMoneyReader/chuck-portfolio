@@ -1,5 +1,6 @@
 import LiveMarketPulse from "@/components/LiveMarketPulse";
 import MarketSummary from "@/components/MarketSummary";
+import FearGreedGauge from "@/components/FearGreedGauge";
 import Link from "next/link";
 
 const FEATURES = [
@@ -29,6 +30,9 @@ export default function Home() {
 
       {/* 실시간 시장 */}
       <LiveMarketPulse />
+
+      {/* 공포·탐욕 지수 */}
+      <FearGreedGauge />
 
       {/* 국내 시장 동향 */}
       <MarketSummary />
