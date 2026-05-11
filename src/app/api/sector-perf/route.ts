@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { KOSPI_SYMBOLS, KOSDAQ_SYMBOLS, SECTOR_MAP, koreanName } from "@/lib/stockList";
+import { SECTOR_STOCKS } from "@/lib/sectorStocks";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +19,10 @@ interface SectorResult {
   }[];
 }
 
-async function fetchChangePct(symbol: string): Promise<{
+async function fetchChangePct(symbol: string, name: string): Promise<{
   symbol: string;
-  changePct: number;
   name: string;
+  changePct: number;
   price: number;
   volume: number;
 } | null> {
@@ -43,7 +43,7 @@ async function fetchChangePct(symbol: string): Promise<{
 
     return {
       symbol,
-      name: koreanName(symbol),
+      name,
       changePct: parseFloat(((price - prev) / prev * 100).toFixed(2)),
       price: price as number,
       volume: (meta.regularMarketVolume as number) ?? 0,
@@ -53,54 +53,74 @@ async function fetchChangePct(symbol: string): Promise<{
   }
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const market = searchParams.get("market") ?? "KOSPI";
-  const symbols = market === "KOSDAQ" ? KOSDAQ_SYMBOLS : KOSPI_SYMBOLS;
-
+export async function GET() {
   try {
-    const results = await Promise.all(symbols.map(fetchChangePct));
-    const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
-
-    // 섹터별 그룹핑
-    type StockEntry = {
-      name: string;
-      code: string;
-      market: "KS" | "KQ";
-      changePct: number;
-      price: number;
-      volume: number;
-    };
-    const sectorMap: Record<string, StockEntry[]> = {};
-    for (const r of valid) {
-      const sector = SECTOR_MAP[r.symbol] ?? "기타";
-      if (!sectorMap[sector]) sectorMap[sector] = [];
-      // Extract code and market from symbol (e.g. "005930.KS" → code="005930", market="KS")
-      const dotIdx = r.symbol.lastIndexOf(".");
-      const code = dotIdx >= 0 ? r.symbol.slice(0, dotIdx) : r.symbol;
-      const suffix = dotIdx >= 0 ? r.symbol.slice(dotIdx + 1) : "KS";
-      const market: "KS" | "KQ" = suffix === "KQ" ? "KQ" : "KS";
-      sectorMap[sector].push({ name: r.name, code, market, changePct: r.changePct, price: r.price, volume: r.volume });
+    // 1. SECTOR_STOCKS에서 유니크 심볼 수집 (name 정보 포함)
+    const symMap = new Map<string, string>(); // symbol → name
+    for (const stocks of Object.values(SECTOR_STOCKS)) {
+      for (const s of stocks) {
+        if (!symMap.has(s.sym)) symMap.set(s.sym, s.name);
+      }
     }
 
+    const allSymbols = Array.from(symMap.entries()); // [symbol, name][]
+
+    // 2. 15개씩 배치로 Yahoo Finance 조회
+    const BATCH = 15;
+    const dataMap = new Map<string, { changePct: number; price: number; volume: number }>();
+
+    for (let i = 0; i < allSymbols.length; i += BATCH) {
+      const batch = allSymbols.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(([sym, name]) => fetchChangePct(sym, name))
+      );
+      for (const r of results) {
+        if (r) {
+          dataMap.set(r.symbol, { changePct: r.changePct, price: r.price, volume: r.volume });
+        }
+      }
+      if (i + BATCH < allSymbols.length) {
+        await new Promise((r) => setTimeout(r, 60));
+      }
+    }
+
+    // 3. SECTOR_STOCKS 기반으로 섹터별 결과 구성
     const sectors: SectorResult[] = [];
-    for (const sector of Object.keys(sectorMap)) {
-      const stocks = sectorMap[sector];
-      if (!stocks || stocks.length === 0) continue;
-      const avg = stocks.reduce((s: number, r: StockEntry) => s + r.changePct, 0) / stocks.length;
-      const top = stocks.reduce((a: StockEntry, b: StockEntry) => a.changePct > b.changePct ? a : b);
+
+    for (const [sector, stockDefs] of Object.entries(SECTOR_STOCKS)) {
+      type StockEntry = {
+        name: string; code: string; market: "KS" | "KQ";
+        changePct: number; price: number; volume: number;
+      };
+
+      const stocks: StockEntry[] = [];
+      for (const def of stockDefs) {
+        const d = dataMap.get(def.sym);
+        if (!d) continue;
+        const dotIdx = def.sym.lastIndexOf(".");
+        const code = dotIdx >= 0 ? def.sym.slice(0, dotIdx) : def.sym;
+        const suffix = dotIdx >= 0 ? def.sym.slice(dotIdx + 1) : "KS";
+        const market: "KS" | "KQ" = suffix === "KQ" ? "KQ" : "KS";
+        stocks.push({ name: def.name, code, market, changePct: d.changePct, price: d.price, volume: d.volume });
+      }
+
+      if (stocks.length === 0) continue;
+
+      const avg = stocks.reduce((s, r) => s + r.changePct, 0) / stocks.length;
+      const top = stocks.reduce((a, b) => a.changePct > b.changePct ? a : b);
+
       sectors.push({
         sector,
         avgChangePct: parseFloat(avg.toFixed(2)),
         stockCount: stocks.length,
         topStock: top.name,
         topChangePct: top.changePct,
-        stocks: [...stocks].sort((a: StockEntry, b: StockEntry) => b.changePct - a.changePct),
+        stocks: [...stocks].sort((a, b) => b.changePct - a.changePct),
       });
     }
 
     sectors.sort((a, b) => b.avgChangePct - a.avgChangePct);
-    return NextResponse.json({ market, sectors, timestamp: new Date().toISOString() });
+    return NextResponse.json({ sectors, timestamp: new Date().toISOString() });
   } catch {
     return NextResponse.json({ error: "섹터 데이터를 불러올 수 없습니다" }, { status: 500 });
   }
