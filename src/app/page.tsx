@@ -1,4 +1,5 @@
 import LiveMarketPulse from "@/components/LiveMarketPulse";
+import MarketSummary from "@/components/MarketSummary";
 import Link from "next/link";
 
 const FEATURES = [
@@ -28,6 +29,9 @@ export default function Home() {
 
       {/* 실시간 시장 */}
       <LiveMarketPulse />
+
+      {/* 국내 시장 동향 */}
+      <MarketSummary />
 
       {/* 히어로 */}
       <div className="text-center space-y-3 py-4">
