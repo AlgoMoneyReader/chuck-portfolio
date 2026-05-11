@@ -81,7 +81,7 @@ export const SECTOR_STOCKS: Record<string, SectorStockDef[]> = {
     { sym: "035900.KQ", name: "JYP엔터" },
     { sym: "122870.KQ", name: "와이지엔터" },
     { sym: "376300.KQ", name: "디어유" },
-    { sym: "035760.KS", name: "CJ ENM" },
+    { sym: "035760.KQ", name: "CJ ENM" },
     { sym: "067160.KQ", name: "아프리카TV" },
   ],
   "금융": [
@@ -137,6 +137,7 @@ export const SECTOR_STOCKS: Record<string, SectorStockDef[]> = {
     { sym: "030200.KS", name: "KT" },
     { sym: "032640.KS", name: "LG유플러스" },
     { sym: "034730.KS", name: "SK스퀘어" },
+    { sym: "010170.KQ", name: "대한광통신" },
     { sym: "030750.KS", name: "KT서브마린" },
   ],
   "지주": [
