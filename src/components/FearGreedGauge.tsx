@@ -81,7 +81,6 @@ function GaugeSVG({ score }: { score: number }) {
       {/* 현재 점수까지 채우기 */}
       {score > 0 && (() => {
         const a1 = ((-180) * Math.PI) / 180;
-        const a2 = rad;
         const x1 = cx + radius * Math.cos(a1);
         const y1 = cy + radius * Math.sin(a1);
         const large = score > 50 ? 1 : 0;

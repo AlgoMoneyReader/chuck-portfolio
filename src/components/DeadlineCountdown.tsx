@@ -32,10 +32,10 @@ function urgencyStyle(days: number): { bar: string; badge: string; text: string 
 }
 
 export default function DeadlineCountdown() {
-  const [now, setNow] = useState(Date.now());
+  const [, setTick] = useState(0);
 
   useEffect(() => {
-    const i = setInterval(() => setNow(Date.now()), 60_000);
+    const i = setInterval(() => setTick(t => t + 1), 60_000);
     return () => clearInterval(i);
   }, []);
 
