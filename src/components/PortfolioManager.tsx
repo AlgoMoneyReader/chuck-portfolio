@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
+} from "recharts";
 
 interface Holding {
   id?: string;
@@ -17,6 +20,31 @@ interface Holding {
   profitLossPct?: number;
   evalAmount?: number;
 }
+
+interface DiagnosisResult {
+  score: number;
+  grade: string;
+  factors: {
+    supply: number;   // 0-40
+    momentum: number; // 0-30
+    volume: number;   // 0-15
+    week52: number;   // 0-15
+  };
+  stockScores: Array<{
+    code: string; name: string; score: number; grade: string; weight: number;
+  }>;
+  sectorWeights: Array<{ sector: string; weight: number; avgChangePct: number }>;
+  comment: string[];
+  analyzedCount: number;
+}
+
+const gradeConfig: Record<string, { color: string; cls: string }> = {
+  S: { color: "#f59e0b", cls: "bg-amber-500/20 text-amber-400 border border-amber-500/40" },
+  A: { color: "#22c55e", cls: "bg-green-500/20 text-green-400 border border-green-500/40" },
+  B: { color: "#06b6d4", cls: "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40" },
+  C: { color: "#f97316", cls: "bg-orange-500/20 text-orange-400 border border-orange-500/40" },
+  D: { color: "#ef4444", cls: "bg-red-500/20 text-red-400 border border-red-500/40" },
+};
 
 const SECTORS = ["반도체", "AI·테크", "금융", "바이오", "방산", "에너지", "통신", "건설", "자동차", "ETF", "기타"];
 const STORAGE_KEY = "alilnam_portfolio";
@@ -46,6 +74,9 @@ export default function PortfolioManager() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Holding | null>(null);
   const [loading, setLoading] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [diagnosisOpen, setDiagnosisOpen] = useState(false);
 
   const [form, setForm] = useState<Omit<Holding, "id">>({
     ticker: "",
@@ -144,11 +175,49 @@ export default function PortfolioManager() {
     saveToStorage(updated);
   }
 
+  async function runDiagnosis() {
+    if (holdings.length === 0) return;
+    setDiagnosing(true);
+    setDiagnosisOpen(false);
+    try {
+      const payload = holdings.map(h => ({
+        ticker: h.ticker,
+        name: h.name,
+        evalAmount: h.evalAmount ?? h.qty * h.avg_price,
+        sector: h.sector,
+        changePct: h.changePct,
+      }));
+      const res = await fetch("/api/portfolio-diagnosis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ holdings: payload }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setDiagnosis(data);
+      setDiagnosisOpen(true);
+    } catch {
+      alert("진단 중 오류가 발생했습니다.");
+    } finally {
+      setDiagnosing(false);
+    }
+  }
+
   // Summary
   const totalEval = holdings.reduce((s, h) => s + (h.evalAmount ?? h.qty * h.avg_price), 0);
   const totalCost = holdings.reduce((s, h) => s + h.qty * h.avg_price, 0);
   const totalPL = totalEval - totalCost;
   const totalPLPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+  // Radar chart data — normalize each factor to 0-100 for display
+  const radarData = diagnosis ? [
+    { label: "수급강도", value: parseFloat(((diagnosis.factors.supply / 40) * 100).toFixed(1)), fullMark: 100 },
+    { label: "가격모멘텀", value: parseFloat(((diagnosis.factors.momentum / 30) * 100).toFixed(1)), fullMark: 100 },
+    { label: "거래량", value: parseFloat(((diagnosis.factors.volume / 15) * 100).toFixed(1)), fullMark: 100 },
+    { label: "52주위치", value: parseFloat(((diagnosis.factors.week52 / 15) * 100).toFixed(1)), fullMark: 100 },
+  ] : [];
+
+  const gc = diagnosis ? gradeConfig[diagnosis.grade] : null;
 
   return (
     <div className="space-y-4">
@@ -176,6 +245,13 @@ export default function PortfolioManager() {
           <button onClick={loadAndRefresh} disabled={loading}
             className="px-3 py-1.5 text-xs text-gray-400 border border-navy-border rounded-lg hover:border-cyan-brand hover:text-cyan-brand transition-all">
             {loading ? "갱신 중..." : "↻ 새로고침"}
+          </button>
+          <button
+            onClick={runDiagnosis}
+            disabled={diagnosing || holdings.length === 0}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 hover:bg-cyan-brand/30 disabled:opacity-40"
+          >
+            {diagnosing ? "진단 중..." : "🔍 알읽남 계좌 진단"}
           </button>
           <button onClick={openAdd}
             className="px-3 py-1.5 text-xs font-medium text-navy bg-gold rounded-lg hover:bg-gold-light transition-all">
@@ -247,6 +323,86 @@ export default function PortfolioManager() {
           </tbody>
         </table>
       </div>
+
+      {/* 알읽남 계좌 진단 패널 — 아코디언 */}
+      {diagnosis && gc && (
+        <div className={`transition-all duration-500 overflow-hidden ${diagnosisOpen ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"}`}>
+          <div className="card border-cyan-brand/30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                🔍 알읽남 계좌 진단 결과
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${gc.cls}`}>
+                  {diagnosis.grade}등급
+                </span>
+              </h3>
+              <span className="text-lg font-bold num" style={{ color: gc.color }}>
+                {diagnosis.score}점
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left: Radar Chart */}
+              <div>
+                <p className="text-xs text-gray-500 mb-2">4대 지표 밸런스</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="#1A2D42" />
+                    <PolarAngleAxis dataKey="label" tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: "#4B5563", fontSize: 9 }} />
+                    <Radar
+                      name="포트폴리오"
+                      dataKey="value"
+                      stroke={gc.color}
+                      fill={gc.color}
+                      fillOpacity={0.25}
+                      strokeWidth={2}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Right: Sector analysis + comment */}
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500">섹터 비중 분석</p>
+                <div className="space-y-2">
+                  {diagnosis.sectorWeights.slice(0, 5).map(s => (
+                    <div key={s.sector}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="text-gray-300">{s.sector}</span>
+                        <span className="text-gray-400 num">
+                          {s.weight}%
+                          <span className={`ml-2 ${s.avgChangePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+                            {s.avgChangePct >= 0 ? "+" : ""}{s.avgChangePct}%
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-navy-border rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(s.weight, 100)}%`,
+                            backgroundColor: s.avgChangePct >= 0 ? "#22c55e" : "#ef4444",
+                            opacity: 0.7,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 3-line comment */}
+                <div className="space-y-1.5 pt-2 border-t border-navy-border/40">
+                  {diagnosis.comment.map((line, i) => (
+                    <p key={i} className="text-xs text-gray-300 leading-relaxed">{line}</p>
+                  ))}
+                </div>
+
+                <p className="text-xs text-gray-600">분석 종목: {diagnosis.analyzedCount}개</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showForm && (

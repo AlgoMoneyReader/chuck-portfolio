@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+const ChartModal = lazy(() => import("./ChartModal"));
 
 interface IndexData {
   price: number;
@@ -22,16 +23,24 @@ interface MarketData {
   timestamp: string;
 }
 
+// Labels that the chart modal supports
+const CHART_LABELS = new Set([
+  "KOSPI", "KOSDAQ", "S&P 500", "NASDAQ",
+  "S&P500 선물", "나스닥 선물", "금", "WTI 원유", "USD/KRW",
+]);
+
 function IndexCard({
   label,
   data,
   format = "number",
   unit,
+  onSelect,
 }: {
   label: string;
   data: IndexData | null;
   format?: "number" | "currency" | "usd";
   unit?: string;
+  onSelect: (label: string) => void;
 }) {
   if (!data) {
     return (
@@ -54,18 +63,30 @@ function IndexCard({
     return p.toFixed(2);
   };
 
+  const hasChart = CHART_LABELS.has(label);
+
   return (
-    <div className="card flex flex-col gap-1">
-      <p className="card-title">{label}</p>
-      <p className="num text-xl font-bold text-white">
+    <button
+      onClick={() => hasChart && onSelect(label)}
+      className={`card flex flex-col gap-1 text-left transition-all
+        ${hasChart ? "cursor-pointer hover:border-cyan-brand/40 hover:bg-navy-card/80 active:scale-[0.98]" : ""}`}
+    >
+      <div className="flex items-center justify-between">
+        <p className="card-title mb-0">{label}</p>
+        {hasChart && <span className="text-gray-600 text-xs opacity-60">📈</span>}
+      </div>
+      <p className="num text-xl font-bold text-white mt-1">
         {formatPrice(data.price)}{unit && <span className="text-xs text-gray-500 ml-1">{unit}</span>}
       </p>
       <div className="flex items-center gap-2">
         <span className={`num text-sm font-medium ${colorClass}`}>
           {arrow} {Math.abs(data.changePct).toFixed(2)}%
         </span>
+        {data.marketState === "REGULAR" && (
+          <span className="text-signal-green text-xs">● 장중</span>
+        )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -75,12 +96,14 @@ function SmallCard({
   format = "usd",
   unit,
   emoji,
+  onSelect,
 }: {
   label: string;
   data: IndexData | null;
   format?: "number" | "usd";
   unit?: string;
   emoji?: string;
+  onSelect: (label: string) => void;
 }) {
   if (!data) {
     return (
@@ -100,11 +123,20 @@ function SmallCard({
     return p.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
   };
 
+  const hasChart = CHART_LABELS.has(label);
+
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-navy-card/40 rounded-lg border border-navy-border/30">
+    <button
+      onClick={() => hasChart && onSelect(label)}
+      className={`w-full flex items-center justify-between py-2 px-3
+        bg-navy-card/40 rounded-lg border border-navy-border/30 text-left
+        transition-all
+        ${hasChart ? "cursor-pointer hover:border-cyan-brand/30 hover:bg-navy-card/60 active:scale-[0.98]" : ""}`}
+    >
       <div className="flex items-center gap-1.5">
         {emoji && <span className="text-sm">{emoji}</span>}
         <span className="text-xs text-gray-400">{label}</span>
+        {hasChart && <span className="text-gray-600 text-xs opacity-50">↗</span>}
       </div>
       <div className="flex items-center gap-2">
         <span className="num text-xs text-gray-300">
@@ -114,7 +146,7 @@ function SmallCard({
           {arrow}{Math.abs(data.changePct).toFixed(2)}%
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -122,6 +154,7 @@ export default function LiveMarketPulse() {
   const [data, setData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [chart, setChart] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -139,43 +172,71 @@ export default function LiveMarketPulse() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 60_000);
-    return () => clearInterval(interval);
+    // 장중(KST 09:00~15:30) 15초, 장외 60초 폴링
+    function getInterval() {
+      const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+      const day  = kst.getUTCDay();
+      const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+      const open = day >= 1 && day <= 5 && mins >= 540 && mins < 930;
+      return open ? 15_000 : 60_000;
+    }
+    let interval = setInterval(fetchData, getInterval());
+    // 1분마다 인터벌 재계산 (장 개폐 전환 대응)
+    const reschedule = setInterval(() => {
+      clearInterval(interval);
+      interval = setInterval(fetchData, getInterval());
+    }, 60_000);
+    return () => { clearInterval(interval); clearInterval(reschedule); };
   }, [fetchData]);
 
   return (
-    <section className="space-y-3">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">실시간 시장 현황</h2>
-        {lastUpdated && (
-          <span className="text-xs text-gray-600">
-            {loading ? "갱신 중..." : `${lastUpdated} 기준`}
-          </span>
-        )}
-      </div>
+    <>
+      <section className="space-y-3">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">실시간 시장 현황</h2>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-600 hidden sm:block">클릭하면 차트 보기</span>
+            {lastUpdated && (
+              <span className="text-xs text-gray-600">
+                {loading ? "갱신 중..." : `${lastUpdated} 기준`}
+              </span>
+            )}
+          </div>
+        </div>
 
-      {/* 국내·미국 지수 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <IndexCard label="KOSPI"   data={data?.kospi ?? null} />
-        <IndexCard label="KOSDAQ"  data={data?.kosdaq ?? null} />
-        <IndexCard label="S&P 500" data={data?.sp500 ?? null} />
-        <IndexCard label="NASDAQ"  data={data?.nasdaq ?? null} />
-      </div>
+        {/* 국내·미국 지수 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <IndexCard label="KOSPI"   data={data?.kospi  ?? null} onSelect={setChart} />
+          <IndexCard label="KOSDAQ"  data={data?.kosdaq ?? null} onSelect={setChart} />
+          <IndexCard label="S&P 500" data={data?.sp500  ?? null} onSelect={setChart} />
+          <IndexCard label="NASDAQ"  data={data?.nasdaq ?? null} onSelect={setChart} />
+        </div>
 
-      {/* 선물·원자재·환율 (컴팩트 행) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <SmallCard label="S&P500 선물" data={data?.esFut ?? null}  emoji="📈" />
-        <SmallCard label="나스닥 선물" data={data?.nqFut ?? null}  emoji="📊" />
-        <SmallCard label="금"          data={data?.gold ?? null}   emoji="🥇" unit="/oz" />
-        <SmallCard label="WTI 원유"    data={data?.oil ?? null}    emoji="🛢" unit="/bbl" />
-      </div>
+        {/* 선물·원자재 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <SmallCard label="S&P500 선물" data={data?.esFut ?? null} emoji="📈" onSelect={setChart} />
+          <SmallCard label="나스닥 선물" data={data?.nqFut ?? null} emoji="📊" onSelect={setChart} />
+          <SmallCard label="금"          data={data?.gold  ?? null} emoji="🥇" unit="/oz" onSelect={setChart} />
+          <SmallCard label="WTI 원유"    data={data?.oil   ?? null} emoji="🛢" unit="/bbl" onSelect={setChart} />
+        </div>
 
-      {/* 환율 */}
-      <div className="grid grid-cols-1 gap-2">
-        <SmallCard label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱"
-          format="number" unit="원" />
-      </div>
-    </section>
+        {/* 환율 */}
+        <div className="grid grid-cols-1 gap-2">
+          <SmallCard label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱"
+            format="number" unit="원" onSelect={setChart} />
+        </div>
+      </section>
+
+      {/* 차트 모달 */}
+      {chart && (
+        <Suspense fallback={null}>
+          <ChartModal
+            label={chart}
+            onClose={() => setChart(null)}
+          />
+        </Suspense>
+      )}
+    </>
   );
 }

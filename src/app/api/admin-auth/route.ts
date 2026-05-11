@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 const SESSION_COOKIE = "admin_session";
 const MAX_AGE = 60 * 60 * 8; // 8시간
@@ -20,8 +19,8 @@ export async function POST(request: Request) {
     // 간단한 세션 토큰 (실제 서비스라면 JWT 사용 권장)
     const token = Buffer.from(`chuck-admin:${Date.now()}`).toString("base64");
 
-    const cookieStore = await cookies();
-    cookieStore.set(SESSION_COOKIE, token, {
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -29,14 +28,18 @@ export async function POST(request: Request) {
       path: "/",
     });
 
-    return NextResponse.json({ ok: true });
+    return response;
   } catch {
     return NextResponse.json({ error: "요청 처리 오류" }, { status: 400 });
   }
 }
 
 export async function DELETE() {
-  const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE);
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    maxAge: 0,
+    path: "/",
+  });
+  return response;
 }

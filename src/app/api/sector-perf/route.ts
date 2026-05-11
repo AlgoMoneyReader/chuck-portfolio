@@ -1,21 +1,36 @@
 import { NextResponse } from "next/server";
 import { KOSPI_SYMBOLS, KOSDAQ_SYMBOLS, SECTOR_MAP, koreanName } from "@/lib/stockList";
 
+export const dynamic = "force-dynamic";
+
 interface SectorResult {
   sector: string;
   avgChangePct: number;
   stockCount: number;
   topStock: string;
   topChangePct: number;
-  stocks: { name: string; changePct: number }[];
+  stocks: {
+    name: string;
+    code: string;
+    market: "KS" | "KQ";
+    changePct: number;
+    price: number;
+    volume: number;
+  }[];
 }
 
-async function fetchChangePct(symbol: string): Promise<{ symbol: string; changePct: number; name: string } | null> {
+async function fetchChangePct(symbol: string): Promise<{
+  symbol: string;
+  changePct: number;
+  name: string;
+  price: number;
+  volume: number;
+} | null> {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-      next: { revalidate: 120 },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -30,6 +45,8 @@ async function fetchChangePct(symbol: string): Promise<{ symbol: string; changeP
       symbol,
       name: koreanName(symbol),
       changePct: parseFloat(((price - prev) / prev * 100).toFixed(2)),
+      price: price as number,
+      volume: (meta.regularMarketVolume as number) ?? 0,
     };
   } catch {
     return null;
@@ -46,12 +63,24 @@ export async function GET(request: Request) {
     const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
 
     // 섹터별 그룹핑
-    type StockEntry = { changePct: number; name: string };
+    type StockEntry = {
+      name: string;
+      code: string;
+      market: "KS" | "KQ";
+      changePct: number;
+      price: number;
+      volume: number;
+    };
     const sectorMap: Record<string, StockEntry[]> = {};
     for (const r of valid) {
       const sector = SECTOR_MAP[r.symbol] ?? "기타";
       if (!sectorMap[sector]) sectorMap[sector] = [];
-      sectorMap[sector].push({ changePct: r.changePct, name: r.name });
+      // Extract code and market from symbol (e.g. "005930.KS" → code="005930", market="KS")
+      const dotIdx = r.symbol.lastIndexOf(".");
+      const code = dotIdx >= 0 ? r.symbol.slice(0, dotIdx) : r.symbol;
+      const suffix = dotIdx >= 0 ? r.symbol.slice(dotIdx + 1) : "KS";
+      const market: "KS" | "KQ" = suffix === "KQ" ? "KQ" : "KS";
+      sectorMap[sector].push({ name: r.name, code, market, changePct: r.changePct, price: r.price, volume: r.volume });
     }
 
     const sectors: SectorResult[] = [];

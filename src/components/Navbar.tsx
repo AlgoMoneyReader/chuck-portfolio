@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { FaInstagram } from "react-icons/fa";
 
 const NAV_ITEMS = [
   { href: "/", label: "홈", icon: "◈" },
@@ -47,6 +48,19 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href="https://www.instagram.com/algo_money_reader/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:bg-white/5"
+            aria-label="알읽남 인스타그램"
+          >
+            <FaInstagram
+              size={18}
+              className="text-gray-500 group-hover:text-pink-400 transition-colors duration-200"
+              style={{ filter: "none" }}
+            />
+          </a>
           <span className="w-2 h-2 rounded-full bg-signal-green animate-pulse" />
           <span className="text-xs text-gray-500 hidden sm:block">실시간</span>
         </div>

@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
+
 // 한국어 종목명 매핑 (lib/stockList.ts 참조)
 const KR_NAMES: Record<string, string> = {
   "005930.KS": "삼성전자", "000660.KS": "SK하이닉스", "005380.KS": "현대차",
@@ -64,7 +67,7 @@ async function fetchOneChart(symbol: string): Promise<StockResult | null> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const json = await res.json();

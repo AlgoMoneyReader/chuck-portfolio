@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { KOSPI_SYMBOLS, KOSDAQ_SYMBOLS, koreanName } from "@/lib/stockList";
 
+export const dynamic = "force-dynamic";
+
 interface VolumeResult {
   rank: number;
   code: string;
@@ -18,7 +20,7 @@ async function fetchVolumeData(symbol: string): Promise<VolumeResult | null> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-      next: { revalidate: 120 },
+      cache: "no-store",
     });
     if (!res.ok) return null;
     const json = await res.json();

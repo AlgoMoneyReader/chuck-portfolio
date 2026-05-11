@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
+
+interface DrawerState { code: string; market: "KS" | "KQ"; name: string; }
+
+interface SectorStockLive {
+  sym: string; code: string; market: "KS" | "KQ"; name: string;
+  price: number; changePct: number; sparkline: number[]; rawPrices: number[];
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,14 +24,19 @@ interface SpikeRow {
 interface SectorRow {
   sector: string; avgChangePct: number; stockCount: number;
   topStock: string; topChangePct: number;
+  stocks: {
+    name: string;
+    code: string;
+    market: "KS" | "KQ";
+    changePct: number;
+    price: number;
+    volume: number;
+  }[];
 }
 interface HighRow {
   rank: number; code: string; name: string;
   price: number; changePct: number;
   week52High: number; distFromHigh: number; isNewHigh: boolean;
-}
-interface FlowItem {
-  type: string; label: string; netBuy: number; buy: number; sell: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,11 +53,6 @@ const fmtPrice = (n: number) => n.toLocaleString("ko-KR") + "원";
 const fmtVol = (n: number) =>
   n >= 1_000_000 ? (n / 1_000_000).toFixed(1) + "M" :
   n >= 1_000 ? (n / 1_000).toFixed(0) + "K" : String(n);
-const fmtAmount = (n: number) => {
-  const abs = Math.abs(n);
-  const s = abs >= 10000 ? (abs / 10000).toFixed(1) + "조" : abs.toLocaleString("ko-KR") + "억";
-  return (n > 0 ? "+" : n < 0 ? "-" : "") + s;
-};
 
 // ─── 공통 UI ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +73,7 @@ function MarketTab({ label, active, onClick }: { label: string; active: boolean;
   );
 }
 
-function MainTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function MainTabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
       className={`px-3 py-1 text-xs rounded-full transition-all whitespace-nowrap ${
@@ -97,7 +105,7 @@ function StatusBadge() {
 
 // ─── 상승 TOP 10 ──────────────────────────────────────────────────────────────
 
-function TopGainersList({ market }: { market: string }) {
+function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
@@ -123,7 +131,6 @@ function TopGainersList({ market }: { market: string }) {
       <div className="flex justify-between mb-3 text-xs"><StatusBadge />
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      {/* 헤더 */}
       <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
@@ -134,7 +141,10 @@ function TopGainersList({ market }: { market: string }) {
       {loading ? <SkeletonRows /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <div key={r.code} className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded">
+            <div key={r.code}
+              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
+            >
               <RankBadge rank={r.rank} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
@@ -155,7 +165,7 @@ function TopGainersList({ market }: { market: string }) {
 
 // ─── 거래량 급등 ──────────────────────────────────────────────────────────────
 
-function VolumeSpikeList({ market }: { market: string }) {
+function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<SpikeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
@@ -194,7 +204,10 @@ function VolumeSpikeList({ market }: { market: string }) {
       ) : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <div key={r.code} className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded">
+            <div key={r.code}
+              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
+            >
               <RankBadge rank={r.rank} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
@@ -217,6 +230,47 @@ function VolumeSpikeList({ market }: { market: string }) {
 
 // ─── 섹터 흐름 ────────────────────────────────────────────────────────────────
 
+function Sparkline({ points, changePct, width = 72, height = 28 }: {
+  points: number[]; changePct: number; width?: number; height?: number;
+}) {
+  if (points.length < 2) {
+    return <div style={{ width, height }} className="bg-white/5 rounded" />;
+  }
+  const pad = 2;
+  const w = width - pad * 2;
+  const h = height - pad * 2;
+  const pathD = points.map((p, i) => {
+    const x = pad + (i / (points.length - 1)) * w;
+    const y = pad + (1 - p / 100) * h;
+    return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+
+  // Korean stock convention: red = up, blue = down
+  const color = changePct >= 0 ? "#f43f5e" : "#60a5fa";
+  const lastY = pad + (1 - (points[points.length - 1] ?? 50) / 100) * h;
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <defs>
+        <linearGradient id={`sg_${changePct >= 0 ? "up" : "dn"}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Area fill */}
+      <path
+        d={`${pathD} L ${(pad + w).toFixed(1)} ${(pad + h).toFixed(1)} L ${pad} ${(pad + h).toFixed(1)} Z`}
+        fill={`url(#sg_${changePct >= 0 ? "up" : "dn"})`}
+      />
+      {/* Line */}
+      <path d={pathD} fill="none" stroke={color} strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+      {/* Last point dot */}
+      <circle cx={(pad + w).toFixed(1)} cy={lastY.toFixed(1)} r="2" fill={color} />
+    </svg>
+  );
+}
+
 const SECTOR_COLORS: Record<string, string> = {
   "반도체":"#22d3ee","자동차":"#a78bfa","2차전지":"#34d399","바이오":"#f472b6",
   "IT플랫폼":"#60a5fa","엔터":"#fb923c","금융":"#facc15","소재":"#94a3b8",
@@ -224,9 +278,12 @@ const SECTOR_COLORS: Record<string, string> = {
   "가전":"#67e8f9","건설":"#fca5a5","해운":"#6ee7b7","항공":"#a5b4fc","기타":"#6b7280",
 };
 
-function SectorHeatmap({ market }: { market: string }) {
+function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [sectors, setSectors] = useState<SectorRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalSector, setModalSector] = useState<SectorRow | null>(null);
+  const [modalStocks, setModalStocks] = useState<SectorStockLive[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -238,10 +295,36 @@ function SectorHeatmap({ market }: { market: string }) {
   }, [market]);
 
   useEffect(() => {
-    setLoading(true); load();
+    setLoading(true); setModalSector(null); load();
     const i = setInterval(load, 120_000);
     return () => clearInterval(i);
   }, [load]);
+
+  // ESC closes modal
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setModalSector(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Fetch stocks when sector is selected
+  function openSectorModal(s: SectorRow) {
+    setModalSector(s);
+    setModalStocks([]);
+    setModalLoading(true);
+    fetch(`/api/sector-stocks?sector=${encodeURIComponent(s.sector)}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { stocks?: SectorStockLive[] } | null) => { if (j?.stocks) setModalStocks(j.stocks); })
+      .catch(() => {})
+      .finally(() => setModalLoading(false));
+  }
+
+  const SECTOR_ICONS: Record<string, string> = {
+    "반도체":"💾","자동차":"🚗","2차전지":"🔋","바이오":"💊","IT플랫폼":"📱",
+    "엔터":"🎵","금융":"🏦","소재":"⚙️","에너지":"⚡","소비재":"🛍️",
+    "통신":"📡","지주":"🏢","가전":"📺","건설":"🏗️","해운":"🚢",
+    "항공":"✈️","방산·조선":"🛡️","로봇·AI":"🤖","기타":"📊",
+  };
 
   if (loading) return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
@@ -252,36 +335,176 @@ function SectorHeatmap({ market }: { market: string }) {
   );
 
   return (
-    <div>
-      <p className="text-xs text-gray-600 mb-3">오늘 섹터별 평균 등락률</p>
+    <>
+      {/* ── 섹터 카드 그리드 ── */}
+      <p className="text-xs text-gray-600 mb-3">오늘 섹터별 평균 등락률 · 클릭하면 구성 종목 보기</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {sectors.map(s => {
           const isPos = s.avgChangePct >= 0;
-          const intensity = Math.min(Math.abs(s.avgChangePct) / 5, 1); // 0~5% → opacity 0~1
+          const intensity = Math.min(Math.abs(s.avgChangePct) / 5, 1);
           const color = SECTOR_COLORS[s.sector] ?? "#6b7280";
           return (
-            <div key={s.sector}
-              className="p-3 rounded-lg border border-navy-border/30 relative overflow-hidden hover:border-gray-600 transition-colors"
-              style={{ backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2,"0") : "08"}` }}>
-              {/* 배경 강도 바 */}
-              <div className="absolute bottom-0 left-0 h-1 rounded-b-lg transition-all"
+            <button
+              key={s.sector}
+              onClick={() => openSectorModal(s)}
+              className="p-3 rounded-lg border relative overflow-hidden text-left transition-all active:scale-[0.97] hover:brightness-110"
+              style={{
+                backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2, "0") : "08"}`,
+                borderColor: "rgba(255,255,255,0.1)",
+              }}
+            >
+              <div className="absolute bottom-0 left-0 h-1 rounded-b-lg"
                 style={{ width: `${intensity * 100}%`, backgroundColor: color, opacity: 0.7 }} />
-              <p className="text-xs font-semibold text-white">{s.sector}</p>
-              <p className={`text-lg font-bold num ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-sm">{SECTOR_ICONS[s.sector] ?? "📊"}</span>
+                <p className="text-xs font-semibold text-white">{s.sector}</p>
+              </div>
+              <p className={`text-lg font-bold num ${isPos ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
                 {isPos ? "+" : ""}{s.avgChangePct.toFixed(2)}%
               </p>
-              <p className="text-xs text-gray-500 truncate">TOP: {s.topStock}</p>
-            </div>
+              <p className="text-xs text-gray-500 truncate">▲ {s.topStock}</p>
+            </button>
           );
         })}
       </div>
-    </div>
+
+      {/* ── Toss 스타일 모달 ── */}
+      {modalSector && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setModalSector(null)} />
+
+          {/* Modal container */}
+          <div className="relative z-10 w-full sm:max-w-md bg-[#111827] border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col"
+            style={{ maxHeight: "85vh" }}>
+
+            {/* ── Modal Header ── */}
+            <div className="px-5 pt-6 pb-4 shrink-0">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1 font-medium tracking-wider uppercase">섹터 흐름</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{SECTOR_ICONS[modalSector.sector] ?? "📊"}</span>
+                    <h2 className="text-2xl font-bold text-white">{modalSector.sector}</h2>
+                  </div>
+                  {!modalLoading && modalStocks.length > 0 && (
+                    <p className="text-sm text-gray-400 mt-1">{modalStocks.length}개 종목</p>
+                  )}
+                </div>
+                {/* Sector avg change */}
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 mb-1">오늘</p>
+                  <p className={`text-xl font-bold num ${modalSector.avgChangePct >= 0 ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
+                    {modalSector.avgChangePct >= 0 ? "+" : ""}{modalSector.avgChangePct.toFixed(2)}%
+                  </p>
+                  <button onClick={() => setModalSector(null)}
+                    className="mt-2 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all ml-auto">
+                    <span className="text-sm leading-none">✕</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="mt-4 border-t border-white/10" />
+            </div>
+
+            {/* ── Stock List ── */}
+            <div className="overflow-y-auto flex-1 px-2 pb-6"
+              style={{ scrollbarWidth: "thin", scrollbarColor: "#1A2D42 transparent" }}>
+
+              {modalLoading ? (
+                /* Loading skeleton */
+                <div className="space-y-1 px-3 pt-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-3 animate-pulse">
+                      <div className="w-9 h-9 rounded-full bg-white/10 shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 bg-white/10 rounded w-24" />
+                        <div className="h-2.5 bg-white/5 rounded w-16" />
+                      </div>
+                      <div className="w-16 h-7 bg-white/5 rounded" />
+                      <div className="text-right space-y-1">
+                        <div className="h-3 bg-white/10 rounded w-16" />
+                        <div className="h-2.5 bg-white/5 rounded w-12" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : modalStocks.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm text-gray-500">종목 데이터를 불러올 수 없습니다</p>
+                </div>
+              ) : (
+                <div>
+                  {modalStocks.map((stock, idx) => {
+                    const isUp = stock.changePct >= 0;
+                    const changeColor = isUp ? "#f43f5e" : "#60a5fa";
+                    // Color-coded avatar background
+                    const avatarColors = ["#1e3a5f","#1a3a2f","#3d1f3d","#2d2a1a","#1f2d3d","#2d1a1a","#1a2d3d","#2d2d1a"];
+                    const bgColor = avatarColors[idx % avatarColors.length];
+
+                    return (
+                      <div
+                        key={stock.code}
+                        onClick={() => { onSelect({ code: stock.code, market: stock.market, name: stock.name }); setModalSector(null); }}
+                        className="flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-colors hover:bg-white/[0.04] active:bg-white/[0.08]"
+                      >
+                        {/* Avatar */}
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 border border-white/10"
+                          style={{ backgroundColor: bgColor }}
+                        >
+                          {stock.name.slice(0, 2)}
+                        </div>
+
+                        {/* Name + Code */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{stock.name}</p>
+                          <p className="text-xs text-gray-500 num">{stock.code}</p>
+                        </div>
+
+                        {/* Sparkline */}
+                        <div className="shrink-0">
+                          <Sparkline points={stock.sparkline} changePct={stock.changePct} width={72} height={28} />
+                        </div>
+
+                        {/* Price + Change */}
+                        <div className="text-right shrink-0 min-w-[72px]">
+                          {stock.price > 0 ? (
+                            <>
+                              <p className="text-sm font-semibold text-white num">
+                                {stock.price.toLocaleString("ko-KR")}원
+                              </p>
+                              <p className="text-xs font-bold num" style={{ color: changeColor }}>
+                                {isUp ? "▲" : "▼"} {Math.abs(stock.changePct).toFixed(2)}%
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-gray-600">—</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom handle for mobile */}
+            <div className="flex justify-center pb-2 pt-1 sm:hidden shrink-0">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 // ─── 52주 신고가 ──────────────────────────────────────────────────────────────
 
-function Week52HighList({ market }: { market: string }) {
+function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<HighRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
@@ -298,7 +521,7 @@ function Week52HighList({ market }: { market: string }) {
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(load, 3_600_000); // 1시간 (자주 안 바뀜)
+    const i = setInterval(load, 3_600_000);
     return () => clearInterval(i);
   }, [load]);
 
@@ -320,7 +543,10 @@ function Week52HighList({ market }: { market: string }) {
       ) : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <div key={r.code} className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded">
+            <div key={r.code}
+              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
+            >
               <RankBadge rank={r.rank} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -344,79 +570,117 @@ function Week52HighList({ market }: { market: string }) {
   );
 }
 
-// ─── 투자자 동향 ──────────────────────────────────────────────────────────────
+// ─── 투자자 동향 (토스 스타일) ───────────────────────────────────────────────
 
-const INVESTOR_ICONS: Record<string, string> = { foreign:"🌐", institution:"🏦", individual:"👤" };
+interface RankItem {
+  rank: number; code: string; name: string;
+  price: number; changePct: number;
+  netBuyAmount: number; netBuyQty: number;
+}
+interface RankData {
+  buy: { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
+  sell: { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
+}
 
-function InvestorFlowList({ market }: { market: string }) {
-  const [flow, setFlow] = useState<FlowItem[]>([]);
+function fmtAmount(n: number): string {
+  const abs = Math.abs(n);
+  const s = abs >= 10000 ? (abs / 10000).toFixed(1) + "조" : abs.toLocaleString("ko-KR") + "억";
+  return (n > 0 ? "+" : n < 0 ? "-" : "") + s;
+}
+
+
+function InvestorRankCol({
+  title, items, mode, onSelect,
+}: {
+  title: string; items: RankItem[]; mode: "buy" | "sell";
+  onSelect: (d: DrawerState) => void;
+}) {
+  const isPos = mode === "buy";
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-semibold text-gray-300 mb-2 px-1">{title}</p>
+      <div className="space-y-0.5">
+        {items.map((item) => (
+          <button
+            key={item.code}
+            onClick={() => onSelect({ code: item.code, market: "KS", name: item.name })}
+            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-navy-sub/60 transition-colors text-left group"
+          >
+            <span className="text-xs text-gray-600 w-4 shrink-0">{item.rank}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-white font-medium truncate group-hover:text-cyan-brand transition-colors">
+                {item.name}
+              </p>
+              <p className="text-xs text-gray-500 num">
+                {item.price.toLocaleString("ko-KR")}원
+                <span className={item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}>
+                  {" "}{item.changePct >= 0 ? "▲" : "▼"}{Math.abs(item.changePct).toFixed(2)}%
+                </span>
+              </p>
+            </div>
+            <span className={`text-xs font-bold num shrink-0 ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+              {fmtAmount(item.netBuyAmount)}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+  const [data, setData]       = useState<RankData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/investor-flow?market=${market}`, { cache: "no-store" });
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      setFlow(json.flow ?? []);
-      setError(false);
-    } catch { setError(true); } finally { setLoading(false); }
-  }, [market]);
+  const [mode, setMode]       = useState<"buy" | "sell">("buy");
 
   useEffect(() => {
-    setLoading(true); load();
-    const i = setInterval(load, isMarketOpen() ? 300_000 : 600_000);
-    return () => clearInterval(i);
-  }, [load]);
+    setLoading(true);
+    fetch("/api/investor-ranking", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && !j.error) setData(j); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const cols = data?.[mode];
 
   return (
-    <div>
-      {error ? (
-        <div className="py-4 space-y-3">
-          <p className="text-xs text-gray-500 text-center">KRX 서버가 직접 API 접근을 제한하고 있습니다.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {[
-              { label: "네이버 금융 — 투자자 동향", url: `https://finance.naver.com/sise/investorDealTrendDay.naver?sosok=${market === "KOSDAQ" ? 1 : 0}` },
-              { label: "KRX 통계 — 매매동향",       url: "https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201020203" },
-            ].map(link => (
-              <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 bg-navy-card border border-navy-border rounded-lg hover:border-gray-600 transition-colors text-xs text-gray-400 hover:text-gray-200">
-                <span className="text-gray-600">↗</span>{link.label}
-              </a>
-            ))}
-          </div>
+    <div className="space-y-3">
+      {/* 순매수/순매도 토글 */}
+      <div className="flex gap-2">
+        {(["buy", "sell"] as const).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-4 py-1.5 text-xs rounded-full font-semibold transition-all ${
+              mode === m
+                ? m === "buy"
+                  ? "bg-signal-green/20 text-signal-green border border-signal-green/40"
+                  : "bg-signal-red/20 text-signal-red border border-signal-red/40"
+                : "text-gray-500 hover:text-gray-300 border border-transparent"
+            }`}>
+            {m === "buy" ? "순매수" : "순매도"}
+          </button>
+        ))}
+        <span className="text-xs text-gray-600 self-center ml-auto">KIS 기준 · KOSPI 상위 45종목</span>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-3 gap-3">
+          {[0,1,2].map(i => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-4 bg-navy-border rounded animate-pulse w-12" />
+              {Array.from({length:5}).map((_,j) => (
+                <div key={j} className="h-10 bg-navy-border rounded animate-pulse" />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : cols ? (
+        <div className="grid grid-cols-3 gap-1 divide-x divide-navy-border/30">
+          <InvestorRankCol title="외국인" items={cols.foreign}     mode={mode} onSelect={onSelect} />
+          <div className="pl-3"><InvestorRankCol title="기관"   items={cols.institution} mode={mode} onSelect={onSelect} /></div>
+          <div className="pl-3"><InvestorRankCol title="개인"   items={cols.individual}  mode={mode} onSelect={onSelect} /></div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-2 text-xs text-gray-600 font-medium pb-1 border-b border-navy-border/40">
-            <span>투자자</span>
-            <span className="text-right">순매수</span>
-            <span className="text-right">매수</span>
-            <span className="text-right">매도</span>
-          </div>
-          {loading ? (
-            [0,1,2].map(i => (
-              <div key={i} className="grid grid-cols-4 gap-2 animate-pulse">
-                {[0,1,2,3].map(j => <div key={j} className="h-8 bg-navy-border rounded" />)}
-              </div>
-            ))
-          ) : (
-            flow.map(item => (
-              <div key={item.type}
-                className="grid grid-cols-4 gap-2 items-center py-2 px-3 rounded-lg bg-navy-card/40 border border-navy-border/30">
-                <div className="flex items-center gap-2">
-                  <span>{INVESTOR_ICONS[item.type]}</span>
-                  <span className="text-sm text-white font-medium">{item.label}</span>
-                </div>
-                <span className={`text-right text-sm font-bold num ${item.netBuy >= 0 ? "text-signal-green" : "text-signal-red"}`}>
-                  {fmtAmount(item.netBuy)}
-                </span>
-                <span className="text-right text-xs text-gray-400 num">{fmtAmount(Math.abs(item.buy))}</span>
-                <span className="text-right text-xs text-gray-400 num">{fmtAmount(Math.abs(item.sell))}</span>
-              </div>
-            ))
-          )}
-        </div>
+        <p className="text-xs text-gray-500 text-center py-4">데이터를 불러오지 못했습니다</p>
       )}
     </div>
   );
@@ -424,10 +688,10 @@ function InvestorFlowList({ market }: { market: string }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type MainTab = "top10" | "volume" | "sector" | "high52" | "flow";
+type MainTabType = "top10" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 
-const TABS: { id: MainTab; label: string }[] = [
+const TABS: { id: MainTabType; label: string }[] = [
   { id: "top10",  label: "상승 TOP10"  },
   { id: "volume", label: "거래량 급등" },
   { id: "sector", label: "섹터 흐름"  },
@@ -436,8 +700,9 @@ const TABS: { id: MainTab; label: string }[] = [
 ];
 
 export default function MarketSummary() {
-  const [mainTab, setMainTab] = useState<MainTab>("top10");
+  const [mainTab, setMainTab] = useState<MainTabType>("top10");
   const [market, setMarket] = useState<MarketType>("KOSPI");
+  const [drawer, setDrawer] = useState<DrawerState | null>(null);
 
   return (
     <section className="card">
@@ -451,20 +716,31 @@ export default function MarketSummary() {
             ))}
           </div>
         </div>
-        {/* 탭 */}
         <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5 flex-wrap">
           {TABS.map(t => (
-            <MainTab key={t.id} label={t.label} active={mainTab === t.id} onClick={() => setMainTab(t.id)} />
+            <MainTabBtn key={t.id} label={t.label} active={mainTab === t.id} onClick={() => setMainTab(t.id)} />
           ))}
         </div>
       </div>
 
       {/* 컨텐츠 */}
-      {mainTab === "top10"  && <TopGainersList  market={market} />}
-      {mainTab === "volume" && <VolumeSpikeList  market={market} />}
-      {mainTab === "sector" && <SectorHeatmap    market={market} />}
-      {mainTab === "high52" && <Week52HighList   market={market} />}
-      {mainTab === "flow"   && <InvestorFlowList market={market} />}
+      {mainTab === "top10"  && <TopGainersList  market={market} onSelect={setDrawer} />}
+      {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={setDrawer} />}
+      {mainTab === "sector" && <SectorHeatmap    market={market} onSelect={setDrawer} />}
+      {mainTab === "high52" && <Week52HighList   market={market} onSelect={setDrawer} />}
+      {mainTab === "flow"   && <InvestorFlowList market={market} onSelect={setDrawer} />}
+
+      {/* 종목 디테일 드로어 */}
+      {drawer && (
+        <Suspense fallback={null}>
+          <StockDetailDrawer
+            code={drawer.code}
+            market={drawer.market}
+            name={drawer.name}
+            onClose={() => setDrawer(null)}
+          />
+        </Suspense>
+      )}
     </section>
   );
 }
