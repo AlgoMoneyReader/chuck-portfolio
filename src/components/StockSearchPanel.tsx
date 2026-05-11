@@ -2,9 +2,15 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import type { StockMasterItem } from "@/lib/stockMaster";
 
 // ── Types ────────────────────────────────────────────────────────────────────
+
+interface SearchResult {
+  code: string;
+  name: string;
+  market: "KS" | "KQ";
+  type: string;
+}
 
 interface StockItem { sym: string; code: string; market: "KS"|"KQ"; name: string; }
 
@@ -12,6 +18,10 @@ interface QuoteData {
   price: number; change: number; changePct: number;
   dayHigh: number; dayLow: number; volume: number;
   week52High: number; week52Low: number; marketState: string;
+  preMarketPrice: number | null;
+  preMarketChangePct: number | null;
+  postMarketPrice: number | null;
+  postMarketChangePct: number | null;
 }
 
 interface ChartPoint { date: string; close: number | null; }
@@ -73,6 +83,50 @@ const RANGES = [
   { key:"3mo", label:"3개월" },
   { key:"1y",  label:"1년"   },
 ];
+
+// ── 마켓 상태 타입 ────────────────────────────────────────────────────────────
+
+type MarketSession = "NXT_PRE" | "REGULAR" | "NXT_POST" | "CLOSED";
+
+function getMarketSession(): MarketSession {
+  const now = new Date();
+  // KST = UTC+9
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return "CLOSED";
+  const minutes = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  if (minutes >= 480 && minutes < 530) return "NXT_PRE";   // 08:00-08:49
+  if (minutes >= 540 && minutes <= 930) return "REGULAR";  // 09:00-15:30
+  if (minutes >= 940 && minutes <= 1200) return "NXT_POST"; // 15:40-20:00
+  return "CLOSED";
+}
+
+// ── MarketStatusBadge 컴포넌트 ────────────────────────────────────────────────
+
+function MarketStatusBadge() {
+  const [session, setSession] = useState<MarketSession>(getMarketSession());
+
+  useEffect(() => {
+    const id = setInterval(() => setSession(getMarketSession()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const config: Record<MarketSession, { cls: string; label: string; dot?: boolean }> = {
+    NXT_PRE:  { cls: "text-blue-400 bg-blue-400/15 border border-blue-400/30",     label: "NXT 프리마켓" },
+    REGULAR:  { cls: "text-signal-green bg-signal-green/15 border border-signal-green/30", label: "KRX 정규장", dot: true },
+    NXT_POST: { cls: "text-purple-400 bg-purple-400/15 border border-purple-400/30", label: "NXT 애프터마켓" },
+    CLOSED:   { cls: "text-gray-500 bg-gray-500/15 border border-gray-500/30",      label: "장마감" },
+  };
+
+  const { cls, label, dot } = config[session];
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-signal-green animate-pulse" />}
+      {label}
+    </span>
+  );
+}
 
 // ── 인라인 차트 ──────────────────────────────────────────────────────────────
 
@@ -164,10 +218,9 @@ function InlineChart({ sym, changePct }: { sym: string; changePct: number }) {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function StockSearchPanel() {
-  // ── 마스터 + 검색 상태 ───────────────────────────────────────────────────
-  const [masterList,    setMasterList]    = useState<StockMasterItem[]>([]);
+  // ── 검색 상태 ────────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState("");
-  const [suggestions,   setSuggestions]   = useState<StockMasterItem[]>([]);
+  const [suggestions,   setSuggestions]   = useState<SearchResult[]>([]);
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
   const [highlightIdx,  setHighlightIdx]  = useState(-1);
 
@@ -183,36 +236,25 @@ export default function StockSearchPanel() {
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // ── 마운트 시 마스터 목록 로드 (캐시 무효화 적용) ────────────────────────
-  useEffect(() => {
-    fetch("/api/stock-master", { cache: "no-store" })
-      .then(r => r.ok ? r.json() : { stocks: [] })
-      .then((data: { version?: string; stocks?: StockMasterItem[] } | StockMasterItem[]) => {
-        // 구버전 응답(배열) / 신버전 응답({version, stocks}) 모두 대응
-        const list = Array.isArray(data) ? data : (data.stocks ?? []);
-        setMasterList(list);
-      })
-      .catch(() => {});
-  }, []);
-
-  // ── 검색어 디바운스 필터링 ────────────────────────────────────────────────
+  // ── 라이브 검색 (300ms 디바운스) ─────────────────────────────────────────
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSuggestions([]);
       setDropdownOpen(false);
       return;
     }
-    const timer = setTimeout(() => {
-      const q = searchQuery.toLowerCase();
-      const hits = masterList
-        .filter(s => s.name.toLowerCase().includes(q) || s.code.includes(q))
-        .slice(0, 10);
-      setSuggestions(hits);
-      setDropdownOpen(hits.length > 0);
-      setHighlightIdx(-1);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/stock-search?q=${encodeURIComponent(searchQuery.trim())}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const hits: SearchResult[] = await res.json();
+        setSuggestions(hits);
+        setDropdownOpen(hits.length > 0);
+        setHighlightIdx(-1);
+      } catch { /* silent */ }
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, masterList]);
+  }, [searchQuery]);
 
   // ── 클릭 외부 감지 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -227,7 +269,7 @@ export default function StockSearchPanel() {
   }, []);
 
   // ── 주식 로드 ─────────────────────────────────────────────────────────────
-  const loadStock = useCallback(async (item: StockMasterItem) => {
+  const loadStock = useCallback(async (item: SearchResult) => {
     const stockItem: StockItem = {
       sym: `${item.code}.${item.market}`,
       code: item.code,
@@ -254,6 +296,10 @@ export default function StockSearchPanel() {
             dayHigh: j.dayHigh, dayLow: j.dayLow, volume: j.volume,
             week52High: j.week52High, week52Low: j.week52Low,
             marketState: j.marketState,
+            preMarketPrice: j.preMarketPrice ?? null,
+            preMarketChangePct: j.preMarketChangePct ?? null,
+            postMarketPrice: j.postMarketPrice ?? null,
+            postMarketChangePct: j.postMarketChangePct ?? null,
           });
         }
       })
@@ -298,10 +344,16 @@ export default function StockSearchPanel() {
   const priceColor = isPos ? "text-signal-green" : "text-signal-red";
   const gc = investor ? GRADE_CONFIG[investor.grade] : null;
 
+  // 현재 마켓 세션 (extended hours 표시용)
+  const currentSession = getMarketSession();
+
   return (
     <section className="card space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">종목 검색 · 수급 분석</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">종목 검색 · 수급 분석</h2>
+          <MarketStatusBadge />
+        </div>
         <span className="text-xs text-gray-600">진보적 사고 기반 Grade</span>
       </div>
 
@@ -371,10 +423,10 @@ export default function StockSearchPanel() {
           ) : quote ? (
             <div className="flex items-start justify-between flex-wrap gap-3">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-xl font-bold text-white">{selected.name}</h3>
                   <span className="text-xs text-gray-500 px-2 py-0.5 bg-navy-sub/60 rounded">{selected.code}</span>
-                  {quote.marketState === "REGULAR" && <span className="text-signal-green text-xs">● 장중</span>}
+                  <MarketStatusBadge />
                 </div>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className={`text-3xl font-bold num ${priceColor}`}>
@@ -385,6 +437,28 @@ export default function StockSearchPanel() {
                     &nbsp;({isPos ? "+" : ""}{quote.change.toLocaleString("ko-KR")}원)
                   </span>
                 </div>
+
+                {/* 시간외 가격 pill */}
+                {currentSession === "NXT_PRE" && quote.preMarketPrice && (
+                  <div className="mt-1.5">
+                    <span className="text-xs px-2.5 py-1 rounded-full border text-blue-400 bg-blue-400/15 border-blue-400/30">
+                      프리마켓 {quote.preMarketPrice.toLocaleString("ko-KR")}원
+                      {quote.preMarketChangePct !== null && (
+                        <> {quote.preMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.preMarketChangePct).toFixed(2)}%</>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {currentSession === "NXT_POST" && quote.postMarketPrice && (
+                  <div className="mt-1.5">
+                    <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
+                      애프터마켓 {quote.postMarketPrice.toLocaleString("ko-KR")}원
+                      {quote.postMarketChangePct !== null && (
+                        <> {quote.postMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.postMarketChangePct).toFixed(2)}%</>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
               {/* 세부 수치 */}
               <div className="flex gap-4 text-xs">

@@ -13,11 +13,11 @@ export async function GET(request: Request) {
     const [dayRes, yearRes] = await Promise.all([
       fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`, {
         headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-        next: { revalidate: 60 },
+        cache: "no-store",
       }),
       fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1wk&range=1y`, {
         headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-        next: { revalidate: 3600 },
+        cache: "no-store",
       }),
     ]);
 
@@ -35,6 +35,15 @@ export async function GET(request: Request) {
     const prev     = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const change   = price - prev;
     const changePct = prev ? (change / prev) * 100 : 0;
+
+    // NXT 시간외 데이터 (Yahoo Finance pre/post market fields)
+    const preMarketPrice  = (meta.preMarketPrice  as number | null | undefined) ?? null;
+    const postMarketPrice = (meta.postMarketPrice as number | null | undefined) ?? null;
+
+    const preMarketChangePct = preMarketPrice && price
+      ? parseFloat(((preMarketPrice - price) / price * 100).toFixed(2)) : null;
+    const postMarketChangePct = postMarketPrice && price
+      ? parseFloat(((postMarketPrice - price) / price * 100).toFixed(2)) : null;
 
     // 52주 고저가
     let week52High = 0;
@@ -61,6 +70,10 @@ export async function GET(request: Request) {
       week52High: Math.round(week52High),
       week52Low:  week52Low === Infinity ? 0 : Math.round(week52Low),
       marketState: meta.marketState ?? "CLOSED",
+      preMarketPrice:   preMarketPrice  ? Math.round(preMarketPrice)  : null,
+      preMarketChangePct,
+      postMarketPrice:  postMarketPrice ? Math.round(postMarketPrice) : null,
+      postMarketChangePct,
       naverUrl: `https://finance.naver.com/item/main.naver?code=${code}`,
     });
   } catch (err) {
