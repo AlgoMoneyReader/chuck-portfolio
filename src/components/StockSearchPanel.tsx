@@ -183,11 +183,15 @@ export default function StockSearchPanel() {
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // ── 마운트 시 마스터 목록 로드 ────────────────────────────────────────────
+  // ── 마운트 시 마스터 목록 로드 (캐시 무효화 적용) ────────────────────────
   useEffect(() => {
-    fetch("/api/stock-master")
-      .then(r => r.ok ? r.json() : [])
-      .then((data: StockMasterItem[]) => setMasterList(data))
+    fetch("/api/stock-master", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : { stocks: [] })
+      .then((data: { version?: string; stocks?: StockMasterItem[] } | StockMasterItem[]) => {
+        // 구버전 응답(배열) / 신버전 응답({version, stocks}) 모두 대응
+        const list = Array.isArray(data) ? data : (data.stocks ?? []);
+        setMasterList(list);
+      })
       .catch(() => {});
   }, []);
 
@@ -326,22 +330,30 @@ export default function StockSearchPanel() {
         {dropdownOpen && suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-2xl overflow-hidden animate-fade-in"
             style={{ zIndex: 60 }}>
-            {suggestions.map((item, idx) => (
-              <button
-                key={item.code + item.market}
-                onClick={() => loadStock(item)}
-                onMouseEnter={() => setHighlightIdx(idx)}
-                className={`w-full px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors text-left ${
-                  highlightIdx === idx
-                    ? "bg-cyan-brand/10 border-l-2 border-cyan-brand"
-                    : "hover:bg-cyan-brand/10 hover:border-l-2 hover:border-cyan-brand"
-                }`}
-              >
-                <span className="flex-1 text-sm font-bold text-white">{item.name}</span>
-                <span className="text-xs text-gray-500 font-mono">{item.code}</span>
-                <span className="text-xs text-gray-600">{item.market === "KS" ? "KOSPI" : "KOSDAQ"}</span>
-              </button>
-            ))}
+            {suggestions.map((item, idx) => {
+              const marketLabel =
+                item.type === "etf" ? "ETF" :
+                item.market === "KS" ? "KOSPI" : "KOSDAQ";
+              const marketColor =
+                item.type === "etf" ? "text-gold" :
+                item.market === "KS" ? "text-gray-600" : "text-cyan-brand/60";
+              return (
+                <button
+                  key={item.code + item.market}
+                  onClick={() => loadStock(item)}
+                  onMouseEnter={() => setHighlightIdx(idx)}
+                  className={`w-full px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors text-left ${
+                    highlightIdx === idx
+                      ? "bg-cyan-brand/10 border-l-2 border-cyan-brand"
+                      : "hover:bg-cyan-brand/10 hover:border-l-2 hover:border-cyan-brand"
+                  }`}
+                >
+                  <span className="flex-1 text-sm font-bold text-white">{item.name}</span>
+                  <span className="text-xs text-gray-500 font-mono">{item.code}</span>
+                  <span className={`text-xs font-medium ${marketColor}`}>{marketLabel}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

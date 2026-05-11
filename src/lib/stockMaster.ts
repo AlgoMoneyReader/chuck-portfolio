@@ -311,6 +311,7 @@ export const STOCK_MASTER: StockMasterItem[] = [
   { code: "133690", name: "TIGER 미국나스닥100", market: "KS", type: "etf" },
 ];
 
+// regular + ETF 포함 / preferred(우선주) · spac 제외
 export const STOCK_MASTER_FILTERED = STOCK_MASTER.filter(
-  (s) => s.type === "regular"
+  (s) => s.type === "regular" || s.type === "etf"
 );
