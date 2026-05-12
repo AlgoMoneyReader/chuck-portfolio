@@ -42,7 +42,8 @@ export async function GET(request: Request) {
 
   try {
     const sparkRes = await fetch(
-      `https://query2.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbols)}&range=1d&interval=15m`,
+      // 5분봉 — 당일 9:00~현재 시간대별 추이를 충분한 해상도로 제공
+      `https://query2.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbols)}&range=1d&interval=5m`,
       {
         headers: {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
       missing.map(async (s) => {
         try {
           const res = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s.sym)}?interval=15m&range=1d`,
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s.sym)}?interval=5m&range=1d`,
             { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
           );
           if (!res.ok) return;
@@ -122,23 +123,26 @@ export async function GET(request: Request) {
     const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const changePct = prev > 0 ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0;
 
-    // Normalize sparkline to 0-100 scale for easy SVG rendering
+    // ── 스파크라인: 전일종가 대비 % 변화율 배열 ─────────────────────────────
+    // Y축을 [-10, 10] 고정 도메인에 매핑하므로 모든 종목의 기울기가 동일한
+    // 기준에서 비교된다. (3% 상승 종목끼리 시각적 기울기 일치)
+    // 첫 포인트 = 0 (장 시작 전일종가 기준선), 이후 각 5분봉의 % 변화율
     let sparkline: number[] = [];
     let rawPrices: number[] = closes;
 
-    if (closes.length >= 2) {
-      // Downsample to at most 20 points
-      const step = Math.max(1, Math.floor(closes.length / 20));
+    if (closes.length >= 1 && prev > 0) {
+      // 최대 30포인트로 다운샘플 (72px 차트에 충분한 해상도)
+      const step = Math.max(1, Math.floor(closes.length / 30));
       const sampled = closes.filter((_: number, i: number) => i % step === 0);
-      if (price > 0 && !sampled.includes(price)) sampled.push(price); // ensure last point = current price
+      // 마지막 포인트 = 현재가로 보정
+      if (price > 0 && sampled[sampled.length - 1] !== price) sampled.push(price);
       rawPrices = sampled;
 
-      const min = Math.min(...sampled);
-      const max = Math.max(...sampled);
-      const range = max - min;
-      sparkline = range > 0
-        ? sampled.map(v => parseFloat(((v - min) / range * 100).toFixed(1)))
-        : sampled.map(() => 50);
+      // 0(기준선) + 각 분봉 가격의 전일종가 대비 % 변화율
+      sparkline = [
+        0,
+        ...sampled.map(v => parseFloat(((v - prev) / prev * 100).toFixed(2))),
+      ];
     }
 
     const dotIdx = s.sym.lastIndexOf(".");

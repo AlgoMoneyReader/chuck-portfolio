@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+import { AreaChart, Area, YAxis } from "recharts";
 const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
 interface DrawerState { code: string; market: "KS" | "KQ"; name: string; }
@@ -240,44 +241,49 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
 
 // ─── 섹터 흐름 ────────────────────────────────────────────────────────────────
 
-function Sparkline({ points, changePct, width = 72, height = 28 }: {
-  points: number[]; changePct: number; width?: number; height?: number;
+// ─── Recharts 기반 스파크라인 ─────────────────────────────────────────────────
+// points: 전일종가 대비 % 변화율 배열 (첫 포인트 = 0)
+// Y축 domain [-10, 10] 고정 → 모든 종목이 동일한 기울기 기준으로 비교됨
+// id: SVG <linearGradient> ID 충돌 방지용 종목 코드
+function Sparkline({ points, changePct, id }: {
+  points: number[]; changePct: number; id: string;
 }) {
   if (points.length < 2) {
-    return <div style={{ width, height }} className="bg-white/5 rounded" />;
+    return <div style={{ width: 72, height: 28 }} className="bg-white/5 rounded" />;
   }
-  const pad = 2;
-  const w = width - pad * 2;
-  const h = height - pad * 2;
-  const pathD = points.map((p, i) => {
-    const x = pad + (i / (points.length - 1)) * w;
-    const y = pad + (1 - p / 100) * h;
-    return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(" ");
 
-  // Korean stock convention: red = up, blue = down
-  const color = changePct >= 0 ? "#f43f5e" : "#60a5fa";
-  const lastY = pad + (1 - (points[points.length - 1] ?? 50) / 100) * h;
+  // 한국 주식 관행: 상승 = 빨강, 하락 = 파랑
+  const isUp = changePct >= 0;
+  const color = isUp ? "#f43f5e" : "#60a5fa";
+  const gradId = `sg_${id}`;                     // 종목별 고유 ID로 SVG 충돌 방지
+  const data = points.map(v => ({ v }));
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+    <AreaChart
+      width={72}
+      height={28}
+      data={data}
+      margin={{ top: 3, right: 0, bottom: 0, left: 0 }}
+    >
       <defs>
-        <linearGradient id={`sg_${changePct >= 0 ? "up" : "dn"}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%"  stopColor={color} stopOpacity={0.4} />
+          <stop offset="95%" stopColor={color} stopOpacity={0}   />
         </linearGradient>
       </defs>
-      {/* Area fill */}
-      <path
-        d={`${pathD} L ${(pad + w).toFixed(1)} ${(pad + h).toFixed(1)} L ${pad} ${(pad + h).toFixed(1)} Z`}
-        fill={`url(#sg_${changePct >= 0 ? "up" : "dn"})`}
+      {/* Y축 고정 도메인: 모든 종목 동일 스케일 보장 */}
+      <YAxis domain={[-10, 10]} hide width={0} />
+      <Area
+        type="monotone"
+        dataKey="v"
+        stroke={color}
+        strokeWidth={1.5}
+        fill={`url(#${gradId})`}
+        dot={false}
+        activeDot={false}
+        isAnimationActive={false}
       />
-      {/* Line */}
-      <path d={pathD} fill="none" stroke={color} strokeWidth="1.5"
-        strokeLinecap="round" strokeLinejoin="round" />
-      {/* Last point dot */}
-      <circle cx={(pad + w).toFixed(1)} cy={lastY.toFixed(1)} r="2" fill={color} />
-    </svg>
+    </AreaChart>
   );
 }
 
@@ -474,9 +480,9 @@ function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: Dra
                           <p className="text-xs text-gray-500 num">{stock.code}</p>
                         </div>
 
-                        {/* Sparkline */}
+                        {/* Sparkline — id로 SVG gradient ID 충돌 방지 */}
                         <div className="shrink-0">
-                          <Sparkline points={stock.sparkline} changePct={stock.changePct} width={72} height={28} />
+                          <Sparkline points={stock.sparkline} changePct={stock.changePct} id={stock.code} />
                         </div>
 
                         {/* Price + Change */}
