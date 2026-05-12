@@ -155,8 +155,9 @@ async function sweepEndpoint(
     // ★ ctx_area → 응답 BODY
     const body = await res.json();
 
-    // KIS 비즈니스 오류 (rt_cd != "0") — INVALID 시장코드 등 즉시 종료
-    const rtCd = (body.rt_cd ?? "0") as string;
+    // KIS 비즈니스 오류 — INVALID 시장코드 등 즉시 종료
+    // ★ rt_cd는 숫자(0) 또는 문자열("0") 모두 반환되므로 String() 변환 필수
+    const rtCd = String(body.rt_cd ?? "0");
     if (rtCd !== "0") {
       console.warn(
         `[kis-master] ${label} p${page} API 오류 rt_cd=${rtCd} ` +
