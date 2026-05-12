@@ -42,9 +42,23 @@ const CACHE_TTL = 24 * 60 * 60 * 1000;
 // ── KIS OAuth 토큰 ────────────────────────────────────────────────────────────
 let _tok: { value: string; exp: number } | null = null;
 
-async function getToken(): Promise<string> {
+export async function getKisToken(): Promise<string> {
   const now = Date.now();
-  if (_tok && _tok.exp > now + 60_000) return _tok.value;
+
+  // ── 2. 환경변수 로드 상태 점검 ─────────────────────────────────────────────
+  console.log(
+    "🔑 KIS Key Load Status:",
+    process.env.KIS_APP_KEY    ? `Loaded (${process.env.KIS_APP_KEY.slice(0, 6)}…)`    : "❌ Missing",
+    "|",
+    process.env.KIS_APP_SECRET ? `Loaded (${process.env.KIS_APP_SECRET.slice(0, 6)}…)` : "❌ Missing"
+  );
+
+  if (_tok && _tok.exp > now + 60_000) {
+    console.log("🎟️  Token Status: Valid (cached, exp in", Math.round((_tok.exp - now) / 1000), "s)");
+    return _tok.value;
+  }
+
+  console.log("🎟️  Token Status: Fetching new token…");
 
   const res = await fetch(
     "https://openapi.koreainvestment.com:9443/oauth2/tokenP",
@@ -60,10 +74,20 @@ async function getToken(): Promise<string> {
     }
   );
 
-  if (!res.ok) throw new Error(`[kis-master] 토큰 발급 실패: HTTP ${res.status}`);
-  const data = await res.json();
-  if (!data.access_token) throw new Error("[kis-master] access_token 없음");
+  if (!res.ok) {
+    let body = "";
+    try { body = await res.text(); } catch { /* ignore */ }
+    console.error(`🚨 [KIS API ERROR] 토큰 발급 실패: HTTP ${res.status}`, body);
+    throw new Error(`[kis-master] 토큰 발급 실패: HTTP ${res.status} — ${body}`);
+  }
 
+  const data = await res.json();
+  if (!data.access_token) {
+    console.error("🚨 [KIS API ERROR] 토큰 응답에 access_token 없음:", JSON.stringify(data));
+    throw new Error("[kis-master] access_token 없음");
+  }
+
+  console.log("🎟️  Token Status: Valid (new, exp in", data.expires_in ?? 86400, "s)");
   _tok = { value: data.access_token, exp: now + (data.expires_in ?? 86400) * 1000 };
   return _tok.value;
 }
@@ -106,7 +130,7 @@ async function sweepEndpoint(
     page++;
 
     // ── 공통 쿼리 파라미터 ──────────────────────────────────────────────────
-    const params = new URLSearchParams({
+    const paramObj: Record<string, string> = {
       FID_COND_MRKT_DIV_CODE: mktDiv,
       FID_COND_SCR_DIV_CODE: trId === "FHPST01710000" ? "20171" : "20170",
       FID_INPUT_ISCD: "0000",       // 전체 종목
@@ -118,35 +142,52 @@ async function sweepEndpoint(
       FID_INPUT_PRICE_2: "999999999",
       FID_VOL_CNT: "0",
       FID_INPUT_DATE_1: "",
-    });
+    };
+    // FHPST01700000(가격순위)는 FID_RANK_SORT_CLS_CODE 필수 (없으면 ERROR INPUT FIELD NOT FOUND)
+    if (trId === "FHPST01700000") paramObj["FID_RANK_SORT_CLS_CODE"] = "0";
+    const params = new URLSearchParams(paramObj);
 
-    let res: Response;
-    try {
-      res = await fetch(
-        `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/volume-rank?${params}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            appkey: process.env.KIS_APP_KEY!,
-            appsecret: process.env.KIS_APP_SECRET!,
-            tr_id: trId,
-            custtype: "P",
-            // 연속 조회 헤더
-            tr_cont: trCont,
-            ctx_area_fk100: ctxFk,
-            ctx_area_nk100: ctxNk,
-          } as Record<string, string>,
-          cache: "no-store",
-        }
-      );
-    } catch (err) {
-      console.error(`[kis-master] ${label} p${page} 네트워크 오류:`, String(err));
-      break;
+    // EGW00201(초당 초과) 재시도 — 최대 3회, 1s/2s/4s 백오프
+    let res: Response | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        res = await fetch(
+          `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/volume-rank?${params}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              appkey: process.env.KIS_APP_KEY!,
+              appsecret: process.env.KIS_APP_SECRET!,
+              tr_id: trId,
+              custtype: "P",
+              tr_cont: trCont,
+              ctx_area_fk100: ctxFk,
+              ctx_area_nk100: ctxNk,
+            } as Record<string, string>,
+            cache: "no-store",
+          }
+        );
+        if (res.ok) break; // 성공 시 재시도 루프 탈출
+        // 서버 에러(500)일 때만 재시도
+        if (res.status < 500) break;
+        console.warn(`[kis-master] ${label} p${page} HTTP ${res.status} attempt ${attempt}/3 — retrying…`);
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      } catch (err) {
+        console.error(`[kis-master] ${label} p${page} 네트워크 오류 attempt ${attempt}/3:`, String(err));
+        if (attempt === 3) { res = null; }
+        else await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
     }
 
-    if (!res.ok) {
-      console.error(`[kis-master] ${label} p${page} HTTP ${res.status}`);
+    if (!res || !res.ok) {
+      let errBody = "";
+      if (res) { try { errBody = await res.text(); } catch { /* ignore */ } }
+      console.error(
+        `🚨 [KIS API ERROR] ${label} p${page}`,
+        res ? `HTTP ${res.status}` : "network error",
+        errBody.slice(0, 300)
+      );
       break;
     }
 
@@ -159,9 +200,11 @@ async function sweepEndpoint(
     // ★ rt_cd는 숫자(0) 또는 문자열("0") 모두 반환되므로 String() 변환 필수
     const rtCd = String(body.rt_cd ?? "0");
     if (rtCd !== "0") {
-      console.warn(
-        `[kis-master] ${label} p${page} API 오류 rt_cd=${rtCd} ` +
-        `msg="${body.msg1 ?? ""}" → 수집 중단`
+      console.error(
+        `🚨 [KIS API ERROR] ${label} p${page}`,
+        `rt_cd=${rtCd}`,
+        `msg1="${body.msg1 ?? ""}"`,
+        `msg_cd="${body.msg_cd ?? ""}"`
       );
       break;
     }
@@ -215,12 +258,11 @@ async function sweepEndpoint(
 
 // ── 전체 수집 ─────────────────────────────────────────────────────────────────
 async function fetchAllStocks(token: string): Promise<MasterStock[]> {
-  // 거래량 순위로 KOSPI + KOSDAQ 각각 전 페이지 순회
-  // NOTE: KOSDAQ("Q")는 FHPST01710000에서 INVALID → 빈 배열 반환 (rt_cd 체크)
-  const [ksVol, kqVol] = await Promise.all([
-    sweepEndpoint(token, "J", "FHPST01710000", "KOSPI-거래량"),
-    sweepEndpoint(token, "Q", "FHPST01710000", "KOSDAQ-거래량"),
-  ]);
+  // 거래량 순위 — 순차 실행 (병렬 시 EGW00201 초당 거래건수 초과)
+  // NOTE: KOSDAQ("Q")는 FHPST01710000에서 INVALID → rt_cd 체크로 즉시 종료
+  const ksVol = await sweepEndpoint(token, "J", "FHPST01710000", "KOSPI-거래량");
+  await new Promise((r) => setTimeout(r, 200));
+  const kqVol = await sweepEndpoint(token, "Q", "FHPST01710000", "KOSDAQ-거래량");
 
   // 중복 제거 병합
   const seen = new Set<string>();
@@ -241,10 +283,10 @@ async function fetchAllStocks(token: string): Promise<MasterStock[]> {
       `가격 순위 API 보완 실행… (장 마감 후 제한일 수 있음)`
     );
 
-    const [ksPrc, kqPrc] = await Promise.all([
-      sweepEndpoint(token, "J", "FHPST01700000", "KOSPI-가격"),
-      sweepEndpoint(token, "Q", "FHPST01700000", "KOSDAQ-가격"),
-    ]);
+    // 가격 순위도 순차 실행 (초당 초과 방지)
+    const ksPrc = await sweepEndpoint(token, "J", "FHPST01700000", "KOSPI-가격");
+    await new Promise((r) => setTimeout(r, 200));
+    const kqPrc = await sweepEndpoint(token, "Q", "FHPST01700000", "KOSDAQ-가격");
 
     for (const s of [...ksPrc, ...kqPrc]) {
       if (!seen.has(s.code)) {
@@ -288,7 +330,7 @@ export async function getKisMaster(
   }
 
   console.log("[kis-master] KIS API 전종목 순회 시작 …");
-  const token = await getToken();
+  const token = await getKisToken();
   const all = await fetchAllStocks(token);
 
   console.log(

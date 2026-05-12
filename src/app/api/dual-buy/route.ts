@@ -5,33 +5,15 @@
  *
  * 종목 풀: KIS 마스터 전종목 (KOSPI + KOSDAQ, 하드코딩 배열 없음)
  * KIS inquire-investor API 를 배치 호출 → frgn > 0 && orgn > 0 종목 추출
+ *
+ * ★ 토큰: fetchKisMaster.ts 의 getKisToken() 공유 — 별도 발급 금지
+ *   (KIS 1분 1회 제한: 두 모듈이 각자 토큰 발급 시 403 rate-limit 폭발)
  */
 
 import { NextResponse } from "next/server";
-import { getKisMaster } from "@/lib/fetchKisMaster";
+import { getKisMaster, getKisToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
-
-// ── KIS 토큰 ──────────────────────────────────────────────────────────────────
-let _tok: { value: string; exp: number } | null = null;
-
-async function getToken(): Promise<string> {
-  const now = Date.now();
-  if (_tok && _tok.exp > now + 60_000) return _tok.value;
-  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: process.env.KIS_APP_KEY,
-      appsecret: process.env.KIS_APP_SECRET,
-    }),
-    cache: "no-store",
-  });
-  const data = await res.json();
-  _tok = { value: data.access_token, exp: now + (data.expires_in ?? 86400) * 1000 };
-  return data.access_token;
-}
 
 export interface DualBuyItem {
   code: string;
@@ -77,8 +59,18 @@ async function fetchInvestor(
         cache: "no-store",
       }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      let errBody = "";
+      try { errBody = await res.text(); } catch { /* ignore */ }
+      console.error(`🚨 [KIS API ERROR] inquire-investor ${code} HTTP ${res.status}`, errBody.slice(0, 200));
+      return null;
+    }
     const data = await res.json();
+    // KIS 비즈니스 오류 로깅
+    if (String(data.rt_cd ?? "0") !== "0") {
+      console.error(`🚨 [KIS API ERROR] inquire-investor ${code} rt_cd=${data.rt_cd} msg="${data.msg1 ?? ""}"`);
+      return null;
+    }
     const rows: KISRow[] = data.output ?? [];
     const r = rows.find((x) => x.frgn_ntby_tr_pbmn !== "");
     if (!r) return null;
@@ -98,9 +90,12 @@ async function fetchInvestor(
 
 export async function GET() {
   try {
-    const token = await getToken();
+    // ★ fetchKisMaster 공유 토큰 사용 — 별도 발급 없음 (1분 1회 제한)
+    console.log("🎟️  [dual-buy] Token: using shared getKisToken()");
+    const token = await getKisToken();
+    console.log("🎟️  [dual-buy] Token: OK");
 
-    // KIS 마스터 전종목 로드 (캐시 활용)
+    // KIS 마스터 전종목 로드 (캐시 활용 — 토큰 재발급 없음)
     const master = await getKisMaster(["regular"]);
     const ks = master.filter((s) => s.market === "KS");
     const kq = master.filter((s) => s.market === "KQ");
@@ -109,19 +104,21 @@ export async function GET() {
       `[dual-buy] 스캔 대상: KOSPI ${ks.length}개 + KOSDAQ ${kq.length}개 = 합계 ${master.length}개`
     );
 
-    const BATCH = 10;
+    // BATCH=3, delay=300ms — KIS 초당 거래건수 제한(EGW00201) 방지
+    const BATCH = 3;
+    const DELAY_MS = 300;
     const results: Awaited<ReturnType<typeof fetchInvestor>>[] = [];
 
     for (let i = 0; i < ks.length; i += BATCH) {
       const r = await Promise.all(ks.slice(i, i + BATCH).map((s) => fetchInvestor(s.code, token, "J")));
       results.push(...r);
-      if (i + BATCH < ks.length) await new Promise((r) => setTimeout(r, 80));
+      if (i + BATCH < ks.length) await new Promise((r) => setTimeout(r, DELAY_MS));
     }
 
     for (let i = 0; i < kq.length; i += BATCH) {
       const r = await Promise.all(kq.slice(i, i + BATCH).map((s) => fetchInvestor(s.code, token, "Q")));
       results.push(...r);
-      if (i + BATCH < kq.length) await new Promise((r) => setTimeout(r, 80));
+      if (i + BATCH < kq.length) await new Promise((r) => setTimeout(r, DELAY_MS));
     }
 
     const nameMap = new Map(master.map((s) => [s.code, s.name]));
@@ -150,6 +147,7 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
+    console.error("🚨 [KIS API ERROR] [dual-buy] GET() 최상위 오류:", String(err));
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
