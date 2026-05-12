@@ -12,7 +12,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getKrxMaster } from "@/lib/fetchKrxMaster";
+import { getKisMaster } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
@@ -168,10 +168,10 @@ export async function GET() {
     const ksMap = new Map<string, string>(Object.entries(MAJOR_STOCKS_KS));
     const kqMap = new Map<string, string>(Object.entries(MAJOR_STOCKS_KQ));
 
-    // 2) KRX 마스터로 풀 확장 (regular 종목만 — ETF·우선주 제외)
+    // 2) KIS 마스터로 풀 확장 (regular 종목만 — ETF·우선주 제외)
     try {
-      const krxAll = await getKrxMaster(["regular"]);
-      console.log(`[dual-buy] KRX master loaded: ${krxAll.length}개`);
+      const krxAll = await getKisMaster(["regular"]);
+      console.log(`[dual-buy] KIS master loaded: ${krxAll.length}개`);
 
       for (const s of krxAll) {
         if (s.market === "KS" && !ksMap.has(s.code)) {
@@ -181,7 +181,7 @@ export async function GET() {
         }
       }
     } catch (err) {
-      console.warn("[dual-buy] KRX 로드 실패, 주요 종목만 스캔:", err);
+      console.warn("[dual-buy] KIS 마스터 로드 실패, 주요 종목만 스캔:", err);
     }
 
     const ksEntries = Array.from(ksMap.entries());

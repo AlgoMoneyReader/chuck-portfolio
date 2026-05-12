@@ -218,6 +218,29 @@ function InlineChart({ sym, changePct }: { sym: string; changePct: number }) {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function StockSearchPanel() {
+  // ── 전종목 마스터 (마운트 시 1회 로드 → 클라이언트 필터) ──────────────────
+  const [allStocks, setAllStocks] = useState<SearchResult[]>([]);
+  const [masterLoaded, setMasterLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/stock-master", { cache: "no-store" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (!j?.stocks) return;
+        const stocks: SearchResult[] = (j.stocks as SearchResult[]).filter(
+          (s) => s.type !== "spac" && s.type !== "preferred"
+        );
+        setAllStocks(stocks);
+        setMasterLoaded(true);
+        // ▼▼▼ 사용자 요청: 검색창 로드 종목 수 콘솔 출력 ▼▼▼
+        console.log("검색창 로드된 종목 수:", stocks.length,
+          `(source: ${j.source ?? "unknown"}, total in master: ${j.total ?? stocks.length})`);
+      })
+      .catch(() => {
+        setMasterLoaded(true); // 실패해도 API fallback으로 검색 가능
+      });
+  }, []);
+
   // ── 검색 상태 ────────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState("");
   const [suggestions,   setSuggestions]   = useState<SearchResult[]>([]);
@@ -236,25 +259,48 @@ export default function StockSearchPanel() {
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // ── 라이브 검색 (300ms 디바운스) ─────────────────────────────────────────
+  // ── 검색: 클라이언트 필터 우선 → 부족하면 API fallback ──────────────────
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const q = searchQuery.trim();
+    if (!q) {
       setSuggestions([]);
       setDropdownOpen(false);
       return;
     }
+
+    const lq = q.toLowerCase();
+
+    // 1) 로컬 필터 (마스터 로드 완료 시 즉시)
+    if (masterLoaded && allStocks.length > 0) {
+      const hits = allStocks
+        .filter(
+          (s) => s.name.toLowerCase().includes(lq) || s.code.includes(lq)
+        )
+        .slice(0, 10);
+      setSuggestions(hits);
+      setDropdownOpen(hits.length > 0);
+      setHighlightIdx(-1);
+
+      // 10개 미만이면 Yahoo Finance 보완 (비동기, 300ms 후)
+      if (hits.length >= 10) return;
+    }
+
+    // 2) API fallback (마스터 미로드 or 결과 부족)
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/stock-search?q=${encodeURIComponent(searchQuery.trim())}`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/stock-search?q=${encodeURIComponent(q)}`,
+          { cache: "no-store" }
+        );
         if (!res.ok) return;
-        const hits: SearchResult[] = await res.json();
-        setSuggestions(hits);
-        setDropdownOpen(hits.length > 0);
+        const apiHits: SearchResult[] = await res.json();
+        setSuggestions(apiHits);
+        setDropdownOpen(apiHits.length > 0);
         setHighlightIdx(-1);
       } catch { /* silent */ }
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, allStocks, masterLoaded]);
 
   // ── 클릭 외부 감지 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -367,7 +413,11 @@ export default function StockSearchPanel() {
             onChange={e => setSearchQuery(e.target.value)}
             onFocus={() => suggestions.length > 0 && setDropdownOpen(true)}
             onKeyDown={handleKeyDown}
-            placeholder="종목명 또는 종목코드 검색 (예: 삼성전자, 005930)"
+            placeholder={
+              masterLoaded && allStocks.length > 0
+                ? `종목명·코드 검색 (${allStocks.length.toLocaleString("ko-KR")}개 로드됨)`
+                : "종목명 또는 종목코드 검색 (예: 삼성전자, 005930)"
+            }
             className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 outline-none"
           />
           {searchQuery && (
