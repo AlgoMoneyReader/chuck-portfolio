@@ -50,9 +50,7 @@ function isMarketOpen(): boolean {
 }
 
 const fmtPrice = (n: number) => n.toLocaleString("ko-KR") + "원";
-const fmtVol = (n: number) =>
-  n >= 1_000_000 ? (n / 1_000_000).toFixed(1) + "M" :
-  n >= 1_000 ? (n / 1_000).toFixed(0) + "K" : String(n);
+const fmtVol = (n: number) => n.toLocaleString("ko-KR");
 
 // ─── 공통 UI ──────────────────────────────────────────────────────────────────
 
@@ -112,7 +110,7 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/market-top?market=${market}`, { cache: "no-store" });
+      const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       setRows(json.topGainers ?? []);
@@ -122,8 +120,14 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(load, isMarketOpen() ? 60_000 : 300_000);
-    return () => clearInterval(i);
+    let tid: ReturnType<typeof setTimeout>;
+    function schedule() {
+      // 매 tick마다 장 상태를 재평가 — mount 시점에 고정되지 않음
+      const delay = isMarketOpen() ? 30_000 : 120_000;
+      tid = setTimeout(() => { load(); schedule(); }, delay);
+    }
+    schedule();
+    return () => clearTimeout(tid);
   }, [load]);
 
   return (
@@ -172,7 +176,7 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/volume-spike?market=${market}`, { cache: "no-store" });
+      const res = await fetch(`/api/volume-spike?market=${market}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       setRows(json.spikes ?? []);
@@ -182,8 +186,14 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(load, isMarketOpen() ? 120_000 : 600_000);
-    return () => clearInterval(i);
+    let tid: ReturnType<typeof setTimeout>;
+    function schedule() {
+      // 매 tick마다 장 상태를 재평가
+      const delay = isMarketOpen() ? 60_000 : 300_000;
+      tid = setTimeout(() => { load(); schedule(); }, delay);
+    }
+    schedule();
+    return () => clearTimeout(tid);
   }, [load]);
 
   return (

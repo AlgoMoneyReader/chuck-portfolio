@@ -16,8 +16,9 @@ interface VolumeResult {
 
 async function fetchVolumeData(symbol: string): Promise<VolumeResult | null> {
   try {
-    // 5일치 일봉 → 오늘 포함 최대 5개 데이터 포인트
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    // 5일치 일봉 → 오늘 포함 최대 5개 데이터 포인트 (타임스탬프로 CDN 캐시 무효화)
+    const bust = Date.now();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d&_=${bust}`;
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
       cache: "no-store",
