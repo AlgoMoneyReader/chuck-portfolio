@@ -1,14 +1,13 @@
 /**
- * /api/stock-search?q=검색어
+ * GET /api/stock-search?q=검색어
  *
  * 검색 우선순위:
- *  1. KIS 전종목 마스터 (2,000개+) 로컬 필터 — 즉시 반환
- *  2. Yahoo Finance 라이브 검색 — 마스터에 없는 소형주·신규 상장 보완
+ *  1. KIS 전종목 마스터 (2,000개+) 서버 캐시 필터 — 즉시 반환
+ *  2. Yahoo Finance 라이브 검색 — KIS 마스터에 없는 신규 상장·소형주 보완
  *
- * Ticker 포맷 정책:
- *  - 응답 code = 6자리 숫자 (예: "039490")
- *  - market = "KS" | "KQ"
- *  - Yahoo Finance 심볼은 백엔드 내부에서만 사용 (code + "." + market)
+ * Ticker 포맷 정책 (이 파일 전체 준수):
+ *  응답 code = 6자리 숫자 문자열  ← UI 표시 기준
+ *  Yahoo Finance 심볼(.KS/.KQ)은 내부 전용, 응답에 노출 안 함
  */
 
 import { NextResponse } from "next/server";
@@ -36,34 +35,40 @@ export async function GET(request: Request) {
   if (!q) return NextResponse.json([]);
 
   const lq = q.toLowerCase();
+  let localHits: SearchResult[] = [];
+  let masterCodes = new Set<string>();
 
-  // ── 1. KIS 전종목 마스터 로컬 검색 ─────────────────────────────────────────
-  const master = await getKisMaster(["regular", "etf"]);
-  const localHits: SearchResult[] = master
-    .filter(
-      (s) =>
-        s.type !== "spac" &&
-        s.type !== "preferred" &&
-        (s.name.toLowerCase().includes(lq) || s.code.includes(lq))
-    )
-    .slice(0, 10)
-    .map((s) => ({
-      code: s.code,
-      name: s.name,
-      market: s.market,
-      type: s.type,
-    }));
+  // ── 1. KIS 전종목 마스터 로컬 필터 ─────────────────────────────────────────
+  try {
+    const master = await getKisMaster(["regular", "etf"]);
+    masterCodes = new Set(master.map((s) => s.code));
 
-  // 10개 채워졌으면 즉시 반환
-  if (localHits.length >= 10) {
-    return NextResponse.json(localHits, {
-      headers: { "Cache-Control": "no-store" },
-    });
+    localHits = master
+      .filter(
+        (s) =>
+          s.type !== "spac" &&
+          s.type !== "preferred" &&
+          (s.name.toLowerCase().includes(lq) || s.code.includes(lq))
+      )
+      .slice(0, 10)
+      .map((s) => ({
+        code: s.code,
+        name: s.name,
+        market: s.market,
+        type: s.type,
+      }));
+
+    if (localHits.length >= 10) {
+      return NextResponse.json(localHits, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
+  } catch {
+    // KIS 미설정 환경 → Yahoo Finance 단독 검색
   }
 
-  // ── 2. Yahoo Finance 보완 (마스터에 없는 종목) ──────────────────────────────
+  // ── 2. Yahoo Finance 보완 ────────────────────────────────────────────────────
   const localCodes = new Set(localHits.map((s) => s.code));
-  const masterCodeSet = new Set(master.map((s) => s.code));
 
   try {
     const yfUrl =
@@ -84,12 +89,13 @@ export async function GET(request: Request) {
     if (yfRes.ok) {
       const yfJson = await yfRes.json();
       const quotes: YFQuote[] = yfJson?.quotes ?? [];
+
       for (const item of quotes) {
         if (!item.symbol?.endsWith(".KS") && !item.symbol?.endsWith(".KQ"))
           continue;
         const code = item.symbol.replace(/\.(KS|KQ)$/, "");
         const market: "KS" | "KQ" = item.symbol.endsWith(".KS") ? "KS" : "KQ";
-        if (localCodes.has(code) || masterCodeSet.has(code)) continue;
+        if (localCodes.has(code) || masterCodes.has(code)) continue;
 
         yfResults.push({
           code,
@@ -100,8 +106,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const merged = [...localHits, ...yfResults].slice(0, 10);
-    return NextResponse.json(merged, {
+    return NextResponse.json([...localHits, ...yfResults].slice(0, 10), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {
