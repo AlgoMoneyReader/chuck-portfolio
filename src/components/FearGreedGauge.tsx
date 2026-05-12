@@ -28,88 +28,154 @@ function scoreLabel(score: number): string {
   return "극도 탐욕";
 }
 
-// 반원 게이지 — 점수·레이블은 SVG 밖 HTML로 분리
+// ─── 반원형 계기판 SVG ────────────────────────────────────────────────────────
+//
+// ✅ 핵심 수학 규칙:
+//    score 0 → 각도 -π   (9시 방향, 왼쪽 끝)
+//    score 50 → 각도 -π/2 (12시 방향, 최상단)
+//    score 100 → 각도 0   (3시 방향, 오른쪽 끝)
+//
+// ❌ 기존 버그:
+//    1. score > 50 이면 large-arc-flag=1 → SVG가 하단 225° 경로를 선택
+//       → overflow:visible 상태에서 계기판 아래로 거대한 원호가 튀어나옴
+//    2. arc(0, 100) = 양 끝이 지름 위치 → SVG 스펙상 "degenerate" 케이스
+//       → 브라우저마다 다른 반원을 선택, 두꺼운 전체 원처럼 렌더링
+//
+// ✅ 수정:
+//    - large-arc-flag 항상 0 고정 (반원 내 어떤 부분 호도 0으로 충분)
+//    - 배경 트랙은 90° × 2로 분리해 degenerate 케이스 완전 회피
+//    - overflow:visible 제거, viewBox 안에 모든 요소 정확히 배치
+//
 function GaugeSVG({ score }: { score: number }) {
-  const color = scoreColor(score);
-  const R  = 56;
-  const cx = 80;
-  const cy = 70;
+  // ── 레이아웃 상수 ─────────────────────────────────────────────────────────
+  const CX  = 100;   // 중심 X
+  const CY  = 70;    // 중심 Y (좌표계 기준)
+  const R   = 58;    // 아크 중심선 반지름
+  const SW  = 12;    // 트랙 스트로크 두께
+  const NL  = 48;    // 바늘 길이 (트랙 안쪽: R - SW/2 - 여백 ≈ 52이므로 48로 안전)
+  //
+  // viewBox "0 0 200 110":
+  //   트랙 상단 가장자리: CY - R - SW/2 = 70 - 58 - 6 = 6  → viewBox 안쪽 ✓
+  //   트랙 양 끝 Y:       CY = 70                           → viewBox 안쪽 ✓
+  //   점수 텍스트: CY+21 = 91, 레이블: CY+37 = 107         → viewBox 안쪽 ✓
 
-  // 각도: -180deg(좌 끝) → 0deg(우 끝), 점수 0→100
-  const angleRad = ((-180 + (score / 100) * 180) * Math.PI) / 180;
-  const nX = cx + R * Math.cos(angleRad);
-  const nY = cy + R * Math.sin(angleRad);
+  // score → 라디안 변환 (score 0.02, 99.98로 clamp → degenerate 양 끝점 회피)
+  const toRad = (s: number) =>
+    -Math.PI + (Math.max(0.02, Math.min(99.98, s)) / 100) * Math.PI;
 
-  function arcPath(from: number, to: number) {
-    const a1 = ((-180 + (from / 100) * 180) * Math.PI) / 180;
-    const a2 = ((-180 + (to   / 100) * 180) * Math.PI) / 180;
-    const x1 = cx + R * Math.cos(a1);
-    const y1 = cy + R * Math.sin(a1);
-    const x2 = cx + R * Math.cos(a2);
-    const y2 = cy + R * Math.sin(a2);
-    const large = (to - from) > 50 ? 1 : 0;
-    return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`;
-  }
+  // SVG 아크 경로 생성
+  // ⚠️ large-arc-flag 항상 0:
+  //    반원(180°) 내부의 임의 부분 호는 시계 방향(sweep=1) + small-arc(large=0)로
+  //    항상 상단 경로가 선택된다. score > 50 이어도 예외 없음.
+  const arc = (s1: number, s2: number): string => {
+    const a1 = toRad(s1);
+    const a2 = toRad(s2);
+    const x1 = (CX + R * Math.cos(a1)).toFixed(2);
+    const y1 = (CY + R * Math.sin(a1)).toFixed(2);
+    const x2 = (CX + R * Math.cos(a2)).toFixed(2);
+    const y2 = (CY + R * Math.sin(a2)).toFixed(2);
+    return `M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`;
+  };
 
-  // 현재 점수까지의 활성 아크
-  const activeA1Rad = (-180 * Math.PI) / 180;
-  const activeX1 = cx + R * Math.cos(activeA1Rad);
-  const activeY1 = cy + R * Math.sin(activeA1Rad);
-  const activeLarge = score > 50 ? 1 : 0;
+  const color  = scoreColor(score);
+  const label  = scoreLabel(score);
+  const angle  = toRad(score);
+  const nX     = (CX + NL * Math.cos(angle)).toFixed(2);
+  const nY     = (CY + NL * Math.sin(angle)).toFixed(2);
 
-  // 눈금 마커 (0, 25, 50, 75, 100)
-  const ticks = [0, 25, 50, 75, 100];
+  // 5단계 색상 구간
+  const ZONES: [number, number, string][] = [
+    [0,  25,  "#ef4444"],   // 극도 공포
+    [25, 45,  "#f97316"],   // 공포
+    [45, 55,  "#eab308"],   // 중립
+    [55, 75,  "#84cc16"],   // 탐욕
+    [75, 100, "#22c55e"],   // 극도 탐욕
+  ];
 
   return (
-    <svg viewBox="10 10 140 70" className="w-48 h-24" overflow="visible">
-      <defs>
-        {/* 게이지 배경용 그라디언트 (빨강→노랑→초록) */}
-        <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor="#ef4444" />
-          <stop offset="25%"  stopColor="#f97316" />
-          <stop offset="50%"  stopColor="#eab308" />
-          <stop offset="75%"  stopColor="#84cc16" />
-          <stop offset="100%" stopColor="#22c55e" />
-        </linearGradient>
-      </defs>
+    // overflow 기본값(hidden) — viewBox 바깥 렌더링 원천 차단
+    <svg viewBox="0 0 200 110" width="192" height="105" style={{ display: "block" }}>
 
-      {/* ① 두꺼운 어두운 배경 트랙 */}
-      <path d={arcPath(0, 100)} fill="none" stroke="#1e2a3a" strokeWidth="14" strokeLinecap="round" />
+      {/* ① 배경 트랙: 90° × 2로 분리 → 180° degenerate 케이스 완전 회피 */}
+      <path d={arc(0, 50)}   fill="none" stroke="#0d1a27" strokeWidth={SW + 4} strokeLinecap="butt" />
+      <path d={arc(50, 100)} fill="none" stroke="#0d1a27" strokeWidth={SW + 4} strokeLinecap="butt" />
 
-      {/* ② 그라디언트 컬러 트랙 (낮은 투명도 — 배경 가이드) */}
-      <path d={arcPath(0, 100)} fill="none" stroke="url(#gaugeGrad)" strokeWidth="14"
-        strokeLinecap="round" opacity="0.25" />
+      {/* ② 5단계 색상 구간 배경 (낮은 opacity — 가이드용) */}
+      {ZONES.map(([s1, s2, c]) => (
+        <path key={s1}
+          d={arc(s1, s2)}
+          fill="none"
+          stroke={c}
+          strokeWidth={SW}
+          strokeLinecap="butt"
+          opacity="0.28"
+        />
+      ))}
 
-      {/* ③ 현재 점수까지 밝은 채우기 */}
-      {score > 0 && (
+      {/* ③ 현재 점수까지 활성 아크 (large=0 고정 → 항상 상단 반원 경로 유지) */}
+      {score > 0.5 && (
         <path
-          d={`M ${activeX1} ${activeY1} A ${R} ${R} 0 ${activeLarge} 1 ${nX} ${nY}`}
-          fill="none" stroke={color} strokeWidth="14" strokeLinecap="round" opacity="0.9"
+          d={arc(0, score)}
+          fill="none"
+          stroke={color}
+          strokeWidth={SW}
+          strokeLinecap="round"
+          opacity="0.9"
         />
       )}
 
-      {/* ④ 눈금 마커 */}
-      {ticks.map((t) => {
-        const a = ((-180 + (t / 100) * 180) * Math.PI) / 180;
-        const inner = R - 10;
-        const outer = R + 4;
+      {/* ④ 눈금 마커 (0 / 25 / 50 / 75 / 100) */}
+      {([0, 25, 50, 75, 100] as const).map(t => {
+        const a = toRad(t);
         return (
-          <line key={t}
-            x1={cx + inner * Math.cos(a)} y1={cy + inner * Math.sin(a)}
-            x2={cx + outer * Math.cos(a)} y2={cy + outer * Math.sin(a)}
-            stroke="#334155" strokeWidth="1.5" strokeLinecap="round"
+          <line
+            key={t}
+            x1={(CX + (R - 7) * Math.cos(a)).toFixed(2)}
+            y1={(CY + (R - 7) * Math.sin(a)).toFixed(2)}
+            x2={(CX + (R + 6) * Math.cos(a)).toFixed(2)}
+            y2={(CY + (R + 6) * Math.sin(a)).toFixed(2)}
+            stroke="#2a3f52"
+            strokeWidth="1.5"
+            strokeLinecap="round"
           />
         );
       })}
 
       {/* ⑤ 바늘 */}
-      <line x1={cx} y1={cy} x2={nX} y2={nY}
-        stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-      <circle cx={cx} cy={cy} r="5" fill="white" />
-      <circle cx={cx} cy={cy} r="2.5" fill={color} />
+      <line
+        x1={CX} y1={CY}
+        x2={nX} y2={nY}
+        stroke="white"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        opacity="0.95"
+      />
+
+      {/* ⑥ 중앙 허브 */}
+      <circle cx={CX} cy={CY} r="5"   fill="white" />
+      <circle cx={CX} cy={CY} r="2.5" fill={color} />
+
+      {/* ⑦ 점수 & 레이블 — SVG 내 중앙 배치로 HTML 겹침 완전 제거 */}
+      <text
+        x={CX} y={CY + 22}
+        textAnchor="middle"
+        fill={color}
+        fontSize="22"
+        fontWeight="bold"
+        fontFamily="ui-monospace, monospace"
+      >{score}</text>
+      <text
+        x={CX} y={CY + 38}
+        textAnchor="middle"
+        fill={color}
+        fontSize="12"
+        fontWeight="600"
+      >{label}</text>
     </svg>
   );
 }
+
+// ─── 보조 통계 ────────────────────────────────────────────────────────────────
 
 function MiniStat({ label, score }: { label: string; score: number }) {
   return (
@@ -119,6 +185,8 @@ function MiniStat({ label, score }: { label: string; score: number }) {
     </div>
   );
 }
+
+// ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 export default function FearGreedGauge() {
   const [data, setData] = useState<FGData | null>(null);
@@ -167,17 +235,10 @@ export default function FearGreedGauge() {
         </div>
       ) : (
         <div className="flex flex-col sm:flex-row items-center gap-4">
-          {/* 게이지 + 점수 (HTML로 분리) */}
-          <div className="flex flex-col items-center shrink-0">
+
+          {/* 게이지 — 점수·레이블 텍스트 SVG 내 임베드, HTML 겹침 없음 */}
+          <div className="shrink-0">
             <GaugeSVG score={data.score} />
-            <div className="-mt-2 text-center">
-              <p className="text-2xl font-bold num leading-none" style={{ color: scoreColor(data.score) }}>
-                {data.score}
-              </p>
-              <p className="text-sm font-semibold mt-0.5" style={{ color: scoreColor(data.score) }}>
-                {scoreLabel(data.score)}
-              </p>
-            </div>
           </div>
 
           {/* 기간별 비교 */}
