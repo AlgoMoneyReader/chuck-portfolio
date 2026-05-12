@@ -1,17 +1,16 @@
 /**
  * GET /api/stock-search?q=검색어
  *
- * 검색 우선순위:
- *  1. KIS 전종목 마스터 (2,000개+) 서버 캐시 필터 — 즉시 반환
- *  2. Yahoo Finance 라이브 검색 — KIS 마스터에 없는 신규 상장·소형주 보완
+ * 검색 전략 (블로킹 없음):
+ *  1. KIS 마스터 캐시가 이미 적재됐으면 → 로컬 필터 즉시 반환
+ *  2. 캐시 미적재(초기 로드 중) → Yahoo Finance 라이브 검색으로 직행
  *
- * Ticker 포맷 정책 (이 파일 전체 준수):
- *  응답 code = 6자리 숫자 문자열  ← UI 표시 기준
- *  Yahoo Finance 심볼(.KS/.KQ)은 내부 전용, 응답에 노출 안 함
+ * ★ getKisMaster() 대신 getKisMasterCached() 사용 → 절대 블로킹 없음
+ *    KIS API 순회가 완료되기 전에도 Yahoo Finance로 즉각 응답
  */
 
 import { NextResponse } from "next/server";
-import { getKisMaster } from "@/lib/fetchKisMaster";
+import { getKisMasterCached } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
@@ -29,21 +28,50 @@ interface YFQuote {
   longname?: string;
 }
 
+async function yahooSearch(q: string): Promise<SearchResult[]> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v1/finance/search` +
+      `?q=${encodeURIComponent(q)}&lang=ko-KR&region=KR` +
+      `&quotesCount=15&newsCount=0&enableFuzzyQuery=false`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return [];
+    const json = await res.json();
+    const quotes: YFQuote[] = json?.quotes ?? [];
+    return quotes
+      .filter(
+        (q) => q.symbol?.endsWith(".KS") || q.symbol?.endsWith(".KQ")
+      )
+      .map((q) => ({
+        code: q.symbol.replace(/\.(KS|KQ)$/, ""),
+        name: q.shortname ?? q.longname ?? q.symbol,
+        market: (q.symbol.endsWith(".KS") ? "KS" : "KQ") as "KS" | "KQ",
+        type: q.quoteType === "ETF" ? "etf" : "regular",
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
   if (!q) return NextResponse.json([]);
 
   const lq = q.toLowerCase();
-  let localHits: SearchResult[] = [];
-  let masterCodes = new Set<string>();
 
-  // ── 1. KIS 전종목 마스터 로컬 필터 ─────────────────────────────────────────
-  try {
-    const master = await getKisMaster(["regular", "etf"]);
-    masterCodes = new Set(master.map((s) => s.code));
-
-    localHits = master
+  // ── 1. KIS 캐시가 이미 있으면 → 로컬 필터 즉시 (0ms) ─────────────────────
+  const cached = getKisMasterCached(["regular", "etf"]);
+  if (cached) {
+    const localHits: SearchResult[] = cached
       .filter(
         (s) =>
           s.type !== "spac" &&
@@ -51,67 +79,28 @@ export async function GET(request: Request) {
           (s.name.toLowerCase().includes(lq) || s.code.includes(lq))
       )
       .slice(0, 10)
-      .map((s) => ({
-        code: s.code,
-        name: s.name,
-        market: s.market,
-        type: s.type,
-      }));
+      .map((s) => ({ code: s.code, name: s.name, market: s.market, type: s.type }));
 
     if (localHits.length >= 10) {
       return NextResponse.json(localHits, {
-        headers: { "Cache-Control": "no-store" },
+        headers: { "Cache-Control": "no-store", "X-Source": "kis-cache" },
       });
     }
-  } catch {
-    // KIS 미설정 환경 → Yahoo Finance 단독 검색
-  }
 
-  // ── 2. Yahoo Finance 보완 ────────────────────────────────────────────────────
-  const localCodes = new Set(localHits.map((s) => s.code));
+    // 부족하면 Yahoo Finance 보완
+    const masterCodes = new Set(cached.map((s) => s.code));
+    const yfExtra = (await yahooSearch(q)).filter(
+      (r) => !masterCodes.has(r.code)
+    );
 
-  try {
-    const yfUrl =
-      `https://query2.finance.yahoo.com/v1/finance/search` +
-      `?q=${encodeURIComponent(q)}&lang=ko-KR&region=KR` +
-      `&quotesCount=15&newsCount=0&enableFuzzyQuery=false`;
-
-    const yfRes = await fetch(yfUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    const yfResults: SearchResult[] = [];
-    if (yfRes.ok) {
-      const yfJson = await yfRes.json();
-      const quotes: YFQuote[] = yfJson?.quotes ?? [];
-
-      for (const item of quotes) {
-        if (!item.symbol?.endsWith(".KS") && !item.symbol?.endsWith(".KQ"))
-          continue;
-        const code = item.symbol.replace(/\.(KS|KQ)$/, "");
-        const market: "KS" | "KQ" = item.symbol.endsWith(".KS") ? "KS" : "KQ";
-        if (localCodes.has(code) || masterCodes.has(code)) continue;
-
-        yfResults.push({
-          code,
-          name: item.shortname ?? item.longname ?? code,
-          market,
-          type: item.quoteType === "ETF" ? "etf" : "regular",
-        });
-      }
-    }
-
-    return NextResponse.json([...localHits, ...yfResults].slice(0, 10), {
-      headers: { "Cache-Control": "no-store" },
-    });
-  } catch {
-    return NextResponse.json(localHits, {
-      headers: { "Cache-Control": "no-store" },
+    return NextResponse.json([...localHits, ...yfExtra].slice(0, 10), {
+      headers: { "Cache-Control": "no-store", "X-Source": "kis-cache+yf" },
     });
   }
+
+  // ── 2. 캐시 미적재 → Yahoo Finance 직행 (블로킹 없음) ─────────────────────
+  const yfResults = await yahooSearch(q);
+  return NextResponse.json(yfResults.slice(0, 10), {
+    headers: { "Cache-Control": "no-store", "X-Source": "yf-only" },
+  });
 }

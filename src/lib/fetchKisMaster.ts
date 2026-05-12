@@ -275,6 +275,17 @@ export async function getKisMaster(
   return all.filter((s) => includeTypes.includes(s.type));
 }
 
+/**
+ * 캐시된 데이터만 반환 (KIS API 호출 없음)
+ * → stock-search 에서 캐시 미적재 시 Yahoo Finance fallback 결정에 사용
+ */
+export function getKisMasterCached(
+  includeTypes: MasterStock["type"][] = ["regular", "etf"]
+): MasterStock[] | null {
+  if (!_cache || Date.now() - _cache.fetchedAt >= CACHE_TTL) return null;
+  return _cache.data.filter((s) => includeTypes.includes(s.type));
+}
+
 /** 캐시 즉시 무효화 */
 export function invalidateKisMasterCache() {
   _cache = null;

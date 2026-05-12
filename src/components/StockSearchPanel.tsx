@@ -193,12 +193,15 @@ function InlineChart({ sym, changePct }: { sym: string; changePct: number }) {
               <Tooltip
                 content={({ active, payload, label: d }) => {
                   if (!active || !payload?.length) return null;
-                  const v = payload[0].value as number;
+                  // null 포인트(connectNulls)에서 value가 null일 수 있음
+                  const v = payload[0]?.value;
+                  if (v == null) return null;
+                  const num = v as number;
                   return (
                     <div className="bg-navy-card border border-navy-border rounded-lg px-2.5 py-1.5 text-xs">
                       <p className="text-gray-400">{d}</p>
                       <p className="text-white font-bold">
-                        {currency === "KRW" ? v.toLocaleString("ko-KR")+"원" : v.toFixed(2)}
+                        {currency === "KRW" ? num.toLocaleString("ko-KR")+"원" : num.toFixed(2)}
                       </p>
                     </div>
                   );
@@ -222,6 +225,9 @@ export default function StockSearchPanel() {
   const [allStocks, setAllStocks] = useState<SearchResult[]>([]);
   const [masterLoaded, setMasterLoaded] = useState(false);
 
+  // KIS 마스터 로드 상태 (UI 피드백용)
+  const [masterFetching, setMasterFetching] = useState(true); // 로딩 중
+
   useEffect(() => {
     fetch("/api/stock-master", { cache: "no-store" })
       .then((r) => r.ok ? r.json() : null)
@@ -231,13 +237,16 @@ export default function StockSearchPanel() {
           (s) => s.type !== "spac" && s.type !== "preferred"
         );
         setAllStocks(stocks);
-        setMasterLoaded(true);
         // ▼▼▼ 사용자 요청: 검색창 로드 종목 수 콘솔 출력 ▼▼▼
         console.log("검색창 로드된 종목 수:", stocks.length,
           `(source: ${j.source ?? "unknown"}, total in master: ${j.total ?? stocks.length})`);
       })
       .catch(() => {
-        setMasterLoaded(true); // 실패해도 API fallback으로 검색 가능
+        // 네트워크 오류 — finally에서 처리
+      })
+      .finally(() => {
+        setMasterLoaded(true);
+        setMasterFetching(false); // 로딩 완료 (성공/실패 무관)
       });
   }, []);
 
@@ -258,8 +267,10 @@ export default function StockSearchPanel() {
   const [supplyTab, setSupplyTab] = useState<"amount" | "qty">("amount");
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  // 종목 선택 직후 재검색 방지 (setSearchQuery(item.name) 트리거로 드롭다운 재오픈되는 버그 차단)
+  const skipNextSearchRef = useRef(false);
 
-  // ── 검색: 클라이언트 필터 우선 → 부족하면 API fallback ──────────────────
+  // ── 검색: 300ms 디바운스 API 검색 (항상 동작 — master 로드 여부 무관) ────
   useEffect(() => {
     const q = searchQuery.trim();
     if (!q) {
@@ -268,24 +279,12 @@ export default function StockSearchPanel() {
       return;
     }
 
-    const lq = q.toLowerCase();
-
-    // 1) 로컬 필터 (마스터 로드 완료 시 즉시)
-    if (masterLoaded && allStocks.length > 0) {
-      const hits = allStocks
-        .filter(
-          (s) => s.name.toLowerCase().includes(lq) || s.code.includes(lq)
-        )
-        .slice(0, 10);
-      setSuggestions(hits);
-      setDropdownOpen(hits.length > 0);
-      setHighlightIdx(-1);
-
-      // 10개 미만이면 Yahoo Finance 보완 (비동기, 300ms 후)
-      if (hits.length >= 10) return;
+    // 종목 선택 직후엔 재검색 skip (드롭다운 재오픈 버그 방지)
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      return;
     }
 
-    // 2) API fallback (마스터 미로드 or 결과 부족)
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
@@ -293,13 +292,39 @@ export default function StockSearchPanel() {
           { cache: "no-store" }
         );
         if (!res.ok) return;
-        const apiHits: SearchResult[] = await res.json();
+        const raw = await res.json();
+        // 방어적 타입 체크: 배열이 아닌 응답(에러 객체 등)이 오면 무시
+        const apiHits: SearchResult[] = Array.isArray(raw) ? raw : [];
         setSuggestions(apiHits);
         setDropdownOpen(apiHits.length > 0);
         setHighlightIdx(-1);
       } catch { /* silent */ }
     }, 300);
     return () => clearTimeout(timer);
+  }, [searchQuery]); // searchQuery만 의존 → master 로드 시 타이머 취소 없음
+
+  // ── 클라이언트 필터: 마스터 로드 완료 시 즉시 결과 교체 (debounce 불필요) ──
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q || !masterLoaded || allStocks.length === 0) return;
+
+    const lq = q.toLowerCase();
+    try {
+      const hits = allStocks
+        // ★ 옵셔널 체이닝: name/code가 undefined인 항목에서 TypeError 방지
+        .filter((s) =>
+          (s.name?.toLowerCase() ?? "").includes(lq) ||
+          (s.code ?? "").includes(lq)
+        )
+        .slice(0, 10);
+
+      setSuggestions(hits);
+      setDropdownOpen(hits.length > 0);
+      setHighlightIdx(-1);
+    } catch (e) {
+      // filter 중 예외 발생 시 컴포넌트 크래시 방지
+      console.error("[StockSearchPanel] 로컬 필터 오류:", e);
+    }
   }, [searchQuery, allStocks, masterLoaded]);
 
   // ── 클릭 외부 감지 ────────────────────────────────────────────────────────
@@ -316,14 +341,20 @@ export default function StockSearchPanel() {
 
   // ── 주식 로드 ─────────────────────────────────────────────────────────────
   const loadStock = useCallback(async (item: SearchResult) => {
+    const code   = item.code   ?? "";
+    const market = item.market ?? "KS";
+    const name   = item.name   ?? item.code ?? "";
+
     const stockItem: StockItem = {
-      sym: `${item.code}.${item.market}`,
-      code: item.code,
-      market: item.market,
-      name: item.name,
+      sym: `${code}.${market}`,
+      code,
+      market,
+      name,
     };
     setSelected(stockItem);
-    setSearchQuery(item.name);
+    // 선택 직후 Effect1이 재검색하여 드롭다운을 재오픈하는 버그 차단
+    skipNextSearchRef.current = true;
+    setSearchQuery(name);
     setDropdownOpen(false);
     setHighlightIdx(-1);
     setQuote(null);
@@ -414,12 +445,18 @@ export default function StockSearchPanel() {
             onFocus={() => suggestions.length > 0 && setDropdownOpen(true)}
             onKeyDown={handleKeyDown}
             placeholder={
-              masterLoaded && allStocks.length > 0
+              allStocks.length > 0
                 ? `종목명·코드 검색 (${allStocks.length.toLocaleString("ko-KR")}개 로드됨)`
-                : "종목명 또는 종목코드 검색 (예: 삼성전자, 005930)"
+                : masterFetching
+                  ? "KIS 종목 데이터 수집 중... (종목코드 먼저 검색 가능)"
+                  : "종목코드로 검색 (예: 005930) · 한글 검색은 KIS 로그인 필요"
             }
             className="flex-1 bg-transparent text-white text-sm placeholder-gray-500 outline-none"
           />
+          {/* KIS 마스터 로딩 중 스피너 */}
+          {masterFetching && (
+            <span className="w-3 h-3 border border-gray-600 border-t-cyan-brand/60 rounded-full animate-spin shrink-0" />
+          )}
           {searchQuery && (
             <button
               onClick={() => { setSearchQuery(""); setSelected(null); setDropdownOpen(false); setSuggestions([]); }}
@@ -428,20 +465,44 @@ export default function StockSearchPanel() {
           )}
         </div>
 
-        {/* 드롭다운 */}
+        {/* 드롭다운: 검색어 있는데 결과 없음 → 이유 안내 */}
+        {searchQuery.trim() && !dropdownOpen && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-xl px-4 py-3 text-xs"
+            style={{ zIndex: 60 }}>
+            {masterFetching ? (
+              <span className="text-gray-400 flex items-center gap-2">
+                <span className="w-3 h-3 border border-gray-600 border-t-cyan-brand/60 rounded-full animate-spin" />
+                KIS 전종목 데이터 수집 중... 잠시 후 한글 검색 가능
+              </span>
+            ) : allStocks.length === 0 ? (
+              <span className="text-gray-500">종목코드로 검색하세요 (예: 005930)</span>
+            ) : (
+              <span className="text-gray-500">
+                &apos;{searchQuery.trim()}&apos; 검색 결과 없음
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 드롭다운: 결과 있음 */}
         {dropdownOpen && suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-2xl overflow-hidden animate-fade-in"
             style={{ zIndex: 60 }}>
             {suggestions.map((item, idx) => {
+              // ★ 방어적 처리: name/code/market이 undefined여도 크래시 없음
+              const itemCode   = item?.code   ?? "";
+              const itemName   = item?.name   ?? itemCode;
+              const itemMarket = item?.market ?? "KS";
+              const itemType   = item?.type   ?? "regular";
               const marketLabel =
-                item.type === "etf" ? "ETF" :
-                item.market === "KS" ? "KOSPI" : "KOSDAQ";
+                itemType === "etf"    ? "ETF"    :
+                itemMarket === "KS"   ? "KOSPI"  : "KOSDAQ";
               const marketColor =
-                item.type === "etf" ? "text-gold" :
-                item.market === "KS" ? "text-gray-600" : "text-cyan-brand/60";
+                itemType === "etf"    ? "text-gold" :
+                itemMarket === "KS"   ? "text-gray-600" : "text-cyan-brand/60";
               return (
                 <button
-                  key={item.code + item.market}
+                  key={`${itemCode}-${itemMarket}-${idx}`}
                   onClick={() => loadStock(item)}
                   onMouseEnter={() => setHighlightIdx(idx)}
                   className={`w-full px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors text-left ${
@@ -450,8 +511,8 @@ export default function StockSearchPanel() {
                       : "hover:bg-cyan-brand/10 hover:border-l-2 hover:border-cyan-brand"
                   }`}
                 >
-                  <span className="flex-1 text-sm font-bold text-white">{item.name}</span>
-                  <span className="text-xs text-gray-500 font-mono">{item.code}</span>
+                  <span className="flex-1 text-sm font-bold text-white">{itemName}</span>
+                  <span className="text-xs text-gray-500 font-mono">{itemCode}</span>
                   <span className={`text-xs font-medium ${marketColor}`}>{marketLabel}</span>
                 </button>
               );
@@ -480,11 +541,11 @@ export default function StockSearchPanel() {
                 </div>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className={`text-3xl font-bold num ${priceColor}`}>
-                    {quote.price.toLocaleString("ko-KR")}원
+                    {(quote.price ?? 0).toLocaleString("ko-KR")}원
                   </span>
                   <span className={`text-sm font-semibold num ${priceColor}`}>
-                    {isPos ? "▲" : "▼"} {Math.abs(quote.changePct).toFixed(2)}%
-                    &nbsp;({isPos ? "+" : ""}{quote.change.toLocaleString("ko-KR")}원)
+                    {isPos ? "▲" : "▼"} {Math.abs(quote.changePct ?? 0).toFixed(2)}%
+                    &nbsp;({isPos ? "+" : ""}{(quote.change ?? 0).toLocaleString("ko-KR")}원)
                   </span>
                 </div>
 
@@ -493,7 +554,7 @@ export default function StockSearchPanel() {
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-blue-400 bg-blue-400/15 border-blue-400/30">
                       프리마켓 {quote.preMarketPrice.toLocaleString("ko-KR")}원
-                      {quote.preMarketChangePct !== null && (
+                      {quote.preMarketChangePct != null && (
                         <> {quote.preMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.preMarketChangePct).toFixed(2)}%</>
                       )}
                     </span>
@@ -503,7 +564,7 @@ export default function StockSearchPanel() {
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
                       애프터마켓 {quote.postMarketPrice.toLocaleString("ko-KR")}원
-                      {quote.postMarketChangePct !== null && (
+                      {quote.postMarketChangePct != null && (
                         <> {quote.postMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.postMarketChangePct).toFixed(2)}%</>
                       )}
                     </span>
@@ -513,9 +574,9 @@ export default function StockSearchPanel() {
               {/* 세부 수치 */}
               <div className="flex gap-4 text-xs">
                 {[
-                  { label: "고가",   val: quote.dayHigh.toLocaleString("ko-KR")+"원" },
-                  { label: "저가",   val: quote.dayLow.toLocaleString("ko-KR")+"원" },
-                  { label: "52주 고", val: quote.week52High.toLocaleString("ko-KR")+"원" },
+                  { label: "고가",    val: (quote.dayHigh   ?? 0).toLocaleString("ko-KR")+"원" },
+                  { label: "저가",    val: (quote.dayLow    ?? 0).toLocaleString("ko-KR")+"원" },
+                  { label: "52주 고", val: (quote.week52High ?? 0).toLocaleString("ko-KR")+"원" },
                 ].map(({ label, val }) => (
                   <div key={label} className="text-center">
                     <p className="text-gray-500 mb-0.5">{label}</p>
@@ -618,23 +679,27 @@ export default function StockSearchPanel() {
 
                   {/* 스코어 바 */}
                   <div className="space-y-2">
-                    {investor.factors.map(f => (
-                      <div key={f.label}>
-                        <div className="flex justify-between text-xs mb-0.5">
-                          <span className="text-gray-400">{f.label}</span>
-                          <span className="text-gray-300">{f.score}/{f.max}</span>
+                    {(investor.factors ?? []).map((f, fi) => {
+                      const fScore = f?.score ?? 0;
+                      const fMax   = f?.max   ?? 1; // 0으로 나누기 방지
+                      return (
+                        <div key={f?.label ?? fi}>
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-400">{f?.label ?? ""}</span>
+                            <span className="text-gray-300">{fScore}/{fMax}</span>
+                          </div>
+                          <div className="h-1.5 bg-navy-border rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.min((fScore / fMax) * 100, 100)}%`,
+                                backgroundColor: gc.color,
+                                opacity: 0.8,
+                              }} />
+                          </div>
+                          <p className="text-xs text-gray-600 mt-0.5">{f?.desc ?? ""}</p>
                         </div>
-                        <div className="h-1.5 bg-navy-border rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${(f.score / f.max) * 100}%`,
-                              backgroundColor: gc.color,
-                              opacity: 0.8,
-                            }} />
-                        </div>
-                        <p className="text-xs text-gray-600 mt-0.5">{f.desc}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : (

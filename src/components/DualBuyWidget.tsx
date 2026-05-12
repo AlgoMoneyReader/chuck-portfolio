@@ -52,14 +52,21 @@ export default function DualBuyWidget() {
   const router = useRouter();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(false); // 500 에러 구분 (빈 결과 ≠ 오류)
 
   const load = useCallback(async () => {
+    setApiError(false);
     try {
       const res = await fetch("/api/dual-buy", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        // KIS 인증 실패·서버 오류 → 에러 상태 표시
+        setApiError(true);
+        return;
+      }
       const json: ApiResponse = await res.json();
+      if ((json as { error?: string })?.error) { setApiError(true); return; }
       setData(json);
-    } catch { /* silent */ } finally { setLoading(false); }
+    } catch { setApiError(true); } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -106,6 +113,15 @@ export default function DualBuyWidget() {
       {/* Content */}
       {loading ? (
         <SkeletonRows />
+      ) : apiError ? (
+        // KIS API 인증 실패 / 서버 오류 — 빈 결과와 명확히 구분
+        <div className="py-6 text-center space-y-1">
+          <p className="text-xs text-orange-400/80">⚠️ KIS API 연결 실패</p>
+          <p className="text-xs text-gray-600">
+            KIS 인증정보를 확인하세요.<br />
+            Vercel → Settings → Environment Variables
+          </p>
+        </div>
       ) : !data || data.stocks.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">
           현재 시장에 강력한 쌍끌이 수급이 유입되는 종목이 없습니다.
