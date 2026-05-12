@@ -1,4 +1,18 @@
+/**
+ * /api/dual-buy
+ *
+ * 외국인 + 기관 동반 순매수 TOP 10 (쌍끌이)
+ *
+ * 종목 풀(universe) 전략:
+ *  - KRX 공개 API로 전체 상장 종목 마스터 로드 (2,000개+)
+ *  - 단, investor-flow API 호출 부하를 줄이기 위해
+ *    시가총액 상위 / 유동성 있는 종목을 1차 필터로 사용
+ *  - MAJOR_STOCKS_KS · KQ 는 최우선 스캔 대상으로 유지
+ *  - KRX 마스터 로드 실패 시 MAJOR_STOCKS 로만 스캔
+ */
+
 import { NextResponse } from "next/server";
+import { getKrxMaster } from "@/lib/fetchKrxMaster";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +37,7 @@ async function getKISToken(): Promise<string> {
   return data.access_token;
 }
 
-// ─── KOSPI 주요 종목 ──────────────────────────────────────────────────────────
+// ─── 핵심 스캔 대상 (반드시 포함) ─────────────────────────────────────────────
 const MAJOR_STOCKS_KS: Record<string, string> = {
   "005930": "삼성전자",        "000660": "SK하이닉스",      "005380": "현대차",
   "035420": "NAVER",           "051910": "LG화학",           "207940": "삼성바이오로직스",
@@ -44,7 +58,6 @@ const MAJOR_STOCKS_KS: Record<string, string> = {
   "267250": "HD현대",          "028050": "삼성E&A",          "009830": "한화솔루션",
   "003670": "포스코퓨처엠",    "034020": "두산에너빌리티",   "064350": "현대로템",
   "086280": "현대글로비스",    "000720": "현대건설",
-  // 추가 KOSPI
   "004020": "현대제철",        "011790": "SKC",              "088350": "한화생명",
   "071050": "한국금융지주",    "023530": "롯데쇼핑",         "000150": "두산",
   "138040": "메리츠금융지주",  "005830": "DB손해보험",       "014680": "한솔케미칼",
@@ -56,9 +69,10 @@ const MAJOR_STOCKS_KS: Record<string, string> = {
   "373220": "LG에너지솔루션",  "259960": "크래프톤",         "323410": "카카오뱅크",
   "377300": "카카오페이",      "079550": "LIG넥스원",        "016360": "삼성증권",
   "005940": "NH투자증권",      "011780": "금호석유화학",     "036490": "SK케미칼",
+  "039490": "키움증권",        "023590": "다우기술",         "032190": "다우데이타",
+  "084690": "대상홀딩스",
 };
 
-// ─── KOSDAQ 주요 종목 ─────────────────────────────────────────────────────────
 const MAJOR_STOCKS_KQ: Record<string, string> = {
   "247540": "에코프로비엠",    "086520": "에코프로",         "196170": "알테오젠",
   "357780": "솔브레인",        "263750": "펄어비스",         "145020": "휴젤",
@@ -72,7 +86,7 @@ const MAJOR_STOCKS_KQ: Record<string, string> = {
 export interface DualBuyItem {
   code: string;
   name: string;
-  market: "KS" | "KQ";   // 분석 페이지 라우팅용 (ticker = code.market)
+  market: "KS" | "KQ";
   price: number;
   changePct: number;
   foreign: number;
@@ -88,7 +102,6 @@ interface KISRow {
   orgn_ntby_tr_pbmn: string;
 }
 
-/** 백만원 → 억원 */
 function toUk(s: string): number {
   const n = parseInt((s ?? "").replace(/,/g, "") || "0", 10);
   return isNaN(n) ? 0 : Math.round(n / 100);
@@ -150,14 +163,38 @@ export async function GET() {
   try {
     const token = await getKISToken();
 
-    const ksEntries = Object.entries(MAJOR_STOCKS_KS);
-    const kqEntries = Object.entries(MAJOR_STOCKS_KQ);
+    // ── 종목 풀 구성 ─────────────────────────────────────────────────────────
+    // 1) 고정 주요 종목 (KOSPI + KOSDAQ)
+    const ksMap = new Map<string, string>(Object.entries(MAJOR_STOCKS_KS));
+    const kqMap = new Map<string, string>(Object.entries(MAJOR_STOCKS_KQ));
 
-    // 10개씩 배치 병렬 처리
+    // 2) KRX 마스터로 풀 확장 (regular 종목만 — ETF·우선주 제외)
+    try {
+      const krxAll = await getKrxMaster(["regular"]);
+      console.log(`[dual-buy] KRX master loaded: ${krxAll.length}개`);
+
+      for (const s of krxAll) {
+        if (s.market === "KS" && !ksMap.has(s.code)) {
+          ksMap.set(s.code, s.name);
+        } else if (s.market === "KQ" && !kqMap.has(s.code)) {
+          kqMap.set(s.code, s.name);
+        }
+      }
+    } catch (err) {
+      console.warn("[dual-buy] KRX 로드 실패, 주요 종목만 스캔:", err);
+    }
+
+    const ksEntries = Array.from(ksMap.entries());
+    const kqEntries = Array.from(kqMap.entries());
+
+    console.log(
+      `[dual-buy] 스캔 대상: KOSPI ${ksEntries.length}개 + KOSDAQ ${kqEntries.length}개 = 합계 ${ksEntries.length + kqEntries.length}개`
+    );
+
+    // ── 배치 병렬 처리 (10개씩, rate limit 방지) ────────────────────────────
     const BATCH = 10;
     const results: Awaited<ReturnType<typeof fetchStockInvestor>>[] = [];
 
-    // KOSPI 배치
     for (let i = 0; i < ksEntries.length; i += BATCH) {
       const batch = ksEntries.slice(i, i + BATCH);
       const batchResults = await Promise.all(batch.map(([c]) => fetchStockInvestor(c, token, "J")));
@@ -165,7 +202,6 @@ export async function GET() {
       if (i + BATCH < ksEntries.length) await new Promise((r) => setTimeout(r, 80));
     }
 
-    // KOSDAQ 배치
     for (let i = 0; i < kqEntries.length; i += BATCH) {
       const batch = kqEntries.slice(i, i + BATCH);
       const batchResults = await Promise.all(batch.map(([c]) => fetchStockInvestor(c, token, "Q")));
@@ -173,17 +209,19 @@ export async function GET() {
       if (i + BATCH < kqEntries.length) await new Promise((r) => setTimeout(r, 80));
     }
 
-    const allStocks = { ...MAJOR_STOCKS_KS, ...MAJOR_STOCKS_KQ };
-    const KQ_CODES = new Set(Object.keys(MAJOR_STOCKS_KQ));
+    const allStocks = new Map<string, string>([
+      ...Array.from(ksMap.entries()),
+      ...Array.from(kqMap.entries()),
+    ]);
+    const kqCodes = new Set(kqMap.keys());
     const valid = results.filter(Boolean) as NonNullable<(typeof results)[0]>[];
 
-    // 외국인 + 기관 모두 양수 필터 → 합산 내림차순 → TOP 10
     const dualBuy: DualBuyItem[] = valid
       .filter((r) => r.frgn > 0 && r.orgn > 0)
       .map((r) => ({
         code: r.code,
-        name: allStocks[r.code] ?? r.code,
-        market: (KQ_CODES.has(r.code) ? "KQ" : "KS") as "KS" | "KQ",
+        name: allStocks.get(r.code) ?? r.code,
+        market: (kqCodes.has(r.code) ? "KQ" : "KS") as "KS" | "KQ",
         price: r.price,
         changePct: r.changePct,
         foreign: r.frgn,
@@ -192,6 +230,10 @@ export async function GET() {
       }))
       .sort((a, b) => b.combined - a.combined)
       .slice(0, 10);
+
+    console.log(
+      `[dual-buy] 쌍끌이 포착: ${dualBuy.length}개 / 응답 ${valid.length}개`
+    );
 
     return NextResponse.json(
       { stocks: dualBuy, timestamp: new Date().toISOString(), threshold: 0 },
