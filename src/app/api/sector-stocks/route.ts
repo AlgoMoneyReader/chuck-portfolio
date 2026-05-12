@@ -10,7 +10,8 @@ export interface SectorStockLive {
   name: string;
   price: number;
   changePct: number;
-  sparkline: number[];  // normalized price points (0-100 scale) for SVG drawing
+  volume: number;       // 당일 누적 거래량 (주)
+  sparkline: number[];  // 전일종가 대비 % 변화율 배열 (Y축 [-10,10] 기준)
   rawPrices: number[];  // raw price values
 }
 
@@ -18,6 +19,7 @@ interface SparkMeta {
   regularMarketPrice?: number;
   chartPreviousClose?: number;
   previousClose?: number;
+  regularMarketVolume?: number;  // 당일 누적 거래량
 }
 
 interface SparkData {
@@ -122,6 +124,7 @@ export async function GET(request: Request) {
     const price = meta.regularMarketPrice ?? 0;
     const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const changePct = prev > 0 ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0;
+    const volume = (meta.regularMarketVolume as number | undefined) ?? 0;
 
     // ── 스파크라인: 전일종가 대비 % 변화율 배열 ─────────────────────────────
     // Y축을 [-10, 10] 고정 도메인에 매핑하므로 모든 종목의 기울기가 동일한
@@ -149,7 +152,7 @@ export async function GET(request: Request) {
     const code = dotIdx >= 0 ? s.sym.slice(0, dotIdx) : s.sym;
     const market: "KS" | "KQ" = s.sym.endsWith(".KQ") ? "KQ" : "KS";
 
-    return { sym: s.sym, code, market, name: s.name, price, changePct, sparkline, rawPrices };
+    return { sym: s.sym, code, market, name: s.name, price, changePct, volume, sparkline, rawPrices };
   });
 
   // Sort by absolute changePct desc so biggest movers show first

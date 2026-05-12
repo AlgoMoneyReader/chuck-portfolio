@@ -49,9 +49,14 @@ function MarkdownRenderer({ text }: { text: string }) {
   );
 }
 
-export default function StockAnalyzer() {
-  const [ticker, setTicker] = useState("");
-  const [companyName, setCompanyName] = useState("");
+interface StockAnalyzerProps {
+  initialTicker?: string;   // 외부 페이지에서 종목 클릭 시 전달 (URL: ?ticker=005930.KS)
+  initialName?: string;     // 외부 페이지에서 종목 클릭 시 전달 (URL: ?name=삼성전자)
+}
+
+export default function StockAnalyzer({ initialTicker = "", initialName = "" }: StockAnalyzerProps) {
+  const [ticker, setTicker] = useState(initialTicker);
+  const [companyName, setCompanyName] = useState(initialName);
   const [thesis, setThesis] = useState("");
   const [goal, setGoal] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);

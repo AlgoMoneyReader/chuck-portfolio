@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
-import { AreaChart, Area, YAxis } from "recharts";
+import { useRouter } from "next/navigation";
 const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
 interface DrawerState { code: string; market: "KS" | "KQ"; name: string; }
 
 interface SectorStockLive {
   sym: string; code: string; market: "KS" | "KQ"; name: string;
-  price: number; changePct: number; sparkline: number[]; rawPrices: number[];
+  price: number; changePct: number; volume: number;
+  sparkline: number[]; rawPrices: number[];
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -241,51 +242,7 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
 
 // ─── 섹터 흐름 ────────────────────────────────────────────────────────────────
 
-// ─── Recharts 기반 스파크라인 ─────────────────────────────────────────────────
-// points: 전일종가 대비 % 변화율 배열 (첫 포인트 = 0)
-// Y축 domain [-10, 10] 고정 → 모든 종목이 동일한 기울기 기준으로 비교됨
-// id: SVG <linearGradient> ID 충돌 방지용 종목 코드
-function Sparkline({ points, changePct, id }: {
-  points: number[]; changePct: number; id: string;
-}) {
-  if (points.length < 2) {
-    return <div style={{ width: 72, height: 28 }} className="bg-white/5 rounded" />;
-  }
-
-  // 한국 주식 관행: 상승 = 빨강, 하락 = 파랑
-  const isUp = changePct >= 0;
-  const color = isUp ? "#f43f5e" : "#60a5fa";
-  const gradId = `sg_${id}`;                     // 종목별 고유 ID로 SVG 충돌 방지
-  const data = points.map(v => ({ v }));
-
-  return (
-    <AreaChart
-      width={72}
-      height={28}
-      data={data}
-      margin={{ top: 3, right: 0, bottom: 0, left: 0 }}
-    >
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%"  stopColor={color} stopOpacity={0.4} />
-          <stop offset="95%" stopColor={color} stopOpacity={0}   />
-        </linearGradient>
-      </defs>
-      {/* Y축 고정 도메인: 모든 종목 동일 스케일 보장 */}
-      <YAxis domain={[-10, 10]} hide width={0} />
-      <Area
-        type="monotone"
-        dataKey="v"
-        stroke={color}
-        strokeWidth={1.5}
-        fill={`url(#${gradId})`}
-        dot={false}
-        activeDot={false}
-        isAnimationActive={false}
-      />
-    </AreaChart>
-  );
-}
+// Sparkline 컴포넌트는 섹터 모달이 테이블 형태로 전환됨에 따라 제거됨
 
 const SECTOR_COLORS: Record<string, string> = {
   "반도체":"#22d3ee","자동차":"#a78bfa","2차전지":"#34d399","바이오":"#f472b6",
@@ -294,7 +251,8 @@ const SECTOR_COLORS: Record<string, string> = {
   "가전":"#67e8f9","건설":"#fca5a5","해운":"#6ee7b7","항공":"#a5b4fc","기타":"#6b7280",
 };
 
-function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+function SectorHeatmap({ market }: { market: string }) {
+  const router = useRouter();
   const [sectors, setSectors] = useState<SectorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalSector, setModalSector] = useState<SectorRow | null>(null);
@@ -384,66 +342,65 @@ function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: Dra
         })}
       </div>
 
-      {/* ── Toss 스타일 모달 ── */}
+      {/* ── 섹터 종목 모달 — 항상 화면 중앙, 테이블 형식 ── */}
       {modalSector && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* 배경 어둠 + 블러 */}
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm"
             onClick={() => setModalSector(null)} />
 
-          {/* Modal container */}
-          <div className="relative z-10 w-full sm:max-w-md bg-[#111827] border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col"
+          {/* 모달 컨테이너 */}
+          <div className="relative z-10 w-full max-w-lg bg-[#0f1923] border border-white/10 rounded-2xl shadow-2xl flex flex-col"
             style={{ maxHeight: "85vh" }}>
 
-            {/* ── Modal Header ── */}
-            <div className="px-5 pt-6 pb-4 shrink-0">
-              <div className="flex items-start justify-between">
+            {/* ── 헤더 ── */}
+            <div className="px-5 pt-5 pb-0 shrink-0">
+              <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1 font-medium tracking-wider uppercase">섹터 흐름</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">{SECTOR_ICONS[modalSector.sector] ?? "📊"}</span>
-                    <h2 className="text-2xl font-bold text-white">{modalSector.sector}</h2>
+                    <span className="text-xl">{SECTOR_ICONS[modalSector.sector] ?? "📊"}</span>
+                    <h2 className="text-lg font-bold text-white">
+                      {modalSector.sector} 주요 종목 TOP 10
+                    </h2>
                   </div>
-                  {!modalLoading && modalStocks.length > 0 && (
-                    <p className="text-sm text-gray-400 mt-1">{modalStocks.length}개 종목</p>
-                  )}
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className={`text-sm font-bold num ${modalSector.avgChangePct >= 0 ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
+                      오늘 {modalSector.avgChangePct >= 0 ? "+" : ""}{modalSector.avgChangePct.toFixed(2)}%
+                    </span>
+                    {!modalLoading && modalStocks.length > 0 && (
+                      <span className="text-xs text-gray-500">{Math.min(modalStocks.length, 10)}개 종목</span>
+                    )}
+                  </div>
                 </div>
-                {/* Sector avg change */}
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 mb-1">오늘</p>
-                  <p className={`text-xl font-bold num ${modalSector.avgChangePct >= 0 ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
-                    {modalSector.avgChangePct >= 0 ? "+" : ""}{modalSector.avgChangePct.toFixed(2)}%
-                  </p>
-                  <button onClick={() => setModalSector(null)}
-                    className="mt-2 w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all ml-auto">
-                    <span className="text-sm leading-none">✕</span>
-                  </button>
-                </div>
+                <button onClick={() => setModalSector(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all shrink-0 mt-0.5">
+                  <span className="text-sm leading-none">✕</span>
+                </button>
               </div>
 
-              {/* Divider */}
-              <div className="mt-4 border-t border-white/10" />
+              {/* 테이블 헤더 */}
+              <div className="flex items-center gap-2 py-2 border-y border-white/10 text-xs text-gray-500 font-medium">
+                <span className="w-5 shrink-0" />
+                <span className="flex-1">종목명</span>
+                <span className="w-[90px] text-right shrink-0">현재가</span>
+                <span className="w-[62px] text-right shrink-0">등락률</span>
+                <span className="w-[76px] text-right shrink-0">거래량</span>
+              </div>
             </div>
 
-            {/* ── Stock List ── */}
-            <div className="overflow-y-auto flex-1 px-2 pb-6"
+            {/* ── 종목 테이블 ── */}
+            <div className="overflow-y-auto flex-1 pb-3"
               style={{ scrollbarWidth: "thin", scrollbarColor: "#1A2D42 transparent" }}>
 
               {modalLoading ? (
-                /* Loading skeleton */
-                <div className="space-y-1 px-3 pt-2">
+                <div className="space-y-0 pt-1">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 py-3 animate-pulse">
-                      <div className="w-9 h-9 rounded-full bg-white/10 shrink-0" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="h-3 bg-white/10 rounded w-24" />
-                        <div className="h-2.5 bg-white/5 rounded w-16" />
-                      </div>
-                      <div className="w-16 h-7 bg-white/5 rounded" />
-                      <div className="text-right space-y-1">
-                        <div className="h-3 bg-white/10 rounded w-16" />
-                        <div className="h-2.5 bg-white/5 rounded w-12" />
-                      </div>
+                    <div key={i} className="flex items-center gap-2 px-5 py-2.5 animate-pulse">
+                      <div className="w-5 h-3 bg-white/10 rounded shrink-0" />
+                      <div className="flex-1 h-3 bg-white/10 rounded" />
+                      <div className="w-[90px] h-3 bg-white/5 rounded shrink-0" />
+                      <div className="w-[62px] h-3 bg-white/5 rounded shrink-0" />
+                      <div className="w-[76px] h-3 bg-white/5 rounded shrink-0" />
                     </div>
                   ))}
                 </div>
@@ -452,54 +409,44 @@ function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: Dra
                   <p className="text-sm text-gray-500">종목 데이터를 불러올 수 없습니다</p>
                 </div>
               ) : (
-                <div>
-                  {modalStocks.map((stock, idx) => {
+                <div className="divide-y divide-white/[0.05]">
+                  {modalStocks.slice(0, 10).map((stock, idx) => {
                     const isUp = stock.changePct >= 0;
-                    const changeColor = isUp ? "#f43f5e" : "#60a5fa";
-                    // Color-coded avatar background
-                    const avatarColors = ["#1e3a5f","#1a3a2f","#3d1f3d","#2d2a1a","#1f2d3d","#2d1a1a","#1a2d3d","#2d2d1a"];
-                    const bgColor = avatarColors[idx % avatarColors.length];
-
                     return (
                       <div
                         key={stock.code}
-                        onClick={() => { onSelect({ code: stock.code, market: stock.market, name: stock.name }); setModalSector(null); }}
-                        className="flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-colors hover:bg-white/[0.04] active:bg-white/[0.08]"
+                        onClick={() => {
+                          router.push(
+                            `/analyze?ticker=${stock.code}.${stock.market}&name=${encodeURIComponent(stock.name)}`
+                          );
+                          setModalSector(null);
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 cursor-pointer hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors group"
                       >
-                        {/* Avatar */}
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 border border-white/10"
-                          style={{ backgroundColor: bgColor }}
-                        >
-                          {stock.name.slice(0, 2)}
-                        </div>
+                        <span className="text-xs text-gray-600 w-5 shrink-0 text-center">{idx + 1}</span>
 
-                        {/* Name + Code */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{stock.name}</p>
-                          <p className="text-xs text-gray-500 num">{stock.code}</p>
+                          <p className="text-sm font-semibold text-white truncate group-hover:text-cyan-400 transition-colors">
+                            {stock.name}
+                          </p>
+                          <p className="text-xs text-gray-600">{stock.code}</p>
                         </div>
 
-                        {/* Sparkline — id로 SVG gradient ID 충돌 방지 */}
-                        <div className="shrink-0">
-                          <Sparkline points={stock.sparkline} changePct={stock.changePct} id={stock.code} />
-                        </div>
+                        <span className="w-[90px] text-right text-sm text-white num shrink-0">
+                          {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
+                        </span>
 
-                        {/* Price + Change */}
-                        <div className="text-right shrink-0 min-w-[72px]">
-                          {stock.price > 0 ? (
-                            <>
-                              <p className="text-sm font-semibold text-white num">
-                                {stock.price.toLocaleString("ko-KR")}원
-                              </p>
-                              <p className="text-xs font-bold num" style={{ color: changeColor }}>
-                                {isUp ? "▲" : "▼"} {Math.abs(stock.changePct).toFixed(2)}%
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-xs text-gray-600">—</p>
-                          )}
-                        </div>
+                        <span className={`w-[62px] text-right text-sm font-bold num shrink-0 ${isUp ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
+                          {stock.price > 0
+                            ? `${isUp ? "▲" : "▼"}${Math.abs(stock.changePct).toFixed(2)}%`
+                            : "—"}
+                        </span>
+
+                        <span className="w-[76px] text-right text-xs text-gray-400 num shrink-0">
+                          {(stock.volume ?? 0) > 0
+                            ? stock.volume.toLocaleString("ko-KR")
+                            : "—"}
+                        </span>
                       </div>
                     );
                   })}
@@ -507,9 +454,9 @@ function SectorHeatmap({ market, onSelect }: { market: string; onSelect: (d: Dra
               )}
             </div>
 
-            {/* Bottom handle for mobile */}
-            <div className="flex justify-center pb-2 pt-1 sm:hidden shrink-0">
-              <div className="w-10 h-1 rounded-full bg-white/20" />
+            {/* 하단 힌트 */}
+            <div className="px-5 py-2.5 border-t border-white/10 shrink-0">
+              <p className="text-xs text-gray-600">종목 클릭 → AI 종목 분석 페이지</p>
             </div>
           </div>
         </div>
@@ -742,7 +689,7 @@ export default function MarketSummary() {
       {/* 컨텐츠 */}
       {mainTab === "top10"  && <TopGainersList  market={market} onSelect={setDrawer} />}
       {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={setDrawer} />}
-      {mainTab === "sector" && <SectorHeatmap    market={market} onSelect={setDrawer} />}
+      {mainTab === "sector" && <SectorHeatmap    market={market} />}
       {mainTab === "high52" && <Week52HighList   market={market} onSelect={setDrawer} />}
       {mainTab === "flow"   && <InvestorFlowList market={market} onSelect={setDrawer} />}
 

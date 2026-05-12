@@ -72,6 +72,7 @@ const MAJOR_STOCKS_KQ: Record<string, string> = {
 export interface DualBuyItem {
   code: string;
   name: string;
+  market: "KS" | "KQ";   // 분석 페이지 라우팅용 (ticker = code.market)
   price: number;
   changePct: number;
   foreign: number;
@@ -173,6 +174,7 @@ export async function GET() {
     }
 
     const allStocks = { ...MAJOR_STOCKS_KS, ...MAJOR_STOCKS_KQ };
+    const KQ_CODES = new Set(Object.keys(MAJOR_STOCKS_KQ));
     const valid = results.filter(Boolean) as NonNullable<(typeof results)[0]>[];
 
     // 외국인 + 기관 모두 양수 필터 → 합산 내림차순 → TOP 10
@@ -181,6 +183,7 @@ export async function GET() {
       .map((r) => ({
         code: r.code,
         name: allStocks[r.code] ?? r.code,
+        market: (KQ_CODES.has(r.code) ? "KQ" : "KS") as "KS" | "KQ",
         price: r.price,
         changePct: r.changePct,
         foreign: r.frgn,
