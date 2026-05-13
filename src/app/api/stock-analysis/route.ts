@@ -8,7 +8,34 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 const SYSTEM_PROMPT = `당신은 '진보를 위한 주식투자' 철학을 기반으로 한 냉철한 퀀트 투자 분석가입니다.
 알읽남(알고리즘이 읽어주는 돈) 채널의 분석 톤앤매너: 감정 배제, 데이터 중심, 직접적 판단, 짧고 강렬한 문장.
 모든 판단은 수치로 근거를 제시하고, 체리피킹 없이 장단점을 균형있게 평가하세요.
+반드시 Google Search를 통해 해당 종목의 최신 뉴스, 최근 실적, 최신 애널리스트 리포트를 검색한 뒤 분석에 반영하세요.
 JSON만 반환하고 다른 텍스트는 절대 포함하지 마세요. 마크다운 코드블록(\`\`\`json)도 쓰지 마세요.`;
+
+// Yahoo Finance 뉴스 최근 헤드라인 수집
+async function fetchRecentNews(symbol: string, name: string): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v1/finance/search` +
+        `?q=${encodeURIComponent(name)}&lang=ko-KR&region=KR&quotesCount=0&newsCount=6`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+    );
+    if (!res.ok) return "";
+    const j = await res.json();
+    const news: Array<{ title: string; publishTime?: number }> = j.news ?? [];
+    if (!news.length) return "";
+    return news
+      .slice(0, 6)
+      .map((n) => {
+        const date = n.publishTime
+          ? new Date(n.publishTime * 1000).toLocaleDateString("ko-KR")
+          : "최근";
+        return `- [${date}] ${n.title}`;
+      })
+      .join("\n");
+  } catch {
+    return "";
+  }
+}
 
 export async function GET(request: Request) {
   if (!process.env.GEMINI_API_KEY) {
@@ -27,23 +54,25 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "code, name required" }, { status: 400 });
   }
 
-  // Yahoo Finance 재무 데이터 조회
   const symbol = `${code}.${market}`;
-  let finData = "";
-  try {
-    const summaryRes = await fetch(
-      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
-        `?modules=financialData,defaultKeyStatistics,summaryDetail,earningsTrend`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
-    );
+  const today  = new Date().toLocaleDateString("ko-KR", {
+    year: "numeric", month: "long", day: "numeric",
+  });
 
-    if (summaryRes.ok) {
-      const j = await summaryRes.json();
+  // ── 병렬: Yahoo Finance 재무 데이터 + 최신 뉴스 ──────────────────────────
+  const [finResult, newsResult] = await Promise.allSettled([
+    (async () => {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
+          `?modules=financialData,defaultKeyStatistics,summaryDetail`,
+        { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+      );
+      if (!res.ok) return "";
+      const j = await res.json();
       const fd = j?.quoteSummary?.result?.[0]?.financialData ?? {};
       const ks = j?.quoteSummary?.result?.[0]?.defaultKeyStatistics ?? {};
       const sd = j?.quoteSummary?.result?.[0]?.summaryDetail ?? {};
-
-      finData = JSON.stringify({
+      return JSON.stringify({
         currentPrice:       fd.currentPrice?.raw,
         targetMeanPrice:    fd.targetMeanPrice?.raw,
         recommendationKey:  fd.recommendationKey,
@@ -64,35 +93,46 @@ export async function GET(request: Request) {
         fiftyTwoWeekLow:    sd.fiftyTwoWeekLow?.raw,
         fiftyTwoWeekHigh:   sd.fiftyTwoWeekHigh?.raw,
       });
-    }
-  } catch { /* 재무 데이터 없어도 진행 */ }
+    })(),
+    fetchRecentNews(symbol, name),
+  ]);
+
+  const finData  = finResult.status  === "fulfilled" ? finResult.value  : "";
+  const newsData = newsResult.status === "fulfilled" ? newsResult.value : "";
 
   const userPrompt = `
+오늘 날짜: ${today}
 종목: ${name} (${code}.${market === "KS" ? "KOSPI" : "KOSDAQ"})
-재무 데이터: ${finData || "unavailable"}
+Yahoo Finance 재무 데이터: ${finData || "조회 불가"}
+최근 뉴스 헤드라인:
+${newsData || "없음"}
 
-위 종목에 대해 '진보를 위한 주식투자' 관점의 냉철한 분석을 아래 JSON 형식으로 반환하세요.
-데이터가 없는 항목은 일반 지식 기반으로 작성하되, 확실하지 않은 수치는 쓰지 마세요.
+[지시사항]
+1. Google Search로 "${name} 주가 실적 2025", "${name} 최신 뉴스", "${name} 애널리스트 목표주가" 등을 검색해 최신 정보를 반드시 반영하세요.
+2. 과거 데이터 언급 시 반드시 출처와 날짜를 명시하세요. 학습 데이터 기반 추정은 "추정" 표기.
+3. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
 
 {
-  "businessModel": "한 문장으로: 핵심 비즈니스 모델 (무엇으로 돈을 버는가)",
-  "pros": ["성장동력1 — 수치 근거", "성장동력2 — 수치 근거", "성장동력3 — 수치 근거"],
-  "cons": ["리스크1 — 구체적 위험", "리스크2 — 구체적 위험", "리스크3 — 구체적 위험"],
-  "financialHealth": "영업이익률·부채비율·현금흐름 3년 추이 2~3문장 요약",
-  "valuation": "현재 주가 저평가/고평가 여부 + 최종 의견 (매수/보유/매도) — 근거 포함",
-  "summary": ["알읽남 톤의 핵심 한줄1", "핵심 한줄2", "핵심 한줄3"]
-}`;
+  "businessModel": "한 문장: 핵심 비즈니스 모델 (무엇으로 돈을 버는가)",
+  "pros": ["성장동력1 — 최신 수치·날짜 근거", "성장동력2 — 최신 수치·날짜 근거", "성장동력3 — 최신 수치·날짜 근거"],
+  "cons": ["리스크1 — 구체적 위험·날짜", "리스크2 — 구체적 위험·날짜", "리스크3 — 구체적 위험·날짜"],
+  "financialHealth": "최신 실적 기준 영업이익률·부채비율·현금흐름 2~3문장 (분기·연도 명시)",
+  "valuation": "현재 주가 저평가/고평가 여부 + 최종 의견 (매수/보유/매도) — 최신 목표주가·밸류에이션 근거",
+  "summary": ["알읽남 톤의 핵심 한줄 (최신 정보 반영)", "핵심 한줄2", "핵심 한줄3"]
+}`.trim();
 
   try {
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       systemInstruction: SYSTEM_PROMPT,
+      // Google Search Grounding — 실시간 웹 검색으로 최신 데이터 반영
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: [{ googleSearch: {} } as any],
     });
 
     const result = await model.generateContent(userPrompt);
-    const text = result.response.text().trim();
+    const text   = result.response.text().trim();
 
-    // JSON 블록 추출 (혹시 마크다운 코드블록이 붙는 경우 방어)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error("🚨 [Gemini] JSON 파싱 실패, raw:", text.slice(0, 300));
