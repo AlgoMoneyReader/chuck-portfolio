@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 const SYSTEM_PROMPT = `Act as an elite equity research analyst at a top-tier investment fund.
 
@@ -42,6 +40,13 @@ Structure your response using this exact framework:
 마크다운 형식으로 작성. 불릿 포인트 적극 활용. 간결하고 전문적으로. 분석 과정 설명 없이 결과만 전달.`;
 
 export async function POST(req: NextRequest) {
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json(
+      { error: "GEMINI_API_KEY가 설정되지 않았습니다. Vercel → Settings → Environment Variables에서 추가하세요." },
+      { status: 503 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { ticker, companyName, thesis, goal } = body;
@@ -59,27 +64,24 @@ export async function POST(req: NextRequest) {
 최신 시장 상황과 섹터 트렌드를 반영하여 실질적이고 실행 가능한 인사이트를 제공해주세요.
     `.trim();
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: SYSTEM_PROMPT,
     });
 
-    const content = message.content[0];
-    if (content.type !== "text") {
-      return NextResponse.json({ error: "분석 생성 실패" }, { status: 500 });
-    }
+    const result = await model.generateContent(userMessage);
+    const text = result.response.text();
 
     return NextResponse.json({
-      analysis: content.text,
+      analysis: text,
       ticker,
       companyName,
       timestamp: new Date().toISOString(),
-      usage: message.usage,
+      model: "gemini-2.5-flash",
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "알 수 없는 오류";
+    console.error("🚨 [Gemini API ERROR] /api/analyze:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
