@@ -11,6 +11,27 @@ const SYSTEM_PROMPT = `당신은 '진보를 위한 주식투자' 철학을 기�
 반드시 Google Search를 통해 해당 종목의 최신 뉴스, 최근 실적, 최신 애널리스트 리포트를 검색한 뒤 분석에 반영하세요.
 JSON만 반환하고 다른 텍스트는 절대 포함하지 마세요. 마크다운 코드블록(\`\`\`json)도 쓰지 마세요.`;
 
+// Yahoo Finance 당일 실시간 주가 (spark API)
+async function fetchCurrentPrice(symbol: string): Promise<{ price: number; fetchedAt: string } | null> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbol)}&range=1d&interval=5m`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const price: number | undefined =
+      j?.spark?.result?.[0]?.response?.[0]?.meta?.regularMarketPrice;
+    if (!price) return null;
+    const fetchedAt = new Date().toLocaleDateString("ko-KR", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+    return { price, fetchedAt };
+  } catch {
+    return null;
+  }
+}
+
 // Yahoo Finance 뉴스 최근 헤드라인 수집
 async function fetchRecentNews(symbol: string, name: string): Promise<string> {
   try {
@@ -60,8 +81,8 @@ export async function GET(request: Request) {
   const year   = now.getFullYear();   // 2026
   const prevY  = year - 1;           // 2025
 
-  // ── 병렬: Yahoo Finance 재무 데이터 + 최신 뉴스 ──────────────────────────
-  const [finResult, newsResult] = await Promise.allSettled([
+  // ── 병렬: Yahoo Finance 재무 데이터 + 실시간 주가 + 최신 뉴스 ────────────
+  const [finResult, priceResult, newsResult] = await Promise.allSettled([
     (async () => {
       const res = await fetch(
         `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
@@ -95,15 +116,23 @@ export async function GET(request: Request) {
         fiftyTwoWeekHigh:   sd.fiftyTwoWeekHigh?.raw,
       });
     })(),
+    fetchCurrentPrice(symbol),
     fetchRecentNews(symbol, name),
   ]);
 
-  const finData  = finResult.status  === "fulfilled" ? finResult.value  : "";
-  const newsData = newsResult.status === "fulfilled" ? newsResult.value : "";
+  const finData    = finResult.status   === "fulfilled" ? finResult.value   : "";
+  const priceInfo  = priceResult.status === "fulfilled" ? priceResult.value : null;
+  const newsData   = newsResult.status  === "fulfilled" ? newsResult.value  : "";
+
+  // 실시간 주가 문자열 (프롬프트 주입용)
+  const currentPriceLine = priceInfo
+    ? `현재가 (${priceInfo.fetchedAt} Yahoo Finance 실시간): ${priceInfo.price.toLocaleString("ko-KR")}원\n※ 밸류에이션 분석의 기준 주가로 이 값을 사용하세요. 주가 검색 불필요.`
+    : `현재가: Yahoo Finance 조회 실패 — Google Search로 당일 종가 검색 후 사용`;
 
   const userPrompt = `
 오늘 날짜: ${today}
 종목: ${name} (${code}.${market === "KS" ? "KOSPI" : "KOSDAQ"})
+${currentPriceLine}
 Yahoo Finance 재무 데이터: ${finData || "조회 불가"}
 최근 뉴스 헤드라인:
 ${newsData || "없음"}

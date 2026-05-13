@@ -41,6 +41,27 @@ Structure your response using this exact framework:
 마크다운 형식으로 작성. 불릿 포인트 적극 활용. 간결하고 전문적으로. 분석 과정 설명 없이 결과만 전달.
 데이터 출처와 날짜를 괄호로 명시하세요. 학습 데이터 기반 추정은 "(추정)" 표기.`;
 
+// Yahoo Finance 당일 실시간 주가 (spark API)
+async function fetchCurrentPrice(symbol: string): Promise<{ price: number; fetchedAt: string } | null> {
+  try {
+    const res = await fetch(
+      `https://query2.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbol)}&range=1d&interval=5m`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const price: number | undefined =
+      j?.spark?.result?.[0]?.response?.[0]?.meta?.regularMarketPrice;
+    if (!price) return null;
+    const fetchedAt = new Date().toLocaleDateString("ko-KR", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+    return { price, fetchedAt };
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
@@ -59,12 +80,19 @@ export async function POST(req: NextRequest) {
 
     const now   = new Date();
     const today = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
-    const year  = now.getFullYear();      // 2026
-    const prevY = year - 1;              // 2025
+    const year  = now.getFullYear();
+    const prevY = year - 1;
+
+    // 실시간 주가 사전 조회 (ticker 형식: 000660.KS)
+    const priceInfo = ticker ? await fetchCurrentPrice(ticker) : null;
+    const currentPriceLine = priceInfo
+      ? `**현재가 (${priceInfo.fetchedAt} Yahoo Finance 실시간): ${priceInfo.price.toLocaleString("ko-KR")}원**\n※ 밸류에이션·기술적 분석의 기준 주가로 이 값을 사용하세요. 주가는 별도 검색 불필요.`
+      : `**현재가**: Yahoo Finance 조회 실패 — Google Search로 당일 주가 검색 후 사용`;
 
     const userMessage = `
 오늘 날짜: ${today}
 **분석 대상**: ${companyName ?? ticker} ${ticker ? `(${ticker})` : ""}
+${currentPriceLine}
 **투자 논거**: ${thesis ?? "종합적인 투자 관점에서 분석해주세요"}
 **목표**: ${goal ?? "투자 의사결정을 위한 종합 분석"}
 
@@ -75,8 +103,8 @@ export async function POST(req: NextRequest) {
    - "${companyName ?? ticker} 주가 전망 ${year}"
    - "${companyName ?? ticker} 애널리스트 목표주가 ${year}"
    - "${companyName ?? ticker} 최신 뉴스 ${year}"
-2. 검색 결과에서 ${year}년 데이터를 최우선으로 사용하고, 없으면 ${prevY}년 4분기 데이터를 사용하세요.
-3. 각 데이터 포인트에 날짜(예: ${year}년 1분기, ${year}년 3월)를 반드시 명시하세요.
+2. ${year}년 데이터 최우선. 없으면 ${prevY}년 4분기 데이터 사용.
+3. 각 데이터 포인트에 날짜(예: ${year}년 1분기)를 반드시 명시하세요.
 4. 학습 데이터 기반 추정값은 "(추정)" 표기하세요.
 
 위 정보를 바탕으로 엘리트 주식 리서치 보고서를 작성해주세요.
