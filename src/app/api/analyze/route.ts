@@ -57,9 +57,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ticker 또는 companyName이 필요합니다" }, { status: 400 });
     }
 
-    const today = new Date().toLocaleDateString("ko-KR", {
-      year: "numeric", month: "long", day: "numeric",
-    });
+    const now   = new Date();
+    const today = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+    const year  = now.getFullYear();      // 2026
+    const prevY = year - 1;              // 2025
 
     const userMessage = `
 오늘 날짜: ${today}
@@ -67,10 +68,16 @@ export async function POST(req: NextRequest) {
 **투자 논거**: ${thesis ?? "종합적인 투자 관점에서 분석해주세요"}
 **목표**: ${goal ?? "투자 의사결정을 위한 종합 분석"}
 
-[지시사항]
-1. Google Search로 "${companyName ?? ticker} 최신 실적", "${companyName ?? ticker} 주가 전망 2025", "${companyName ?? ticker} 애널리스트 목표주가" 등을 검색하세요.
-2. 검색 결과의 날짜를 반드시 확인하고, 가장 최신 정보를 우선 사용하세요.
-3. 오래된 데이터(6개월 이상)는 "(구 데이터)" 표기 후 사용하세요.
+[지시사항 — 반드시 준수]
+1. Google Search를 사용해 아래 키워드로 최신 정보를 검색하세요:
+   - "${companyName ?? ticker} ${year}년 실적"
+   - "${companyName ?? ticker} ${year}년 1분기 실적"
+   - "${companyName ?? ticker} 주가 전망 ${year}"
+   - "${companyName ?? ticker} 애널리스트 목표주가 ${year}"
+   - "${companyName ?? ticker} 최신 뉴스 ${year}"
+2. 검색 결과에서 ${year}년 데이터를 최우선으로 사용하고, 없으면 ${prevY}년 4분기 데이터를 사용하세요.
+3. 각 데이터 포인트에 날짜(예: ${year}년 1분기, ${year}년 3월)를 반드시 명시하세요.
+4. 학습 데이터 기반 추정값은 "(추정)" 표기하세요.
 
 위 정보를 바탕으로 엘리트 주식 리서치 보고서를 작성해주세요.
     `.trim();

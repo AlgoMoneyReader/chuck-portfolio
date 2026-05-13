@@ -55,9 +55,10 @@ export async function GET(request: Request) {
   }
 
   const symbol = `${code}.${market}`;
-  const today  = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric", month: "long", day: "numeric",
-  });
+  const now    = new Date();
+  const today  = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+  const year   = now.getFullYear();   // 2026
+  const prevY  = year - 1;           // 2025
 
   // ── 병렬: Yahoo Finance 재무 데이터 + 최신 뉴스 ──────────────────────────
   const [finResult, newsResult] = await Promise.allSettled([
@@ -107,10 +108,15 @@ Yahoo Finance 재무 데이터: ${finData || "조회 불가"}
 최근 뉴스 헤드라인:
 ${newsData || "없음"}
 
-[지시사항]
-1. Google Search로 "${name} 주가 실적 2025", "${name} 최신 뉴스", "${name} 애널리스트 목표주가" 등을 검색해 최신 정보를 반드시 반영하세요.
-2. 과거 데이터 언급 시 반드시 출처와 날짜를 명시하세요. 학습 데이터 기반 추정은 "추정" 표기.
-3. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
+[지시사항 — 반드시 준수]
+1. Google Search로 아래 키워드를 검색해 최신 정보를 반드시 반영하세요:
+   - "${name} ${year}년 실적"
+   - "${name} ${year}년 1분기 실적"
+   - "${name} 주가 전망 ${year}"
+   - "${name} 애널리스트 목표주가 ${year}"
+2. ${year}년 데이터를 최우선 사용. 없으면 ${prevY}년 4분기 데이터 사용.
+3. 각 수치에 날짜(예: ${year}년 1분기)를 반드시 명시. 학습 데이터 기반 추정은 "(추정)" 표기.
+4. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
 
 {
   "businessModel": "한 문장: 핵심 비즈니스 모델 (무엇으로 돈을 버는가)",
