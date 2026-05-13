@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import staticMaster from "@/data/stock_master.json";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -221,34 +222,18 @@ function InlineChart({ sym, changePct }: { sym: string; changePct: number }) {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function StockSearchPanel() {
-  // ── 전종목 마스터 (마운트 시 1회 로드 → 클라이언트 필터) ──────────────────
-  const [allStocks, setAllStocks] = useState<SearchResult[]>([]);
-  const [masterLoaded, setMasterLoaded] = useState(false);
-
-  // KIS 마스터 로드 상태 (UI 피드백용)
-  const [masterFetching, setMasterFetching] = useState(true); // 로딩 중
-
-  useEffect(() => {
-    fetch("/api/stock-master", { cache: "no-store" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (!j?.stocks) return;
-        const stocks: SearchResult[] = (j.stocks as SearchResult[]).filter(
-          (s) => s.type !== "spac" && s.type !== "preferred"
-        );
-        setAllStocks(stocks);
-        // ▼▼▼ 사용자 요청: 검색창 로드 종목 수 콘솔 출력 ▼▼▼
-        console.log("검색창 로드된 종목 수:", stocks.length,
-          `(source: ${j.source ?? "unknown"}, total in master: ${j.total ?? stocks.length})`);
-      })
-      .catch(() => {
-        // 네트워크 오류 — finally에서 처리
-      })
-      .finally(() => {
-        setMasterLoaded(true);
-        setMasterFetching(false); // 로딩 완료 (성공/실패 무관)
-      });
-  }, []);
+  // ── 전종목 마스터: 정적 JSON 직접 import (0ms, 네트워크 없음) ──────────────
+  // KRX KIND에서 수집한 KOSPI+KOSDAQ 2,610개 — src/data/stock_master.json
+  // 업데이트: scripts/generate-stock-master.py 실행 후 커밋
+  const [allStocks] = useState<SearchResult[]>(() => {
+    const stocks = (staticMaster.stocks as SearchResult[]).filter(
+      (s) => s.type !== "spac" && s.type !== "preferred"
+    );
+    console.log(`[검색창] 정적 마스터 로드: ${stocks.length}개 (KRX ${staticMaster.generated})`);
+    return stocks;
+  });
+  const masterLoaded = true;        // 정적 import → 항상 즉시 로드됨
+  const masterFetching = false;     // 로딩 없음
 
   // ── 검색 상태 ────────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState("");

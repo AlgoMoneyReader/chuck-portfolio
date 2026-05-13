@@ -1,16 +1,15 @@
 /**
  * GET /api/stock-search?q=검색어
  *
- * 검색 전략 (블로킹 없음):
- *  1. KIS 마스터 캐시가 이미 적재됐으면 → 로컬 필터 즉시 반환
- *  2. 캐시 미적재(초기 로드 중) → Yahoo Finance 라이브 검색으로 직행
+ * 검색 전략:
+ *  1. 정적 마스터(stock_master.json) 로컬 필터 — 0ms, KIS API 호출 없음
+ *  2. 결과 10개 미만 → Yahoo Finance 보완 (영문명/코드 검색용)
  *
- * ★ getKisMaster() 대신 getKisMasterCached() 사용 → 절대 블로킹 없음
- *    KIS API 순회가 완료되기 전에도 Yahoo Finance로 즉각 응답
+ * KIS API 호출 완전 없음 — rate limit 무관
  */
 
 import { NextResponse } from "next/server";
-import { getKisMasterCached } from "@/lib/fetchKisMaster";
+import stockMaster from "@/data/stock_master.json";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +35,7 @@ async function yahooSearch(q: string): Promise<SearchResult[]> {
       `&quotesCount=15&newsCount=0&enableFuzzyQuery=false`,
       {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
           Accept: "application/json",
         },
         cache: "no-store",
@@ -47,9 +45,7 @@ async function yahooSearch(q: string): Promise<SearchResult[]> {
     const json = await res.json();
     const quotes: YFQuote[] = json?.quotes ?? [];
     return quotes
-      .filter(
-        (q) => q.symbol?.endsWith(".KS") || q.symbol?.endsWith(".KQ")
-      )
+      .filter((q) => q.symbol?.endsWith(".KS") || q.symbol?.endsWith(".KQ"))
       .map((q) => ({
         code: q.symbol.replace(/\.(KS|KQ)$/, ""),
         name: q.shortname ?? q.longname ?? q.symbol,
@@ -61,6 +57,12 @@ async function yahooSearch(q: string): Promise<SearchResult[]> {
   }
 }
 
+// 정적 마스터 (서버 모듈 레벨에서 1회 초기화)
+const MASTER = (stockMaster.stocks as SearchResult[]).filter(
+  (s) => s.type !== "spac" && s.type !== "preferred"
+);
+const MASTER_CODES = new Set(MASTER.map((s) => s.code));
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim();
@@ -68,39 +70,23 @@ export async function GET(request: Request) {
 
   const lq = q.toLowerCase();
 
-  // ── 1. KIS 캐시가 이미 있으면 → 로컬 필터 즉시 (0ms) ─────────────────────
-  const cached = getKisMasterCached(["regular", "etf"]);
-  if (cached) {
-    const localHits: SearchResult[] = cached
-      .filter(
-        (s) =>
-          s.type !== "spac" &&
-          s.type !== "preferred" &&
-          (s.name.toLowerCase().includes(lq) || s.code.includes(lq))
-      )
-      .slice(0, 10)
-      .map((s) => ({ code: s.code, name: s.name, market: s.market, type: s.type }));
+  // 1. 정적 마스터 로컬 필터 (0ms)
+  const localHits = MASTER
+    .filter((s) =>
+      (s.name?.toLowerCase() ?? "").includes(lq) || (s.code ?? "").includes(lq)
+    )
+    .slice(0, 10);
 
-    if (localHits.length >= 10) {
-      return NextResponse.json(localHits, {
-        headers: { "Cache-Control": "no-store", "X-Source": "kis-cache" },
-      });
-    }
-
-    // 부족하면 Yahoo Finance 보완
-    const masterCodes = new Set(cached.map((s) => s.code));
-    const yfExtra = (await yahooSearch(q)).filter(
-      (r) => !masterCodes.has(r.code)
-    );
-
-    return NextResponse.json([...localHits, ...yfExtra].slice(0, 10), {
-      headers: { "Cache-Control": "no-store", "X-Source": "kis-cache+yf" },
+  if (localHits.length >= 10) {
+    return NextResponse.json(localHits, {
+      headers: { "Cache-Control": "no-store", "X-Source": "static-master" },
     });
   }
 
-  // ── 2. 캐시 미적재 → Yahoo Finance 직행 (블로킹 없음) ─────────────────────
-  const yfResults = await yahooSearch(q);
-  return NextResponse.json(yfResults.slice(0, 10), {
-    headers: { "Cache-Control": "no-store", "X-Source": "yf-only" },
+  // 2. Yahoo Finance 보완 (코드/영문명 검색 커버리지 확장)
+  const yfExtra = (await yahooSearch(q)).filter((r) => !MASTER_CODES.has(r.code));
+
+  return NextResponse.json([...localHits, ...yfExtra].slice(0, 10), {
+    headers: { "Cache-Control": "no-store", "X-Source": "static-master+yf" },
   });
 }
