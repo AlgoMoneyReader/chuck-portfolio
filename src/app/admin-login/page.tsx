@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get("from") ?? "/admin";
 
@@ -33,7 +32,9 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        router.replace(from);
+        // window.location: 하드 리다이렉트 → 미들웨어가 새 쿠키를 확실히 인식
+        // router.replace는 소프트 내비게이션이라 쿠키 반영이 안 될 수 있음
+        window.location.href = from;
       } else {
         const json = await res.json();
         setError(json.error ?? "인증 실패");
