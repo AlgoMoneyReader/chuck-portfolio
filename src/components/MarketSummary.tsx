@@ -382,9 +382,9 @@ function SectorHeatmap({ market }: { market: string }) {
               <div className="flex items-center gap-2 py-2 border-y border-white/10 text-xs text-gray-500 font-medium">
                 <span className="w-5 shrink-0" />
                 <span className="flex-1">종목명</span>
-                <span className="w-[90px] text-right shrink-0">현재가</span>
-                <span className="w-[62px] text-right shrink-0">등락률</span>
-                <span className="w-[76px] text-right shrink-0">거래량</span>
+                <span className="w-[86px] text-right shrink-0">현재가</span>
+                <span className="w-[60px] text-right shrink-0">등락률</span>
+                <span className="hidden sm:block w-[76px] text-right shrink-0">거래량</span>
               </div>
             </div>
 
@@ -432,17 +432,17 @@ function SectorHeatmap({ market }: { market: string }) {
                           <p className="text-xs text-gray-600">{stock.code}</p>
                         </div>
 
-                        <span className="w-[90px] text-right text-sm text-white num shrink-0">
+                        <span className="w-[86px] text-right text-sm text-white num shrink-0">
                           {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
                         </span>
 
-                        <span className={`w-[62px] text-right text-sm font-bold num shrink-0 ${isUp ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
+                        <span className={`w-[60px] text-right text-sm font-bold num shrink-0 ${isUp ? "text-[#f43f5e]" : "text-[#60a5fa]"}`}>
                           {stock.price > 0
                             ? `${isUp ? "▲" : "▼"}${Math.abs(stock.changePct).toFixed(2)}%`
                             : "—"}
                         </span>
 
-                        <span className="w-[76px] text-right text-xs text-gray-400 num shrink-0">
+                        <span className="hidden sm:block w-[76px] text-right text-xs text-gray-400 num shrink-0">
                           {(stock.volume ?? 0) > 0
                             ? stock.volume.toLocaleString("ko-KR")
                             : "—"}
@@ -495,11 +495,11 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
       <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-        <span className="w-5 text-center">#</span>
+        <span className="w-5 text-center shrink-0">#</span>
         <span className="flex-1">종목</span>
-        <span className="w-20 text-right">현재가</span>
-        <span className="w-16 text-right">52주 고가</span>
-        <span className="w-14 text-right">신고가 대비</span>
+        <span className="w-20 text-right shrink-0">현재가</span>
+        <span className="hidden sm:block w-16 text-right shrink-0">52주 고가</span>
+        <span className="w-14 text-right shrink-0">대비</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">52주 신고가 근접 종목이 없습니다</p>
@@ -515,14 +515,14 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm text-white font-medium truncate">{r.name}</p>
                   {r.isNewHigh && (
-                    <span className="text-xs px-1.5 py-0.5 bg-gold/20 text-gold rounded font-bold whitespace-nowrap">NEW</span>
+                    <span className="text-[10px] px-1 py-0.5 bg-gold/20 text-gold rounded font-bold whitespace-nowrap shrink-0">NEW</span>
                   )}
                 </div>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className="w-20 text-right text-sm text-white num">{fmtPrice(r.price)}</span>
-              <span className="w-16 text-right text-xs text-gray-400 num">{fmtPrice(r.week52High)}</span>
-              <span className={`w-14 text-right text-sm font-semibold num ${r.distFromHigh >= 0 ? "text-gold" : "text-gray-400"}`}>
+              <span className="w-20 text-right text-sm text-white num shrink-0">{fmtPrice(r.price)}</span>
+              <span className="hidden sm:block w-16 text-right text-xs text-gray-400 num shrink-0">{fmtPrice(r.week52High)}</span>
+              <span className={`w-14 text-right text-sm font-semibold num shrink-0 ${r.distFromHigh >= 0 ? "text-gold" : "text-gray-400"}`}>
                 {r.distFromHigh >= 0 ? "+" : ""}{r.distFromHigh.toFixed(1)}%
               </span>
             </div>
