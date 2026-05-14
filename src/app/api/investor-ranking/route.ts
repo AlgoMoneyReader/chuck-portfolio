@@ -1,27 +1,7 @@
 import { NextResponse } from "next/server";
+import { getKisToken } from "@/lib/fetchKisMaster"; // 공유 토큰 (EGW00133 방지)
 
 export const dynamic = "force-dynamic";
-
-// ─── KIS 토큰 캐시 ────────────────────────────────────────────────────────────
-let cachedToken: { value: string; expiresAt: number } | null = null;
-
-async function getKISToken(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.value;
-  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: process.env.KIS_APP_KEY,
-      appsecret: process.env.KIS_APP_SECRET,
-    }),
-    cache: "no-store",
-  });
-  const data = await res.json();
-  cachedToken = { value: data.access_token, expiresAt: now + (data.expires_in ?? 86400) * 1000 };
-  return data.access_token;
-}
 
 // ─── 조회 대상 종목 (KOSPI/KOSDAQ 주요 60개+) ──────────────────────────────
 const MAJOR_STOCKS: Record<string, string> = {
@@ -66,8 +46,8 @@ export interface RankItem {
 }
 
 interface KISRow {
-  stck_bsop_date: string;
-  stck_clpr: string;
+  stck_bsop_date: string;  // 영업일자 YYYYMMDD
+  stck_clpr: string;       // 종가 (전일 종가)
   prdy_vrss: string;
   prdy_vrss_sign: string;
   frgn_ntby_tr_pbmn: string;
@@ -90,10 +70,15 @@ function toQty(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+/** 오늘 날짜 KST 기준 YYYYMMDD */
+function todayKST(): string {
+  return new Date(Date.now() + 9 * 3_600_000)
+    .toISOString().slice(0, 10).replace(/-/g, "");
+}
+
 async function fetchStockInvestor(code: string, token: string): Promise<{
   code: string;
-  price: number;
-  changePct: number;
+  price: number; changePct: number;
   frgn: number; frgnQty: number;
   orgn: number; orgnQty: number;
   prsn: number; prsnQty: number;
@@ -116,22 +101,29 @@ async function fetchStockInvestor(code: string, token: string): Promise<{
     if (!res.ok) return null;
     const data = await res.json();
     const rows: KISRow[] = data.output ?? [];
+    if (!rows.length) return null;
 
-    // 가장 최근 유효 데이터
-    const r = rows.find((x) => x.frgn_ntby_tr_pbmn !== "");
+    // ── 당일 row 우선 선택 ────────────────────────────────────────────────────
+    // inquire-investor는 최신 영업일부터 내림차순으로 여러 row를 반환.
+    // 장중에는 rows[0]이 당일이지만 flow가 아직 소수일 수 있고,
+    // 장 개시 전에는 rows[0]가 전일인 경우도 있음.
+    const today = todayKST();
+    const r = rows.find((x) => x.stck_bsop_date === today)
+           ?? rows.find((x) => x.frgn_ntby_tr_pbmn !== "" || x.orgn_ntby_tr_pbmn !== "")
+           ?? rows[0];
     if (!r) return null;
 
+    // 가격: stck_clpr는 종가 → 장중에는 전일 종가.
+    // 실시간 주가는 이후 Yahoo Finance 배치 조회로 덮어씀.
     const price = parseInt(r.stck_clpr, 10) || 0;
     const vrss  = parseInt(r.prdy_vrss, 10) || 0;
-    const sign  = r.prdy_vrss_sign; // 1=상한 2=상승 3=보합 4=하한 5=하락
+    const sign  = r.prdy_vrss_sign;
     const signed = ["1","2"].includes(sign) ? vrss : ["4","5"].includes(sign) ? -vrss : 0;
     const prevPrice = price - signed;
     const changePct = prevPrice > 0 ? parseFloat(((signed / prevPrice) * 100).toFixed(2)) : 0;
 
     return {
-      code,
-      price,
-      changePct,
+      code, price, changePct,
       frgn:    toUk(r.frgn_ntby_tr_pbmn), frgnQty: toQty(r.frgn_ntby_qty),
       orgn:    toUk(r.orgn_ntby_tr_pbmn), orgnQty: toQty(r.orgn_ntby_qty),
       prsn:    toUk(r.prsn_ntby_tr_pbmn), prsnQty: toQty(r.prsn_ntby_qty),
@@ -141,12 +133,47 @@ async function fetchStockInvestor(code: string, token: string): Promise<{
   }
 }
 
+// ── Yahoo Finance 실시간 주가 배치 조회 (50개씩) ──────────────────────────────
+async function fetchYFPrices(
+  codes: string[]
+): Promise<Record<string, { price: number; changePct: number }>> {
+  const symbols = codes.map((c) => `${c}.KS`);
+  const map: Record<string, { price: number; changePct: number }> = {};
+
+  // 50개씩 분할
+  for (let i = 0; i < symbols.length; i += 50) {
+    const chunk = symbols.slice(i, i + 50);
+    try {
+      const res = await fetch(
+        `https://query2.finance.yahoo.com/v7/finance/spark` +
+          `?symbols=${encodeURIComponent(chunk.join(","))}&range=1d&interval=5m`,
+        { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+      );
+      if (!res.ok) continue;
+      const j = await res.json();
+      for (const item of j?.spark?.result ?? []) {
+        const meta = item?.response?.[0]?.meta ?? {};
+        const price: number = meta.regularMarketPrice ?? 0;
+        const prev: number  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        if (price > 0) {
+          const code = (item.symbol as string).replace(".KS", "");
+          map[code] = {
+            price,
+            changePct: prev > 0 ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0,
+          };
+        }
+      }
+    } catch { /* silent */ }
+  }
+  return map;
+}
+
 export async function GET() {
   try {
-    const token = await getKISToken();
+    const token = await getKisToken();
     const codes = Object.keys(MAJOR_STOCKS);
 
-    // 10개씩 배치 병렬 처리 (KIS rate limit 대응)
+    // 1. KIS 투자자 동향 (BATCH=10, 80ms 간격)
     const BATCH = 10;
     const results: Awaited<ReturnType<typeof fetchStockInvestor>>[] = [];
     for (let i = 0; i < codes.length; i += BATCH) {
@@ -155,10 +182,18 @@ export async function GET() {
       results.push(...batchResults);
       if (i + BATCH < codes.length) await new Promise((r) => setTimeout(r, 80));
     }
-
     const valid = results.filter(Boolean) as NonNullable<typeof results[0]>[];
 
-    const toItem = (r: NonNullable<typeof valid[0]>, amount: number, qty: number, rank: number): RankItem => ({
+    // 2. Yahoo Finance 실시간 주가로 가격 덮어쓰기 (stck_clpr = 전일 종가 보정)
+    const yfPrices = await fetchYFPrices(valid.map((v) => v.code));
+    for (const v of valid) {
+      const yf = yfPrices[v.code];
+      if (yf) { v.price = yf.price; v.changePct = yf.changePct; }
+    }
+
+    const toItem = (
+      r: NonNullable<typeof valid[0]>, amount: number, qty: number, rank: number
+    ): RankItem => ({
       rank,
       code:         r.code,
       name:         MAJOR_STOCKS[r.code] ?? r.code,
@@ -168,28 +203,25 @@ export async function GET() {
       netBuyQty:    qty,
     });
 
-    const sortDesc = (arr: typeof valid, getAmt: (x: typeof valid[0]) => number) =>
-      [...arr].sort((a, b) => getAmt(b) - getAmt(a));
+    const sortDesc = (arr: typeof valid, fn: (x: typeof valid[0]) => number) =>
+      [...arr].sort((a, b) => fn(b) - fn(a));
+    const sortAsc = (arr: typeof valid, fn: (x: typeof valid[0]) => number) =>
+      [...arr].sort((a, b) => fn(a) - fn(b));
 
-    const sortAsc = (arr: typeof valid, getAmt: (x: typeof valid[0]) => number) =>
-      [...arr].sort((a, b) => getAmt(a) - getAmt(b));
-
-    // TOP 10 순매수
     const foreignBuy  = sortDesc(valid, (x) => x.frgn).slice(0, 10).map((r, i) => toItem(r, r.frgn, r.frgnQty, i+1));
     const instBuy     = sortDesc(valid, (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
     const indivBuy    = sortDesc(valid, (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
-
-    // TOP 10 순매도 (가장 낮은 값 = 매도 상위)
-    const foreignSell = sortAsc(valid, (x) => x.frgn).slice(0, 10).map((r, i) => toItem(r, r.frgn, r.frgnQty, i+1));
-    const instSell    = sortAsc(valid, (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
-    const indivSell   = sortAsc(valid, (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
+    const foreignSell = sortAsc(valid,  (x) => x.frgn).slice(0, 10).map((r, i) => toItem(r, r.frgn, r.frgnQty, i+1));
+    const instSell    = sortAsc(valid,  (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
+    const indivSell   = sortAsc(valid,  (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
 
     return NextResponse.json(
-      { buy: { foreign: foreignBuy, institution: instBuy, individual: indivBuy },
+      { buy:  { foreign: foreignBuy,  institution: instBuy,  individual: indivBuy  },
         sell: { foreign: foreignSell, institution: instSell, individual: indivSell } },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
+    console.error("🚨 [investor-ranking] 오류:", String(err));
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
