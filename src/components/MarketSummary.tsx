@@ -706,6 +706,11 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
 interface USStockRow {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
+  marketState: string;
+  preMarketPrice:     number | null;
+  preMarketChangePct: number | null;
+  postMarketPrice:    number | null;
+  postMarketChangePct: number | null;
 }
 interface USSectorRow { sector: string; symbol: string; changePct: number; price: number; }
 
@@ -767,23 +772,52 @@ function USStockList({
         <p className="text-xs text-gray-500 py-6 text-center">데이터를 불러올 수 없습니다</p>
       ) : (
         <div className="divide-y divide-navy-border/30">
-          {rows.map(r => (
-            <div key={r.code}
-              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
-              onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}
-            >
-              <RankBadge rank={r.rank} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600">{r.code}</p>
+          {rows.map(r => {
+            // 시간외 표시 로직
+            const isPre  = r.marketState === "PRE"  && r.preMarketPrice  !== null;
+            const isPost = (r.marketState === "POST" || r.marketState === "POSTPOST") && r.postMarketPrice !== null;
+            const extPrice  = isPre  ? r.preMarketPrice  : isPost ? r.postMarketPrice  : null;
+            const extPct    = isPre  ? r.preMarketChangePct : isPost ? r.postMarketChangePct : null;
+            const extLabel  = isPre  ? "PRE"  : isPost ? "POST" : null;
+            // 표시 주가: 시간외 있으면 시간외가 메인, 전일종가를 보조로
+            const displayPrice  = extPrice  ?? r.price;
+            const displayPct    = extPct    ?? r.changePct;
+            const isDisplayPos  = displayPct >= 0;
+            return (
+              <div key={r.code}
+                className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+                onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}
+              >
+                <RankBadge rank={r.rank} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm text-white font-medium truncate">{r.name}</p>
+                    {extLabel && (
+                      <span className={`text-[10px] font-bold px-1 py-0.5 rounded shrink-0 ${
+                        isPre ? "bg-amber-400/20 text-amber-300" : "bg-purple-400/20 text-purple-300"
+                      }`}>{extLabel}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 whitespace-nowrap">
+                    {r.code}
+                    {extPrice !== null && (
+                      <span className="text-gray-600 ml-1">· 종가 {fmtUSD(r.price)}</span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end shrink-0 w-20">
+                  <span className="text-sm text-white num whitespace-nowrap">{fmtUSD(displayPrice!)}</span>
+                  {extPrice !== null && (
+                    <span className="text-xs text-gray-600 num whitespace-nowrap line-through">{fmtUSD(r.price)}</span>
+                  )}
+                </div>
+                <span className={`w-14 text-right text-sm font-semibold num whitespace-nowrap ${isDisplayPos ? "text-signal-green" : "text-signal-red"}`}>
+                  {isDisplayPos ? "▲" : "▼"}{Math.abs(displayPct!).toFixed(2)}%
+                </span>
+                <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block whitespace-nowrap">{fmtVolUS(r.volume)}</span>
               </div>
-              <span className="w-20 text-right text-sm text-white num whitespace-nowrap">{fmtUSD(r.price)}</span>
-              <span className={`w-14 text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
-                {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
-              </span>
-              <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block whitespace-nowrap">{fmtVolUS(r.volume)}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -34,9 +34,49 @@ const SECTOR_ETFS = [
 type Quote = {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
+  marketState: string;
+  preMarketPrice:    number | null;
+  preMarketChangePct: number | null;
+  postMarketPrice:   number | null;
+  postMarketChangePct: number | null;
 };
 
-// ── Yahoo predefined screener (S&P500 기반) ────────────────────────────────────
+// ── 공통: Yahoo quote 객체 → Quote 변환 ──────────────────────────────────────
+function parseYahooQuote(q: Record<string, unknown>, rank: number, nameOverride?: string): Quote {
+  return {
+    rank,
+    code:      q.symbol as string,
+    name:      (nameOverride ?? (q.shortName ?? q.longName ?? q.symbol) as string).slice(0, 30),
+    price:     parseFloat(((q.regularMarketPrice as number) ?? 0).toFixed(2)),
+    change:    parseFloat(((q.regularMarketChange as number) ?? 0).toFixed(2)),
+    changePct: parseFloat(((q.regularMarketChangePercent as number) ?? 0).toFixed(2)),
+    volume:    (q.regularMarketVolume as number) ?? 0,
+    marketState: (q.marketState as string) ?? "CLOSED",
+    preMarketPrice:      (q.preMarketPrice     as number | null | undefined) ?? null,
+    preMarketChangePct:  (q.preMarketChangePercent  as number | null | undefined) ?? null,
+    postMarketPrice:     (q.postMarketPrice    as number | null | undefined) ?? null,
+    postMarketChangePct: (q.postMarketChangePercent as number | null | undefined) ?? null,
+  };
+}
+
+// ── Yahoo v7/finance/quote (배치, pre/post 포함) ──────────────────────────────
+async function fetchQuoteBatch(symbols: string[], nameMap?: Record<string, string>): Promise<Quote[]> {
+  try {
+    const joined = symbols.join(",");
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketVolume,preMarketPrice,preMarketChange,preMarketChangePercent,postMarketPrice,postMarketChange,postMarketChangePercent,marketState,shortName`,
+      { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const j = await res.json();
+    const quotes = (j?.quoteResponse?.result ?? []) as Record<string, unknown>[];
+    return quotes.map((q, i) =>
+      parseYahooQuote(q, i + 1, nameMap?.[q.symbol as string])
+    );
+  } catch { return []; }
+}
+
+// ── Yahoo predefined screener (S&P500) — pre/post 포함 ───────────────────────
 async function fetchScreener(scrId: string, count = 10): Promise<Quote[]> {
   try {
     const res = await fetch(
@@ -46,19 +86,11 @@ async function fetchScreener(scrId: string, count = 10): Promise<Quote[]> {
     if (!res.ok) return [];
     const j = await res.json();
     const quotes = (j?.finance?.result?.[0]?.quotes ?? []) as Record<string, unknown>[];
-    return quotes.map((q, i) => ({
-      rank:      i + 1,
-      code:      q.symbol as string,
-      name:      ((q.shortName ?? q.longName ?? q.symbol) as string).slice(0, 30),
-      price:     parseFloat(((q.regularMarketPrice as number) ?? 0).toFixed(2)),
-      change:    parseFloat(((q.regularMarketChange as number) ?? 0).toFixed(2)),
-      changePct: parseFloat(((q.regularMarketChangePercent as number) ?? 0).toFixed(2)),
-      volume:    (q.regularMarketVolume as number) ?? 0,
-    }));
+    return quotes.map((q, i) => parseYahooQuote(q, i + 1));
   } catch { return []; }
 }
 
-// ── Yahoo custom screener (NASDAQ exchange filter) ────────────────────────────
+// ── Yahoo custom screener (NASDAQ) ────────────────────────────────────────────
 async function fetchNasdaqScreener(type: "gainers" | "losers" | "actives", count = 10): Promise<Quote[]> {
   try {
     const sortField = type === "actives" ? "regularmarketvolume" : "percentchange";
@@ -96,20 +128,12 @@ async function fetchNasdaqScreener(type: "gainers" | "losers" | "actives", count
     const j = await res.json();
     const quotes = (j?.finance?.result?.[0]?.quotes ?? []) as Record<string, unknown>[];
     if (!quotes.length) return [];
-    return quotes.map((q, i) => ({
-      rank:      i + 1,
-      code:      q.symbol as string,
-      name:      ((q.shortName ?? q.longName ?? q.symbol) as string).slice(0, 30),
-      price:     parseFloat(((q.regularMarketPrice as number) ?? 0).toFixed(2)),
-      change:    parseFloat(((q.regularMarketChange as number) ?? 0).toFixed(2)),
-      changePct: parseFloat(((q.regularMarketChangePercent as number) ?? 0).toFixed(2)),
-      volume:    (q.regularMarketVolume as number) ?? 0,
-    }));
+    return quotes.map((q, i) => parseYahooQuote(q, i + 1));
   } catch { return []; }
 }
 
-// ── Yahoo Spark API (batch quotes) ────────────────────────────────────────────
-async function fetchSpark(symbols: string[]): Promise<{ code: string; price: number; change: number; changePct: number; volume: number }[]> {
+// ── Yahoo Spark (sector ETF 전용 — pre/post 불필요) ───────────────────────────
+async function fetchSpark(symbols: string[]): Promise<{ code: string; changePct: number; price: number }[]> {
   try {
     const joined = symbols.map(encodeURIComponent).join(",");
     const res = await fetch(
@@ -118,22 +142,13 @@ async function fetchSpark(symbols: string[]): Promise<{ code: string; price: num
     );
     if (!res.ok) return [];
     const j = await res.json();
-    const results = (j?.spark?.result ?? []) as Record<string, unknown>[];
-    return results.flatMap(r => {
-      const resp  = (r?.response as Record<string, unknown>[])?.[0];
-      const meta  = resp?.meta as Record<string, number> | undefined;
+    return ((j?.spark?.result ?? []) as Record<string, unknown>[]).flatMap(r => {
+      const meta = ((r?.response as Record<string, unknown>[])?.[0]?.meta) as Record<string, number> | undefined;
       if (!meta) return [];
       const price = meta.regularMarketPrice ?? 0;
       const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
-      const change    = price - prev;
-      const changePct = prev ? (change / prev) * 100 : 0;
-      return [{
-        code:      r.symbol as string,
-        price:     parseFloat(price.toFixed(2)),
-        change:    parseFloat(change.toFixed(2)),
-        changePct: parseFloat(changePct.toFixed(2)),
-        volume:    meta.regularMarketVolume ?? 0,
-      }];
+      const changePct = prev ? ((price - prev) / prev) * 100 : 0;
+      return [{ code: r.symbol as string, price: parseFloat(price.toFixed(2)), changePct: parseFloat(changePct.toFixed(2)) }];
     });
   } catch { return []; }
 }
@@ -146,43 +161,37 @@ export async function GET(request: Request) {
 
   const ts = new Date().toISOString();
 
-  // ① 섹터 ETF
+  // ① 섹터 ETF (pre/post 불필요)
   if (type === "sector") {
-    const syms = SECTOR_ETFS.map(e => e.symbol);
+    const syms   = SECTOR_ETFS.map(e => e.symbol);
     const sparks = await fetchSpark(syms);
     const sectors = SECTOR_ETFS.map(etf => {
       const q = sparks.find(r => r.code === etf.symbol);
       return { sector: etf.name, symbol: etf.symbol, changePct: q?.changePct ?? 0, price: q?.price ?? 0 };
     }).sort((a, b) => b.changePct - a.changePct);
-    return NextResponse.json({ sectors, timestamp: ts },
-      { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ sectors, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  // ② DOW 30
+  // ② DOW 30 — v7/finance/quote로 교체 (pre/post 포함)
   if (index === "DOW") {
     const tickers = Object.keys(DOW30);
-    const sparks  = await fetchSpark(tickers);
-    const sorted  = sparks
-      .map(q => ({ ...q, name: DOW30[q.code] ?? q.code }))
+    const quotes  = await fetchQuoteBatch(tickers, DOW30);
+    const sorted  = quotes
       .sort((a, b) => {
         if (type === "gainers") return b.changePct - a.changePct;
         if (type === "losers")  return a.changePct - b.changePct;
         return b.volume - a.volume;
       })
       .slice(0, 10)
-      .map((q, i) => ({ rank: i + 1, ...q }));
-    return NextResponse.json({ stocks: sorted, timestamp: ts },
-      { headers: { "Cache-Control": "no-store" } });
+      .map((q, i) => ({ ...q, rank: i + 1 }));
+    return NextResponse.json({ stocks: sorted, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  // ③ NASDAQ — custom screener (POST), fallback to predefined
+  // ③ NASDAQ — custom screener, fallback to S&P500
   if (index === "NASDAQ") {
     const stocks = await fetchNasdaqScreener(type as "gainers" | "losers" | "actives", 10);
-    if (stocks.length > 0) {
-      return NextResponse.json({ stocks, timestamp: ts },
-        { headers: { "Cache-Control": "no-store" } });
-    }
-    // fallback: use S&P500 screener
+    if (stocks.length > 0)
+      return NextResponse.json({ stocks, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
   // ④ S&P500 (or NASDAQ fallback)
@@ -190,6 +199,5 @@ export async function GET(request: Request) {
     type === "gainers" ? "day_gainers" :
     type === "losers"  ? "day_losers"  : "most_actives";
   const stocks = await fetchScreener(scrId, 10);
-  return NextResponse.json({ stocks, timestamp: ts },
-    { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ stocks, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
 }
