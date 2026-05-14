@@ -176,31 +176,47 @@ export default function PortfolioManager() {
   }
 
   async function handleSave() {
-    if (!form.ticker || !form.qty || !form.avg_price) return;
-    const ticker = form.ticker.toUpperCase();
-    let updated: Holding[];
-    if (editTarget) {
-      updated = holdings.map((h) => h.ticker === editTarget.ticker ? { ...h, ...form, ticker } : h);
-    } else {
-      if (holdings.find((h) => h.ticker === ticker)) {
-        alert("이미 등록된 종목입니다. 수정 버튼을 사용하세요.");
-        return;
+    // ── 유효성 검사 (명시적 알림)
+    const ticker = form.ticker.trim().toUpperCase();
+    const qty = Number(form.qty);
+    const avg_price = Number(form.avg_price);
+
+    if (!ticker) { alert("종목코드(티커)를 입력해주세요."); return; }
+    if (!(qty > 0)) { alert("수량을 입력해주세요."); return; }
+    if (!(avg_price > 0)) { alert("평단가를 입력해주세요."); return; }
+
+    try {
+      let updated: Holding[];
+      if (editTarget) {
+        updated = holdings.map((h) =>
+          h.ticker === editTarget.ticker ? { ...h, ...form, ticker, qty, avg_price } : h
+        );
+      } else {
+        if (holdings.find((h) => h.ticker === ticker)) {
+          alert("이미 등록된 종목입니다. 수정 버튼을 사용하세요.");
+          return;
+        }
+        // crypto.randomUUID 대신 안전한 ID 생성
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        updated = [...holdings, { ...form, ticker, qty, avg_price, id }];
       }
-      updated = [...holdings, { ...form, ticker, id: crypto.randomUUID() }];
+
+      // ① 즉시 저장 + 모달 닫기
+      setHoldings(updated);
+      saveToStorage(updated);
+      setShowForm(false);
+
+      // ② 백그라운드 시세 갱신
+      const refreshed = await refreshPrices(updated);
+      setHoldings(refreshed);
+      saveToStorage(refreshed.map(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => rest
+      ));
+    } catch (err) {
+      console.error("[handleSave] 오류:", err);
+      alert("저장 중 오류가 발생했습니다: " + String(err));
     }
-
-    // ① 즉시 저장 + 모달 닫기 (UX 즉각 반응)
-    setHoldings(updated);
-    saveToStorage(updated);
-    setShowForm(false);
-
-    // ② 백그라운드에서 시세 갱신
-    const refreshed = await refreshPrices(updated);
-    setHoldings(refreshed);
-    saveToStorage(refreshed.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => rest
-    ));
   }
 
   function handleDelete(ticker: string) {
@@ -601,31 +617,31 @@ export default function PortfolioManager() {
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">티커 (국내: 6자리 숫자, 해외: 영문)</label>
-                <input value={form.ticker} onChange={(e) => setForm({ ...form, ticker: e.target.value })}
+                <input value={form.ticker} onChange={(e) => { const v = e.target.value; setForm(p => ({ ...p, ticker: v })); }}
                   placeholder="005930 또는 AAPL" disabled={!!editTarget}
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none disabled:opacity-50" />
               </div>
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">종목명</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                <input value={form.name} onChange={(e) => { const v = e.target.value; setForm(p => ({ ...p, name: v })); }}
                   placeholder="삼성전자"
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm focus:border-gold outline-none" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">수량</label>
-                <input type="number" value={form.qty || ""} onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })}
+                <input type="number" value={form.qty || ""} onChange={(e) => { const v = Number(e.target.value); setForm(p => ({ ...p, qty: v })); }}
                   placeholder="100"
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">평단가</label>
-                <input type="number" value={form.avg_price || ""} onChange={(e) => setForm({ ...form, avg_price: Number(e.target.value) })}
+                <input type="number" value={form.avg_price || ""} onChange={(e) => { const v = Number(e.target.value); setForm(p => ({ ...p, avg_price: v })); }}
                   placeholder="175572"
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">통화</label>
-                <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value as "KRW" | "USD" })}
+                <select value={form.currency} onChange={(e) => { const v = e.target.value as "KRW"|"USD"; setForm(p => ({ ...p, currency: v })); }}
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm focus:border-gold outline-none">
                   <option value="KRW">KRW (원화)</option>
                   <option value="USD">USD (달러)</option>
@@ -633,7 +649,7 @@ export default function PortfolioManager() {
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">섹터</label>
-                <select value={form.sector} onChange={(e) => setForm({ ...form, sector: e.target.value })}
+                <select value={form.sector} onChange={(e) => { const v = e.target.value; setForm(p => ({ ...p, sector: v })); }}
                   className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm focus:border-gold outline-none">
                   {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
