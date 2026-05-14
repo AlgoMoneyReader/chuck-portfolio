@@ -188,10 +188,19 @@ export default function PortfolioManager() {
       }
       updated = [...holdings, { ...form, ticker, id: crypto.randomUUID() }];
     }
+
+    // ① 즉시 저장 + 모달 닫기 (UX 즉각 반응)
+    setHoldings(updated);
+    saveToStorage(updated);
+    setShowForm(false);
+
+    // ② 백그라운드에서 시세 갱신
     const refreshed = await refreshPrices(updated);
     setHoldings(refreshed);
-    saveToStorage(refreshed.map(({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => { void currentPrice; void changePct; void profitLoss; void profitLossPct; void evalAmount; return rest; }));
-    setShowForm(false);
+    saveToStorage(refreshed.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => rest
+    ));
   }
 
   function handleDelete(ticker: string) {
