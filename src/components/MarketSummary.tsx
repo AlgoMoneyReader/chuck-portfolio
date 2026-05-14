@@ -552,49 +552,63 @@ function fmtAmount(n: number): string {
 }
 
 
+// 투자자 종류별 단일 리스트 (모바일 탭뷰 + 데스크탑 컬럼뷰 공용)
 function InvestorRankCol({
-  title, items, mode, onSelect,
+  items, mode, onSelect, compact = false,
 }: {
-  title: string; items: RankItem[]; mode: "buy" | "sell";
+  items: RankItem[]; mode: "buy" | "sell";
   onSelect: (d: DrawerState) => void;
+  compact?: boolean; // 데스크탑 3열 모드
 }) {
   const isPos = mode === "buy";
   return (
-    <div className="flex-1 min-w-0">
-      <p className="text-xs font-semibold text-gray-300 mb-2 px-1">{title}</p>
-      <div className="space-y-0.5">
-        {items.map((item) => (
-          <button
-            key={item.code}
-            onClick={() => onSelect({ code: item.code, market: "KS", name: item.name })}
-            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-navy-sub/60 transition-colors text-left group"
-          >
-            <span className="text-xs text-gray-600 w-4 shrink-0">{item.rank}</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-white font-medium truncate group-hover:text-cyan-brand transition-colors">
-                {item.name}
-              </p>
-              <p className="text-xs text-gray-500 num">
-                {item.price.toLocaleString("ko-KR")}원
-                <span className={item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}>
-                  {" "}{item.changePct >= 0 ? "▲" : "▼"}{Math.abs(item.changePct).toFixed(2)}%
-                </span>
-              </p>
-            </div>
-            <span className={`text-xs font-bold num shrink-0 ${isPos ? "text-signal-green" : "text-signal-red"}`}>
-              {fmtAmount(item.netBuyAmount)}
-            </span>
-          </button>
-        ))}
-      </div>
+    <div className="space-y-0.5">
+      {items.map((item) => (
+        <button
+          key={item.code}
+          onClick={() => onSelect({ code: item.code, market: "KS", name: item.name })}
+          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-navy-sub/60 active:bg-navy-sub/80 transition-colors text-left group"
+        >
+          {/* 순위 */}
+          <span className="text-xs text-gray-600 w-4 shrink-0 text-center">{item.rank}</span>
+
+          {/* 종목명 + 가격/등락률 */}
+          <div className="flex-1 min-w-0">
+            <p className={`font-medium truncate group-hover:text-cyan-brand transition-colors ${
+              compact ? "text-xs" : "text-sm"
+            } text-white`}>
+              {item.name}
+            </p>
+            <p className="text-[11px] text-gray-500 num leading-tight">
+              {item.price.toLocaleString("ko-KR")}원
+              <span className={`ml-1 ${item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+                {item.changePct >= 0 ? "▲" : "▼"}{Math.abs(item.changePct).toFixed(2)}%
+              </span>
+            </p>
+          </div>
+
+          {/* 순매수/순매도 금액 */}
+          <span className={`text-xs font-bold num shrink-0 ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+            {fmtAmount(item.netBuyAmount)}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
 
+type InvestorType = "foreign" | "institution" | "individual";
+const INVESTOR_TABS: { key: InvestorType; label: string }[] = [
+  { key: "foreign",     label: "외국인" },
+  { key: "institution", label: "기관"   },
+  { key: "individual",  label: "개인"   },
+];
+
 function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
-  const [data, setData]       = useState<RankData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [mode, setMode]       = useState<"buy" | "sell">("buy");
+  const [data, setData]         = useState<RankData | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [mode, setMode]         = useState<"buy" | "sell">("buy");
+  const [investor, setInvestor] = useState<InvestorType>("foreign");
 
   useEffect(() => {
     setLoading(true);
@@ -608,8 +622,9 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
 
   return (
     <div className="space-y-3">
-      {/* 순매수/순매도 토글 */}
-      <div className="flex gap-2">
+
+      {/* ── 상단 컨트롤: 순매수/순매도 + 기준 안내 ── */}
+      <div className="flex items-center gap-2 flex-wrap">
         {(["buy", "sell"] as const).map(m => (
           <button key={m} onClick={() => setMode(m)}
             className={`px-4 py-1.5 text-xs rounded-full font-semibold transition-all ${
@@ -622,27 +637,64 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
             {m === "buy" ? "순매수" : "순매도"}
           </button>
         ))}
-        <span className="text-xs text-gray-600 self-center ml-auto">KIS 기준 · KOSPI 상위 45종목</span>
+        <span className="text-xs text-gray-600 ml-auto">KIS · KOSPI 상위 45종목</span>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-3 gap-3">
-          {[0,1,2].map(i => (
-            <div key={i} className="space-y-1.5">
-              <div className="h-4 bg-navy-border rounded animate-pulse w-12" />
-              {Array.from({length:5}).map((_,j) => (
-                <div key={j} className="h-10 bg-navy-border rounded animate-pulse" />
-              ))}
+        /* 스켈레톤 */
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 px-2 py-2 animate-pulse">
+              <div className="w-4 h-3 bg-navy-border rounded" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3 bg-navy-border rounded w-3/4" />
+                <div className="h-2.5 bg-navy-border/60 rounded w-1/2" />
+              </div>
+              <div className="h-3 w-12 bg-navy-border rounded" />
             </div>
           ))}
         </div>
-      ) : cols ? (
-        <div className="grid grid-cols-3 gap-1 divide-x divide-navy-border/30">
-          <InvestorRankCol title="외국인" items={cols.foreign}     mode={mode} onSelect={onSelect} />
-          <div className="pl-3"><InvestorRankCol title="기관"   items={cols.institution} mode={mode} onSelect={onSelect} /></div>
-          <div className="pl-3"><InvestorRankCol title="개인"   items={cols.individual}  mode={mode} onSelect={onSelect} /></div>
+      ) : cols ? (<>
+
+        {/* ── 모바일: 외국인/기관/개인 탭 ── */}
+        <div className="flex sm:hidden gap-1 bg-navy-sub/40 rounded-lg p-1">
+          {INVESTOR_TABS.map(t => (
+            <button key={t.key} onClick={() => setInvestor(t.key)}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                investor === t.key
+                  ? "bg-navy-card text-white shadow"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}>
+              {t.label}
+            </button>
+          ))}
         </div>
-      ) : (
+
+        {/* 모바일: 선택된 투자자 리스트 (full-width) */}
+        <div className="sm:hidden">
+          <InvestorRankCol
+            items={cols[investor]}
+            mode={mode}
+            onSelect={onSelect}
+          />
+        </div>
+
+        {/* ── 데스크탑: 3열 그리드 ── */}
+        <div className="hidden sm:grid grid-cols-3 gap-1 divide-x divide-navy-border/30">
+          {INVESTOR_TABS.map((t, idx) => (
+            <div key={t.key} className={idx > 0 ? "pl-3" : ""}>
+              <p className="text-xs font-semibold text-gray-400 mb-2 px-1">{t.label}</p>
+              <InvestorRankCol
+                items={cols[t.key]}
+                mode={mode}
+                onSelect={onSelect}
+                compact
+              />
+            </div>
+          ))}
+        </div>
+
+      </>) : (
         <p className="text-xs text-gray-500 text-center py-4">데이터를 불러오지 못했습니다</p>
       )}
     </div>
