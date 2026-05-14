@@ -36,9 +36,13 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   const response = NextResponse.json({ ok: true });
+  // 로그인 때와 동일한 속성으로 쿠키 삭제 (속성 불일치 시 브라우저가 삭제 안 할 수 있음)
   response.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
     maxAge: 0,
+    expires: new Date(0), // 과거 날짜로 강제 만료
     path: "/",
   });
   return response;

@@ -1,13 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-
 export default function AdminLogout() {
-  const router = useRouter();
-
   const handleLogout = async () => {
     await fetch("/api/admin-auth", { method: "DELETE" });
-    router.push("/");
+    // window.location.href: 하드 리다이렉트 → 라우터 캐시 완전 초기화
+    // router.push는 소프트 내비게이션이라 미들웨어를 재실행하지 않음
+    window.location.href = "/";
   };
 
   return (
