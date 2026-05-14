@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
 const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
-interface DrawerState { code: string; market: "KS" | "KQ"; name: string; }
+interface DrawerState { code: string; market: "KS" | "KQ" | "US"; name: string; }
 
 interface SectorStockLive {
   sym: string; code: string; market: "KS" | "KQ"; name: string;
@@ -719,7 +719,13 @@ function fmtVolUS(n: number): string {
   return n.toString();
 }
 
-function USStockList({ type, index }: { type: "gainers" | "losers" | "actives"; index: string }) {
+function USStockList({
+  type, index, onSelect,
+}: {
+  type: "gainers" | "losers" | "actives";
+  index: string;
+  onSelect: (d: DrawerState) => void;
+}) {
   const [rows, setRows]       = useState<USStockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs]           = useState("");
@@ -762,7 +768,10 @@ function USStockList({ type, index }: { type: "gainers" | "losers" | "actives"; 
       ) : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <div key={r.code} className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded transition-colors">
+            <div key={r.code}
+              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}
+            >
               <RankBadge rank={r.rank} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
@@ -940,7 +949,7 @@ export default function MarketSummary() {
         </div>
 
         {usContent !== "sector" && (
-          <USStockList type={usContent} index={usIndex} />
+          <USStockList type={usContent} index={usIndex} onSelect={setDrawer} />
         )}
         {usContent === "sector" && <USSectorHeatmap />}
       </>)}

@@ -7,18 +7,21 @@ interface StockDetail {
   price: number; change: number; changePct: number;
   dayHigh: number; dayLow: number; volume: number;
   week52High: number; week52Low: number;
-  marketState: string; naverUrl: string;
+  marketState: string; naverUrl: string | null;
+  isUS: boolean; currency: string;
+  preMarketPrice: number | null;  preMarketChangePct: number | null;
+  postMarketPrice: number | null; postMarketChangePct: number | null;
 }
 
 interface Props {
   code: string;
-  market: "KS" | "KQ";
+  market: "KS" | "KQ" | "US";
   name: string;
   onClose: () => void;
 }
 
-const fmtPrice = (n: number) =>
-  n > 0 ? n.toLocaleString("ko-KR") + "원" : "-";
+const fmtKRW = (n: number) => n > 0 ? n.toLocaleString("ko-KR") + "원" : "-";
+const fmtUSD = (n: number) => n > 0 ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-";
 
 const fmtVol = (n: number) =>
   n >= 1_000_000 ? (n / 1_000_000).toFixed(2) + "M주" :
@@ -45,13 +48,21 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const isPos = (data?.changePct ?? 0) >= 0;
-  const color = isPos ? "text-signal-green" : "text-signal-red";
+  const isUS   = market === "US";
+  const fmt    = (n: number) => isUS ? fmtUSD(n) : fmtKRW(n);
+  const isPos  = (data?.changePct ?? 0) >= 0;
+  const color  = isPos ? "text-signal-green" : "text-signal-red";
+  const marketLabel = market === "KS" ? "KOSPI" : market === "KQ" ? "KOSDAQ" : "NYSE/NASDAQ";
 
   // 52주 내 현재 위치 (%)
   const position52 = data && data.week52High > data.week52Low
     ? ((data.price - data.week52Low) / (data.week52High - data.week52Low)) * 100
     : 50;
+
+  // 시간외 데이터
+  const extPrice  = data?.postMarketPrice  ?? data?.preMarketPrice  ?? null;
+  const extPct    = data?.postMarketChangePct ?? data?.preMarketChangePct ?? null;
+  const extLabel  = data?.postMarketPrice ? "시간후" : "시간전";
 
   return (
     <>
@@ -68,7 +79,7 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
           <div>
             <h3 className="text-xl font-bold text-white">{name}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {code} · {market === "KS" ? "KOSPI" : "KOSDAQ"}
+              {code} · {marketLabel}
               {data?.marketState === "REGULAR" && (
                 <span className="ml-2 text-signal-green">● 장중</span>
               )}
@@ -94,20 +105,32 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
           <>
             {/* 현재가 */}
             <div>
-              <p className="text-3xl font-bold text-white num">{fmtPrice(data.price)}</p>
+              <p className="text-3xl font-bold text-white num">{fmt(data.price)}</p>
               <p className={`text-sm font-semibold num mt-1 ${color}`}>
                 {isPos ? "▲" : "▼"} {Math.abs(data.changePct).toFixed(2)}%
-                &nbsp;({isPos ? "+" : ""}{data.change.toLocaleString("ko-KR")}원)
+                &nbsp;({isPos ? "+" : ""}{isUS
+                  ? `$${Math.abs(data.change).toFixed(2)}`
+                  : data.change.toLocaleString("ko-KR") + "원"
+                })
               </p>
+              {/* 미국: 시간외 단가 */}
+              {isUS && extPrice && extPct !== null && (
+                <p className="text-xs text-gray-500 mt-0.5 num">
+                  {extLabel} {fmtUSD(extPrice)}
+                  <span className={extPct >= 0 ? "text-signal-green ml-1" : "text-signal-red ml-1"}>
+                    {extPct >= 0 ? "▲" : "▼"}{Math.abs(extPct).toFixed(2)}%
+                  </span>
+                </p>
+              )}
             </div>
 
             {/* 지표 그리드 */}
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "오늘 고가",  value: fmtPrice(data.dayHigh)  },
-                { label: "오늘 저가",  value: fmtPrice(data.dayLow)   },
-                { label: "거래량",     value: fmtVol(data.volume)     },
-                { label: "52주 고가",  value: fmtPrice(data.week52High) },
+                { label: "오늘 고가",  value: fmt(data.dayHigh)      },
+                { label: "오늘 저가",  value: fmt(data.dayLow)       },
+                { label: "거래량",     value: fmtVol(data.volume)    },
+                { label: "52주 고가",  value: fmt(data.week52High)   },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-navy-sub/50 rounded-xl px-4 py-3">
                   <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -120,8 +143,8 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
             {data.week52High > 0 && data.week52Low > 0 && (
               <div>
                 <div className="flex justify-between text-xs text-gray-600 mb-1">
-                  <span>52주 저가 {fmtPrice(data.week52Low)}</span>
-                  <span>52주 고가 {fmtPrice(data.week52High)}</span>
+                  <span>52주 저가 {fmt(data.week52Low)}</span>
+                  <span>52주 고가 {fmt(data.week52High)}</span>
                 </div>
                 <div className="relative h-2 bg-navy-border rounded-full overflow-hidden">
                   <div className="absolute h-full bg-gradient-to-r from-signal-red via-gold to-signal-green rounded-full"
@@ -133,12 +156,22 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
             )}
 
             {/* 바로가기 */}
-            <a href={data.naverUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                         bg-cyan-brand/20 hover:bg-cyan-brand/30 border border-cyan-brand/40
-                         text-cyan-brand text-sm font-semibold transition-all">
-              네이버 금융 상세보기 ↗
-            </a>
+            {isUS ? (
+              <a href={`https://finance.yahoo.com/quote/${code}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                           bg-cyan-brand/20 hover:bg-cyan-brand/30 border border-cyan-brand/40
+                           text-cyan-brand text-sm font-semibold transition-all">
+                Yahoo Finance 상세보기 ↗
+              </a>
+            ) : data.naverUrl ? (
+              <a href={data.naverUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                           bg-cyan-brand/20 hover:bg-cyan-brand/30 border border-cyan-brand/40
+                           text-cyan-brand text-sm font-semibold transition-all">
+                네이버 금융 상세보기 ↗
+              </a>
+            ) : null}
           </>
         )}
       </div>
