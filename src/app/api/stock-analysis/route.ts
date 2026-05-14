@@ -75,7 +75,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "code, name required" }, { status: 400 });
   }
 
-  const symbol = `${code}.${market}`;
+  const isUS   = market === "US";
+  const symbol = isUS ? code.toUpperCase() : `${code}.${market}`;
   const now    = new Date();
   const today  = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
   const year   = now.getFullYear();   // 2026
@@ -125,26 +126,41 @@ export async function GET(request: Request) {
   const newsData   = newsResult.status  === "fulfilled" ? newsResult.value  : "";
 
   // 실시간 주가 문자열 (프롬프트 주입용)
+  const priceUnit = isUS ? "달러(USD)" : "원(KRW)";
+  const priceStr  = priceInfo
+    ? isUS
+      ? `$${priceInfo.price.toFixed(2)}`
+      : `${priceInfo.price.toLocaleString("ko-KR")}원`
+    : "조회 실패";
   const currentPriceLine = priceInfo
-    ? `현재가 (${priceInfo.fetchedAt} Yahoo Finance 실시간): ${priceInfo.price.toLocaleString("ko-KR")}원\n※ 밸류에이션 분석의 기준 주가로 이 값을 사용하세요. 주가 검색 불필요.`
-    : `현재가: Yahoo Finance 조회 실패 — Google Search로 당일 종가 검색 후 사용`;
+    ? `현재가 (${priceInfo.fetchedAt} Yahoo Finance 실시간): ${priceStr}\n※ 밸류에이션 분석의 기준 주가로 이 값을 사용하세요. 주가 검색 불필요.`
+    : `현재가: Yahoo Finance 조회 실패 — Google Search로 당일 종가(${priceUnit}) 검색 후 사용`;
+
+  const marketLabel = isUS ? "NASDAQ/NYSE" : (market === "KS" ? "KOSPI" : "KOSDAQ");
+
+  // 검색 키워드: 미국주식은 영어로
+  const searchKeywords = isUS ? `
+   - "${name} ${year} earnings results"
+   - "${name} Q1 ${year} revenue guidance"
+   - "${name} stock price target ${year} analyst"
+   - "${name} ${year} outlook"` : `
+   - "${name} ${year}년 실적"
+   - "${name} ${year}년 1분기 실적"
+   - "${name} 주가 전망 ${year}"
+   - "${name} 애널리스트 목표주가 ${year}"`;
 
   const userPrompt = `
 오늘 날짜: ${today}
-종목: ${name} (${code}.${market === "KS" ? "KOSPI" : "KOSDAQ"})
+종목: ${name} (${code}, ${marketLabel})
 ${currentPriceLine}
 Yahoo Finance 재무 데이터: ${finData || "조회 불가"}
 최근 뉴스 헤드라인:
 ${newsData || "없음"}
 
 [지시사항 — 반드시 준수]
-1. Google Search로 아래 키워드를 검색해 최신 정보를 반드시 반영하세요:
-   - "${name} ${year}년 실적"
-   - "${name} ${year}년 1분기 실적"
-   - "${name} 주가 전망 ${year}"
-   - "${name} 애널리스트 목표주가 ${year}"
+1. Google Search로 아래 키워드를 검색해 최신 정보를 반드시 반영하세요:${searchKeywords}
 2. ${year}년 데이터를 최우선 사용. 없으면 ${prevY}년 4분기 데이터 사용.
-3. 각 수치에 날짜(예: ${year}년 1분기)를 반드시 명시. 학습 데이터 기반 추정은 "(추정)" 표기.
+3. 각 수치에 날짜(예: ${year}년 1분기 / Q1 ${year})를 반드시 명시. 학습 데이터 기반 추정은 "(추정)" 표기.
 4. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
 
 {

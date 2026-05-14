@@ -9,11 +9,11 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 interface SearchResult {
   code: string;
   name: string;
-  market: "KS" | "KQ";
+  market: "KS" | "KQ" | "US";
   type: string;
 }
 
-interface StockItem { sym: string; code: string; market: "KS"|"KQ"; name: string; }
+interface StockItem { sym: string; code: string; market: "KS"|"KQ"|"US"; name: string; }
 
 interface QuoteData {
   price: number; change: number; changePct: number;
@@ -329,27 +329,27 @@ export default function StockSearchPanel() {
     const code   = item.code   ?? "";
     const market = item.market ?? "KS";
     const name   = item.name   ?? item.code ?? "";
+    const isUS   = market === "US";
 
     const stockItem: StockItem = {
-      sym: `${code}.${market}`,
+      sym: isUS ? code.toUpperCase() : `${code}.${market}`,
       code,
       market,
       name,
     };
     setSelected(stockItem);
-    // 선택 직후 Effect1이 재검색하여 드롭다운을 재오픈하는 버그 차단
     skipNextSearchRef.current = true;
-    setSearchQuery(name);
+    setSearchQuery(isUS ? `${name} (${code.toUpperCase()})` : name);
     setDropdownOpen(false);
     setHighlightIdx(-1);
     setQuote(null);
     setInvestor(null);
     setAnalysis(null);
     setLoading(true);
-    setInvLoading(true);
+    setInvLoading(!isUS); // 미국주식은 수급 조회 없음
     setAnalLoading(true);
 
-    fetch(`/api/stock-detail?code=${item.code}&market=${item.market}`, { cache: "no-store" })
+    fetch(`/api/stock-detail?code=${code}&market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(j => {
         if (j && !j.error) {
@@ -363,16 +363,20 @@ export default function StockSearchPanel() {
             postMarketPrice: j.postMarketPrice ?? null,
             postMarketChangePct: j.postMarketChangePct ?? null,
           });
+          // currency는 isUSStock 플래그로 fmtPrice에서 처리
         }
       })
       .finally(() => setLoading(false));
 
-    fetch(`/api/stock-investor?code=${item.code}&market=${item.market}`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j && !j.error) setInvestor(j); })
-      .finally(() => setInvLoading(false));
+    // 미국주식은 KIS 수급 데이터 없음 → 스킵
+    if (!isUS) {
+      fetch(`/api/stock-investor?code=${code}&market=${market}`, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then(j => { if (j && !j.error) setInvestor(j); })
+        .finally(() => setInvLoading(false));
+    }
 
-    fetch(`/api/stock-analysis?code=${item.code}&name=${encodeURIComponent(item.name)}&market=${item.market}`, { cache: "no-store" })
+    fetch(`/api/stock-analysis?code=${code}&name=${encodeURIComponent(name)}&market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (j && !j.error) setAnalysis(j); })
       .finally(() => setAnalLoading(false));
@@ -405,6 +409,13 @@ export default function StockSearchPanel() {
   const isPos = (quote?.changePct ?? 0) >= 0;
   const priceColor = isPos ? "text-signal-green" : "text-signal-red";
   const gc = investor ? GRADE_CONFIG[investor.grade] : null;
+  const isUSStock = selected?.market === "US";
+
+  // 가격 포맷 함수 (KRW: 정수 원, USD: $소수점2자리)
+  const fmtPrice = (n: number) =>
+    isUSStock
+      ? `$${n.toFixed(2)}`
+      : `${n.toLocaleString("ko-KR")}원`;
 
   // 현재 마켓 세션 (extended hours 표시용)
   const currentSession = getMarketSession();
@@ -469,12 +480,11 @@ export default function StockSearchPanel() {
           </div>
         )}
 
-        {/* 드롭다운: 결과 있음 */}
-        {dropdownOpen && suggestions.length > 0 && (
+        {/* 드롭다운: 결과 있음 OR 미국주식 입력 감지 */}
+        {(dropdownOpen && suggestions.length > 0) || (searchQuery.trim() && /^[A-Za-z]/.test(searchQuery.trim())) ? (
           <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-2xl overflow-hidden animate-fade-in"
             style={{ zIndex: 60 }}>
             {suggestions.map((item, idx) => {
-              // ★ 방어적 처리: name/code/market이 undefined여도 크래시 없음
               const itemCode   = item?.code   ?? "";
               const itemName   = item?.name   ?? itemCode;
               const itemMarket = item?.market ?? "KS";
@@ -502,8 +512,24 @@ export default function StockSearchPanel() {
                 </button>
               );
             })}
+            {/* 미국주식 직접 검색 옵션 (영문 입력 감지) */}
+            {/^[A-Za-z]/.test(searchQuery.trim()) && (
+              <button
+                onClick={() => {
+                  const ticker = searchQuery.trim().toUpperCase().replace(/[^A-Z0-9.]/g, "");
+                  loadStock({ code: ticker, name: ticker, market: "US", type: "us" });
+                }}
+                className="w-full px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors text-left border-t border-navy-border/50 hover:bg-gold/10"
+              >
+                <span className="flex-1 text-sm font-bold text-gold font-mono">
+                  {searchQuery.trim().toUpperCase()}
+                </span>
+                <span className="text-xs text-gray-400">미국주식 검색</span>
+                <span className="text-xs font-medium text-gold bg-gold/10 px-1.5 py-0.5 rounded">🇺🇸 US</span>
+              </button>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* 결과 패널 */}
@@ -526,11 +552,11 @@ export default function StockSearchPanel() {
                 </div>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className={`text-3xl font-bold num ${priceColor}`}>
-                    {(quote.price ?? 0).toLocaleString("ko-KR")}원
+                    {fmtPrice(quote.price ?? 0)}
                   </span>
                   <span className={`text-sm font-semibold num ${priceColor}`}>
                     {isPos ? "▲" : "▼"} {Math.abs(quote.changePct ?? 0).toFixed(2)}%
-                    &nbsp;({isPos ? "+" : ""}{(quote.change ?? 0).toLocaleString("ko-KR")}원)
+                    &nbsp;({isPos ? "+" : ""}{fmtPrice(quote.change ?? 0)})
                   </span>
                 </div>
 
@@ -538,7 +564,7 @@ export default function StockSearchPanel() {
                 {currentSession === "NXT_PRE" && quote.preMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-blue-400 bg-blue-400/15 border-blue-400/30">
-                      프리마켓 {quote.preMarketPrice.toLocaleString("ko-KR")}원
+                      프리마켓 {fmtPrice(quote.preMarketPrice)}
                       {quote.preMarketChangePct != null && (
                         <> {quote.preMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.preMarketChangePct).toFixed(2)}%</>
                       )}
@@ -548,7 +574,7 @@ export default function StockSearchPanel() {
                 {currentSession === "NXT_POST" && quote.postMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
-                      애프터마켓 {quote.postMarketPrice.toLocaleString("ko-KR")}원
+                      애프터마켓 {fmtPrice(quote.postMarketPrice)}
                       {quote.postMarketChangePct != null && (
                         <> {quote.postMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.postMarketChangePct).toFixed(2)}%</>
                       )}
@@ -559,9 +585,9 @@ export default function StockSearchPanel() {
               {/* 세부 수치 */}
               <div className="flex gap-4 text-xs">
                 {[
-                  { label: "고가",    val: (quote.dayHigh   ?? 0).toLocaleString("ko-KR")+"원" },
-                  { label: "저가",    val: (quote.dayLow    ?? 0).toLocaleString("ko-KR")+"원" },
-                  { label: "52주 고", val: (quote.week52High ?? 0).toLocaleString("ko-KR")+"원" },
+                  { label: "고가",    val: fmtPrice(quote.dayHigh   ?? 0) },
+                  { label: "저가",    val: fmtPrice(quote.dayLow    ?? 0) },
+                  { label: "52주 고", val: fmtPrice(quote.week52High ?? 0) },
                 ].map(({ label, val }) => (
                   <div key={label} className="text-center">
                     <p className="text-gray-500 mb-0.5">{label}</p>
@@ -580,8 +606,18 @@ export default function StockSearchPanel() {
           {/* 수급·등급 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-            {/* 수급현황 */}
+            {/* 수급현황 — 미국주식은 대체 안내 표시 */}
             <div className="bg-navy-sub/40 rounded-xl p-4 space-y-3">
+            {isUSStock ? (
+              <div className="flex flex-col items-center justify-center py-6 gap-2">
+                <span className="text-2xl">🇺🇸</span>
+                <p className="text-sm text-gray-400 font-medium">미국주식 수급 데이터</p>
+                <p className="text-xs text-gray-600 text-center">
+                  외국인/기관/개인 수급은 KRX 전용 데이터입니다.<br/>
+                  미국 시장은 미지원
+                </p>
+              </div>
+            ) : (<>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">수급현황</p>
                 <div className="flex items-center gap-2">
@@ -641,6 +677,7 @@ export default function StockSearchPanel() {
               ) : (
                 <p className="text-xs text-gray-500 py-2">수급 데이터 로딩 중...</p>
               )}
+            </>)}
             </div>
 
             {/* 진보적 사고 Grade */}

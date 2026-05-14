@@ -4,9 +4,14 @@ import { koreanName } from "@/lib/stockList";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code   = searchParams.get("code") ?? "";
-  const market = searchParams.get("market") ?? "KS"; // KS or KQ
+  const market = searchParams.get("market") ?? "KS"; // KS | KQ | US
 
-  const symbol = `${code}.${market}`;
+  // 미국주식은 티커 그대로, 국내는 code.market
+  const isUS   = market === "US";
+  const symbol = isUS ? code.toUpperCase() : `${code}.${market}`;
+
+  // 수치 포맷: 국내는 원 단위(정수), 미국은 달러(소수 2자리)
+  const fmt = (n: number) => isUS ? parseFloat(n.toFixed(2)) : Math.round(n);
 
   try {
     // 1년 주봉으로 52주 범위 + 오늘 메타 동시 조회
@@ -35,6 +40,7 @@ export async function GET(request: Request) {
     const prev     = meta.chartPreviousClose ?? meta.previousClose ?? price;
     const change   = price - prev;
     const changePct = prev ? (change / prev) * 100 : 0;
+    const currency  = meta.currency ?? (isUS ? "USD" : "KRW");
 
     // NXT 시간외 데이터 (Yahoo Finance pre/post market fields)
     const preMarketPrice  = (meta.preMarketPrice  as number | null | undefined) ?? null;
@@ -60,21 +66,25 @@ export async function GET(request: Request) {
     return NextResponse.json({
       symbol,
       code,
-      name: koreanName(symbol),
-      price:      Math.round(price),
-      change:     Math.round(change),
+      market,
+      currency,
+      isUS,
+      name: isUS ? (meta.longName ?? meta.shortName ?? code.toUpperCase()) : koreanName(symbol),
+      price:      fmt(price),
+      change:     fmt(change),
       changePct:  parseFloat(changePct.toFixed(2)),
-      dayHigh:    Math.round(meta.regularMarketDayHigh ?? price),
-      dayLow:     Math.round(meta.regularMarketDayLow  ?? price),
+      dayHigh:    fmt(meta.regularMarketDayHigh ?? price),
+      dayLow:     fmt(meta.regularMarketDayLow  ?? price),
       volume:     meta.regularMarketVolume ?? 0,
-      week52High: Math.round(week52High),
-      week52Low:  week52Low === Infinity ? 0 : Math.round(week52Low),
+      week52High: fmt(week52High),
+      week52Low:  week52Low === Infinity ? 0 : fmt(week52Low),
       marketState: meta.marketState ?? "CLOSED",
-      preMarketPrice:   preMarketPrice  ? Math.round(preMarketPrice)  : null,
+      preMarketPrice:   preMarketPrice  ? fmt(preMarketPrice)  : null,
       preMarketChangePct,
-      postMarketPrice:  postMarketPrice ? Math.round(postMarketPrice) : null,
+      postMarketPrice:  postMarketPrice ? fmt(postMarketPrice) : null,
       postMarketChangePct,
-      naverUrl: `https://finance.naver.com/item/main.naver?code=${code}`,
+      // 국내만 네이버 금융 링크 제공
+      naverUrl: isUS ? null : `https://finance.naver.com/item/main.naver?code=${code}`,
     });
   } catch (err) {
     return NextResponse.json({ error: "데이터 조회 실패", detail: String(err) }, { status: 500 });
