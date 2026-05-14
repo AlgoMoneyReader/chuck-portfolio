@@ -1,16 +1,7 @@
-import type { PortfolioData } from "@/types/portfolio";
-import portfolioData from "@/data/portfolio.json";
-import PortfolioStatus from "@/components/PortfolioStatus";
-import HoldingsHeatmap from "@/components/HoldingsHeatmap";
-import ActionPlan from "@/components/ActionPlan";
-import CashflowSimulation from "@/components/CashflowSimulation";
-import RiaStrategy from "@/components/RiaStrategy";
-import FinalVerdict from "@/components/FinalVerdict";
 import LiveMarketPulse from "@/components/LiveMarketPulse";
 import AdminLogout from "@/components/AdminLogout";
 import DeadlineCountdown from "@/components/DeadlineCountdown";
-
-const data = portfolioData as unknown as PortfolioData;
+import PortfolioManager from "@/components/PortfolioManager";
 
 export default function AdminPage() {
   return (
@@ -26,20 +17,17 @@ export default function AdminPage() {
         <AdminLogout />
       </div>
 
+      {/* 실시간 시장 현황 */}
       <LiveMarketPulse />
+
+      {/* 분양대금 납입 현황 */}
       <DeadlineCountdown />
-      <PortfolioStatus data={data} />
-      <HoldingsHeatmap domestic={data.domesticHoldings} overseas={data.overseasHoldings} />
-      <ActionPlan actions={data.actions} />
-      <CashflowSimulation
-        candidates={data.sellCandidates}
-        targetAmount={data.milestones[1]?.amount ?? 180000000}
-      />
-      <RiaStrategy data={data.riaStrategy} />
-      <FinalVerdict summary={data.finalVerdict.summary} badges={data.finalVerdict.badges} />
+
+      {/* 포트폴리오 + 자금계획 분석 */}
+      <PortfolioManager />
 
       <footer className="text-center text-xs text-gray-600 py-4 border-t border-navy-border">
-        알읽남 Investment Dashboard · Admin View · 데이터 마지막 업데이트: {new Date(data.lastUpdated).toLocaleDateString("ko-KR")}
+        알읽남 Investment Dashboard · Admin View
       </footer>
     </main>
   );

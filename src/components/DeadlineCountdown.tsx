@@ -103,15 +103,16 @@ export default function DeadlineCountdown() {
 
       {/* ── 납입 일정 테이블 ──────────────────────────────────────────────── */}
       <div className="overflow-x-auto -mx-1">
-        <table className="w-full text-xs border-collapse min-w-[480px]">
+        <table className="w-full text-xs border-collapse min-w-[560px]">
           <thead>
             <tr className="border-b border-navy-border/60">
-              <th className="py-2 px-2 text-left text-gray-500 font-medium w-16">차수</th>
-              <th className="py-2 px-2 text-center text-gray-500 font-medium">지정일</th>
-              <th className="py-2 px-2 text-right text-gray-500 font-medium">분양대금</th>
-              <th className="py-2 px-2 text-right text-gray-500 font-medium">입금액</th>
-              <th className="py-2 px-2 text-center text-gray-500 font-medium">입금일</th>
-              <th className="py-2 px-2 text-center text-gray-500 font-medium w-20">상태</th>
+              <th className="py-2 px-2 text-left text-gray-500 font-medium whitespace-nowrap">차수</th>
+              <th className="py-2 px-2 text-center text-gray-500 font-medium whitespace-nowrap">지정일</th>
+              <th className="py-2 px-2 text-right text-gray-500 font-medium whitespace-nowrap">분양대금</th>
+              <th className="py-2 px-2 text-right text-gray-500 font-medium whitespace-nowrap">입금액</th>
+              <th className="py-2 px-2 text-right text-gray-500 font-medium whitespace-nowrap">잔여</th>
+              <th className="py-2 px-2 text-center text-gray-500 font-medium whitespace-nowrap">입금일</th>
+              <th className="py-2 px-2 text-center text-gray-500 font-medium whitespace-nowrap">상태</th>
             </tr>
           </thead>
           <tbody>
@@ -119,6 +120,7 @@ export default function DeadlineCountdown() {
               const isPaid = !!r.paidDate;
               const style = ddayStyle(r.days, isPaid);
               const isNext = nextDue?.seq === r.seq;
+              const remain = r.amount - r.paidAmount;
 
               return (
                 <tr
@@ -128,7 +130,7 @@ export default function DeadlineCountdown() {
                     ${isPaid ? "opacity-60" : ""}`}
                 >
                   {/* 차수 */}
-                  <td className="py-2.5 px-2">
+                  <td className="py-2.5 px-2 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       {isNext && <span className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />}
                       <span className={`font-semibold ${isNext ? "text-gold" : "text-gray-300"}`}>
@@ -138,30 +140,38 @@ export default function DeadlineCountdown() {
                   </td>
 
                   {/* 지정일 */}
-                  <td className="py-2.5 px-2 text-center text-gray-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-center text-gray-400 tabular-nums whitespace-nowrap">
                     {fmtDate(r.dueDate)}
                   </td>
 
                   {/* 분양대금 */}
-                  <td className="py-2.5 px-2 text-right font-semibold text-white num tabular-nums">
+                  <td className="py-2.5 px-2 text-right font-semibold text-white num tabular-nums whitespace-nowrap">
                     {toUk(r.amount)}
                   </td>
 
                   {/* 입금액 */}
-                  <td className="py-2.5 px-2 text-right tabular-nums">
+                  <td className="py-2.5 px-2 text-right tabular-nums whitespace-nowrap">
                     {isPaid
                       ? <span className="text-signal-green font-semibold num">{toUk(r.paidAmount)}</span>
                       : <span className="text-gray-600">—</span>
                     }
                   </td>
 
+                  {/* 잔여 */}
+                  <td className="py-2.5 px-2 text-right tabular-nums whitespace-nowrap">
+                    {remain > 0
+                      ? <span className="text-gold font-semibold num">{toUk(remain)}</span>
+                      : <span className="text-gray-600">—</span>
+                    }
+                  </td>
+
                   {/* 입금일 */}
-                  <td className="py-2.5 px-2 text-center text-gray-400 tabular-nums">
+                  <td className="py-2.5 px-2 text-center text-gray-400 tabular-nums whitespace-nowrap">
                     {r.paidDate ? fmtDate(r.paidDate) : <span className="text-gray-600">—</span>}
                   </td>
 
                   {/* 상태 / D-day */}
-                  <td className="py-2.5 px-2 text-center">
+                  <td className="py-2.5 px-2 text-center whitespace-nowrap">
                     {isPaid ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-signal-green/10 border border-signal-green/30 text-signal-green">
                         ✓ 완납
@@ -184,11 +194,12 @@ export default function DeadlineCountdown() {
           {/* 합계 행 */}
           <tfoot>
             <tr className="border-t-2 border-navy-border/60 bg-navy-sub/30">
-              <td className="py-2.5 px-2 text-gray-400 font-semibold" colSpan={2}>합계</td>
-              <td className="py-2.5 px-2 text-right text-white font-bold num">{toUk(TOTAL_AMOUNT)}</td>
-              <td className="py-2.5 px-2 text-right text-signal-green font-bold num">{toUk(TOTAL_PAID)}</td>
+              <td className="py-2.5 px-2 text-gray-400 font-semibold whitespace-nowrap" colSpan={2}>합계</td>
+              <td className="py-2.5 px-2 text-right text-white font-bold num whitespace-nowrap">{toUk(TOTAL_AMOUNT)}</td>
+              <td className="py-2.5 px-2 text-right text-signal-green font-bold num whitespace-nowrap">{toUk(TOTAL_PAID)}</td>
+              <td className="py-2.5 px-2 text-right text-gold font-bold num whitespace-nowrap">{toUk(TOTAL_REMAIN)}</td>
               <td className="py-2.5 px-2" />
-              <td className="py-2.5 px-2 text-center">
+              <td className="py-2.5 px-2 text-center whitespace-nowrap">
                 <span className="text-[11px] text-gray-500">{paidPct.toFixed(1)}%</span>
               </td>
             </tr>

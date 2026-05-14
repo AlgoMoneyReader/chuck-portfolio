@@ -1,9 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
 } from "recharts";
+
+// ─── 분양 납부 일정 (DeadlineCountdown 과 공유) ──────────────────────────────
+const PAYMENT_SCHEDULE = [
+  { seq: 2, label: "2차 중도금", dueDate: "2026-07-15", amount: 180_200_000 },
+  { seq: 3, label: "3차 중도금", dueDate: "2026-11-16", amount: 180_200_000 },
+  { seq: 4, label: "4차 중도금", dueDate: "2027-03-15", amount: 180_200_000 },
+  { seq: 5, label: "5차 중도금", dueDate: "2027-07-15", amount: 180_200_000 },
+  { seq: 6, label: "6차 중도금", dueDate: "2027-11-15", amount: 180_200_000 },
+  { seq: 7, label: "7차 중도금", dueDate: "2028-03-15", amount: 180_200_000 },
+  { seq: 8, label: "8차 잔금",   dueDate: "2028-08-01", amount: 540_600_000 },
+];
+
+function calcDaysToDate(targetDate: string): number {
+  const kst = new Date(Date.now() + 9 * 3_600_000);
+  const today = new Date(kst.toISOString().split("T")[0]);
+  return Math.ceil((new Date(targetDate).getTime() - today.getTime()) / 86_400_000);
+}
+
+function toUk(won: number): string {
+  return (won / 1_0000_0000).toFixed(1) + "억";
+}
 
 interface Holding {
   id?: string;
@@ -77,6 +98,11 @@ export default function PortfolioManager() {
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [diagnosisOpen, setDiagnosisOpen] = useState(false);
+
+  // 자금 계획 상태
+  const [cash, setCash] = useState<number>(0);          // 만원
+  const [usdkrw, setUsdkrw] = useState<number>(1380);   // 원/달러
+  const [planVisible, setPlanVisible] = useState(false);
 
   const [form, setForm] = useState<Omit<Holding, "id">>({
     ticker: "",
@@ -203,11 +229,34 @@ export default function PortfolioManager() {
     }
   }
 
-  // Summary
-  const totalEval = holdings.reduce((s, h) => s + (h.evalAmount ?? h.qty * h.avg_price), 0);
-  const totalCost = holdings.reduce((s, h) => s + h.qty * h.avg_price, 0);
+  // Summary — KRW 환산 (USD 보유분은 usdkrw 적용)
+  const totalEval = holdings.reduce((s, h) => {
+    const v = h.evalAmount ?? h.qty * h.avg_price;
+    return s + (h.currency === "USD" ? v * usdkrw : v);
+  }, 0);
+  const totalCost = holdings.reduce((s, h) => {
+    const v = h.qty * h.avg_price;
+    return s + (h.currency === "USD" ? v * usdkrw : v);
+  }, 0);
   const totalPL = totalEval - totalCost;
   const totalPLPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+  // 자금 계획 계산
+  const fundPlanRows = useMemo(() => {
+    const cashWon = cash * 10_000;
+    let resources = totalEval + cashWon;
+    return PAYMENT_SCHEDULE.map(p => {
+      const days = calcDaysToDate(p.dueDate);
+      const sufficient = resources >= p.amount;
+      const shortfall = Math.max(0, p.amount - resources);
+      const after = resources - p.amount;
+      resources = Math.max(0, after);
+      return { ...p, days, sufficient, shortfall, before: resources + p.amount, after };
+    });
+  }, [totalEval, cash]);
+
+  // 포트폴리오 없으면 자금계획 닫기
+  const firstInsufficient = fundPlanRows.findIndex(r => !r.sufficient);
 
   // Radar chart data — normalize each factor to 0-100 for display
   const radarData = diagnosis ? [
@@ -403,6 +452,136 @@ export default function PortfolioManager() {
           </div>
         </div>
       )}
+
+      {/* ── 자금 계획 분석 ──────────────────────────────────────────── */}
+      <div className="card border border-gold/20">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="card-title">자금 계획 분석</h2>
+            <p className="text-xs text-gray-500 mt-0.5">래미안 엘라비네 분양대금 납부 시뮬레이션</p>
+          </div>
+          <button
+            onClick={() => setPlanVisible(v => !v)}
+            className="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all bg-gold/20 text-gold border border-gold/40 hover:bg-gold/30"
+          >
+            {planVisible ? "닫기" : "📊 분석 실행"}
+          </button>
+        </div>
+
+        {/* 입력 필드 */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">가용 현금 (만원)</label>
+            <input
+              type="number"
+              value={cash || ""}
+              onChange={e => setCash(Number(e.target.value))}
+              placeholder="예: 5000"
+              className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">USD/KRW 환율</label>
+            <input
+              type="number"
+              value={usdkrw || ""}
+              onChange={e => setUsdkrw(Number(e.target.value))}
+              placeholder="1380"
+              className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none"
+            />
+          </div>
+        </div>
+
+        {planVisible && (
+          <div className="space-y-3">
+            {/* 총 가용 자산 */}
+            <div className="p-3 bg-navy-sub/50 rounded-xl border border-navy-border/40">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-400">총 가용 자산 (포트폴리오 + 현금)</span>
+                <span className="text-sm font-bold text-white num">
+                  {toUk(totalEval + cash * 10_000)}
+                </span>
+              </div>
+              <div className="flex gap-4 mt-1.5 text-xs text-gray-500">
+                <span>포트폴리오 <span className="text-gray-300 num">{toUk(totalEval)}</span></span>
+                <span>현금 <span className="text-gray-300 num">{toUk(cash * 10_000)}</span></span>
+                {holdings.some(h => h.currency === "USD") && (
+                  <span className="text-gray-600">USD @ {usdkrw.toLocaleString()}원</span>
+                )}
+              </div>
+            </div>
+
+            {/* 분양 납부 시뮬레이션 */}
+            {fundPlanRows.map((row, idx) => {
+              const isFirst = idx === firstInsufficient;
+              return (
+                <div
+                  key={row.seq}
+                  className={`p-3 rounded-xl border transition-all ${
+                    row.sufficient
+                      ? "border-signal-green/20 bg-signal-green/5"
+                      : isFirst
+                        ? "border-signal-red/40 bg-signal-red/10"
+                        : "border-signal-red/20 bg-signal-red/5"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs font-bold ${row.sufficient ? "text-signal-green" : "text-signal-red"}`}>
+                          {row.sufficient ? "✅" : "⚠️"} {row.label}
+                        </span>
+                        <span className="text-xs text-gray-500">{row.dueDate.replace(/-/g, ".")}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold
+                          ${row.days <= 60 ? "bg-signal-red/20 text-signal-red" :
+                            row.days <= 180 ? "bg-gold/20 text-gold" :
+                            "bg-navy-border/40 text-gray-400"}`}>
+                          D-{row.days}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        납부금액 <span className="text-white num font-semibold">{toUk(row.amount)}</span>
+                        {" · "}납부 후 잔여 <span className={`num font-semibold ${row.after >= 0 ? "text-gray-300" : "text-signal-red"}`}>
+                          {row.after >= 0 ? toUk(row.after) : `-${toUk(-row.after)}`}
+                        </span>
+                      </div>
+                      {!row.sufficient && (
+                        <div className="text-xs text-signal-red mt-1 font-medium">
+                          → <span className="text-gold num">{toUk(row.shortfall)}</span> 부족 · 추가 매도 또는 자금 조달 필요
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[11px] text-gray-600">납부 전 가용</div>
+                      <div className={`text-sm font-bold num ${row.sufficient ? "text-signal-green" : "text-signal-red"}`}>
+                        {toUk(row.before)}
+                      </div>
+                    </div>
+                  </div>
+                  {/* 진행바 */}
+                  <div className="mt-2 h-1 bg-navy-border/50 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${row.sufficient ? "bg-signal-green" : "bg-signal-red"}`}
+                      style={{ width: `${Math.min(100, (row.before / row.amount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* 요약 */}
+            <div className="p-3 bg-navy-sub/30 rounded-lg border border-navy-border/30">
+              <div className="text-xs text-gray-500">
+                {firstInsufficient === -1
+                  ? <span className="text-signal-green font-semibold">✅ 현재 포트폴리오로 전체 분양대금 납부 가능합니다.</span>
+                  : <span>⚠️ <span className="text-gold font-semibold">{PAYMENT_SCHEDULE[firstInsufficient].label}</span>부터 자금 부족. 그 전까지 추가 자금 마련이 필요합니다.</span>
+                }
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Add/Edit Modal */}
       {showForm && (
