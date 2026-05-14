@@ -222,6 +222,41 @@ export async function GET() {
       .sort((a, b) => b.combined - a.combined)
       .slice(0, 10);
 
+    // 4. Yahoo Finance spark API로 실시간 주가 덮어쓰기
+    //    (KIS inquire-investor의 stck_clpr는 전일 종가 → 장중에 틀림)
+    if (dualBuy.length > 0) {
+      try {
+        const symbols = dualBuy.map((s) => `${s.code}.${s.market}`).join(",");
+        const yfRes = await fetch(
+          `https://query2.finance.yahoo.com/v7/finance/spark` +
+            `?symbols=${encodeURIComponent(symbols)}&range=1d&interval=5m`,
+          { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
+        );
+        if (yfRes.ok) {
+          const yfJson = await yfRes.json();
+          const yfMap: Record<string, { price: number; changePct: number }> = {};
+          for (const item of yfJson?.spark?.result ?? []) {
+            const meta = item?.response?.[0]?.meta ?? {};
+            const price: number = meta.regularMarketPrice ?? 0;
+            const prev: number  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+            if (price > 0) {
+              yfMap[item.symbol] = {
+                price,
+                changePct: prev > 0 ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0,
+              };
+            }
+          }
+          for (const s of dualBuy) {
+            const yf = yfMap[`${s.code}.${s.market}`];
+            if (yf) { s.price = yf.price; s.changePct = yf.changePct; }
+          }
+          console.log(`[dual-buy] YF 실시간 주가 적용: ${Object.keys(yfMap).length}개`);
+        }
+      } catch (e) {
+        console.warn("[dual-buy] YF 주가 조회 실패 (KIS 종가 사용):", String(e));
+      }
+    }
+
     console.log(`[dual-buy] 쌍끌이 포착: ${dualBuy.length}개 / 스캔 ${results.length}개`);
 
     return NextResponse.json(
