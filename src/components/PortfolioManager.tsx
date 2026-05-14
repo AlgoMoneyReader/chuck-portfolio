@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
 } from "recharts";
+import staticMaster from "@/data/stock_master.json";
+
+type StockItem = { code: string; name: string; market: "KS" | "KQ"; type: string };
+const ALL_KR_STOCKS = staticMaster.stocks as StockItem[];
 
 // ─── 분양 납부 일정 (DeadlineCountdown 과 공유) ──────────────────────────────
 const PAYMENT_SCHEDULE = [
@@ -104,6 +108,32 @@ export default function PortfolioManager() {
   const [usdkrw, setUsdkrw] = useState<number>(1380);   // 원/달러
   const [planVisible, setPlanVisible] = useState(false);
 
+  // 종목 검색 상태
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // 종목 검색 결과 (Korean stocks)
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q || q.length < 1) return [];
+    const lower = q.toLowerCase();
+    return ALL_KR_STOCKS
+      .filter(s => s.name.toLowerCase().includes(lower) || s.code.startsWith(q))
+      .slice(0, 8);
+  }, [searchQuery]);
+
   const [form, setForm] = useState<Omit<Holding, "id">>({
     ticker: "",
     name: "",
@@ -166,13 +196,33 @@ export default function PortfolioManager() {
   function openAdd() {
     setEditTarget(null);
     setForm({ ticker: "", name: "", qty: 0, avg_price: 0, currency: "KRW", sector: "기타" });
+    setSearchQuery("");
+    setShowDropdown(false);
     setShowForm(true);
   }
 
   function openEdit(h: Holding) {
     setEditTarget(h);
     setForm({ ticker: h.ticker, name: h.name, qty: h.qty, avg_price: h.avg_price, currency: h.currency, sector: h.sector });
+    setSearchQuery(`${h.name} (${h.ticker})`);
+    setShowDropdown(false);
     setShowForm(true);
+  }
+
+  // 한국 주식 선택
+  function selectKRStock(s: StockItem) {
+    const ticker = `${s.code}.${s.market}`;
+    setForm(p => ({ ...p, ticker, name: s.name, currency: "KRW" }));
+    setSearchQuery(`${s.name} (${s.code})`);
+    setShowDropdown(false);
+  }
+
+  // 해외 주식 직접 입력
+  function selectUSStock(raw: string) {
+    const ticker = raw.trim().toUpperCase();
+    setForm(p => ({ ...p, ticker, name: p.name || ticker, currency: "USD" }));
+    setSearchQuery(ticker);
+    setShowDropdown(false);
   }
 
   async function handleSave() {
@@ -615,17 +665,76 @@ export default function PortfolioManager() {
             <h3 className="font-bold text-white">{editTarget ? "종목 수정" : "종목 추가"}</h3>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">티커 (국내: 6자리 숫자, 해외: 영문)</label>
-                <input value={form.ticker} onChange={(e) => { const v = e.target.value; setForm(p => ({ ...p, ticker: v })); }}
-                  placeholder="005930 또는 AAPL" disabled={!!editTarget}
-                  className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm num focus:border-gold outline-none disabled:opacity-50" />
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs text-gray-500 mb-1 block">종목명</label>
-                <input value={form.name} onChange={(e) => { const v = e.target.value; setForm(p => ({ ...p, name: v })); }}
-                  placeholder="삼성전자"
-                  className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm focus:border-gold outline-none" />
+              {/* ── 종목 검색 자동완성 ── */}
+              <div className="col-span-2 relative" ref={dropdownRef}>
+                <label className="text-xs text-gray-500 mb-1 block">
+                  종목 검색 <span className="text-gray-600">(국내: 종목명·코드 / 해외: 영문 티커)</span>
+                </label>
+                {editTarget ? (
+                  /* 수정 시: 종목 고정 표시 */
+                  <div className="px-3 py-2 bg-navy-sub border border-navy-border rounded-lg text-sm">
+                    <span className="text-white">{form.name}</span>
+                    <span className="text-gray-500 ml-2">({form.ticker})</span>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setShowDropdown(true); setForm(p => ({ ...p, ticker: "", name: "" })); }}
+                      onFocus={() => { if (searchQuery) setShowDropdown(true); }}
+                      placeholder="삼성전자, 한화에어로스페이스, PLTR ..."
+                      autoComplete="off"
+                      className="w-full bg-navy-sub border border-navy-border rounded-lg px-3 py-2 text-white text-sm focus:border-cyan-brand/60 outline-none transition-colors"
+                    />
+                    {/* 선택 완료 표시 */}
+                    {form.ticker && (
+                      <p className="mt-1 text-xs text-signal-green">
+                        ✓ {form.name} &nbsp;<span className="text-gray-500">({form.ticker})</span>
+                        &nbsp;<span className={`px-1.5 py-0.5 rounded text-[10px] ${form.currency === "KRW" ? "bg-blue-500/20 text-blue-400" : "bg-gold/20 text-gold"}`}>{form.currency}</span>
+                      </p>
+                    )}
+                    {/* 드롭다운 */}
+                    {showDropdown && searchQuery.trim() && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-2xl max-h-56 overflow-y-auto">
+                        {searchResults.map(s => (
+                          <button
+                            key={s.code}
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); selectKRStock(s); }}
+                            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-navy-sub text-left transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-white">{s.name}</span>
+                              <span className="text-xs text-gray-500 num">{s.code}</span>
+                            </div>
+                            <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${s.market === "KS" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
+                              {s.market === "KS" ? "KOSPI" : "KOSDAQ"}
+                            </span>
+                          </button>
+                        ))}
+                        {/* 해외 주식 직접 입력 */}
+                        {/^[A-Za-z]/.test(searchQuery) && (
+                          <button
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); selectUSStock(searchQuery); }}
+                            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-navy-sub text-left transition-colors border-t border-navy-border/60"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gold font-mono">{searchQuery.toUpperCase()}</span>
+                              <span className="text-xs text-gray-500">미국주식으로 추가</span>
+                            </div>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded font-medium bg-gold/20 text-gold">US</span>
+                          </button>
+                        )}
+                        {searchResults.length === 0 && !/^[A-Za-z]/.test(searchQuery) && (
+                          <div className="px-3 py-3 text-xs text-gray-500 text-center">
+                            검색 결과 없음
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">수량</label>
@@ -657,7 +766,7 @@ export default function PortfolioManager() {
             </div>
 
             <div className="text-xs text-gray-600">
-              * 국내주식: 티커에 6자리 숫자 입력 시 자동으로 .KS 처리됩니다
+              * 국내주식은 종목명으로 검색 → 선택 · 해외주식은 영문 티커 입력 후 선택
             </div>
 
             <div className="flex gap-3">
