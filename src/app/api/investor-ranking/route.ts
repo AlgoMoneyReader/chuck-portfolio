@@ -1,39 +1,6 @@
 import { NextResponse } from "next/server";
-import { getKisToken } from "@/lib/fetchKisMaster"; // 공유 토큰 (EGW00133 방지)
 
 export const dynamic = "force-dynamic";
-
-// ─── 조회 대상 종목 (KOSPI/KOSDAQ 주요 60개+) ──────────────────────────────
-const MAJOR_STOCKS: Record<string, string> = {
-  // KOSPI 시총 상위
-  "005930": "삼성전자",       "005935": "삼성전자우",     "000660": "SK하이닉스",
-  "005380": "현대차",         "035420": "NAVER",          "051910": "LG화학",
-  "207940": "삼성바이오로직스","005490": "POSCO홀딩스",   "000270": "기아",
-  "006400": "삼성SDI",        "068270": "셀트리온",       "096770": "SK이노베이션",
-  "035720": "카카오",         "034730": "SK스퀘어",       "003550": "LG",
-  "012330": "현대모비스",     "009150": "삼성전기",       "042700": "한미반도체",
-  "055550": "신한지주",       "105560": "KB금융",         "086790": "하나금융지주",
-  "066570": "LG전자",         "028260": "삼성물산",       "003600": "SK",
-  "011200": "HMM",            "010130": "고려아연",       "018260": "삼성SDS",
-  "003490": "대한항공",       "011070": "LG이노텍",       "033780": "KT&G",
-  "010950": "S-Oil",          "036570": "엔씨소프트",     "090430": "아모레퍼시픽",
-  "032640": "LG유플러스",     "030200": "KT",             "017670": "SK텔레콤",
-  "015760": "한국전력",       "316140": "우리금융지주",   "024110": "기업은행",
-  "032830": "삼성생명",       "000810": "삼성화재",       "047050": "포스코인터내셔널",
-  "078930": "GS",             "161390": "한국타이어앤테크놀로지","097950": "CJ제일제당",
-  "047810": "한국항공우주",
-  // 추가 종목
-  "042660": "한화오션",       "010140": "삼성중공업",     "012450": "한화에어로스페이스",
-  "003620": "KG모빌리티",     "018880": "한온시스템",     "329180": "HD현대중공업",
-  "267250": "HD현대",         "028050": "삼성E&A",        "009830": "한화솔루션",
-  "003670": "포스코퓨처엠",   "034020": "두산에너빌리티", "064350": "현대로템",
-  "011170": "롯데케미칼",     "000720": "현대건설",       "086280": "현대글로비스",
-  "241560": "두산밥캣",       "010620": "HD현대미포",     "000100": "유한양행",
-  // KOSDAQ 주요
-  "032560": "대한광통신",     "247540": "에코프로비엠",   "086520": "에코프로",
-  "196170": "알테오젠",       "277810": "레인보우로보틱스","278470": "에이피알",
-  "145020": "휴젤",           "214150": "클래시스",       "041510": "SM엔터",
-};
 
 export interface RankItem {
   rank: number;
@@ -41,193 +8,141 @@ export interface RankItem {
   name: string;
   price: number;
   changePct: number;
-  netBuyAmount: number; // 억원
-  netBuyQty: number;    // 주
+  netBuyAmount: number; // 억원 (양수=순매수, 음수=순매도)
+  netBuyQty: number;
 }
 
-interface KISRow {
-  stck_bsop_date: string;  // 영업일자 YYYYMMDD
-  stck_clpr: string;       // 종가 (전일 종가)
-  prdy_vrss: string;
-  prdy_vrss_sign: string;
-  frgn_ntby_tr_pbmn: string;
-  orgn_ntby_tr_pbmn: string;
-  prsn_ntby_tr_pbmn: string;
-  frgn_ntby_qty: string;
-  orgn_ntby_qty: string;
-  prsn_ntby_qty: string;
-}
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-/** 백만원 → 억원 */
-function toUk(s: string): number {
-  const n = parseInt((s ?? "").replace(/,/g, "") || "0", 10);
-  return isNaN(n) ? 0 : Math.round(n / 100);
-}
+/**
+ * Naver Finance 투자자별 종목 순매수 현황 스크래핑
+ * URL: https://finance.naver.com/sise/investorStock.naver?sosok=0
+ * 외국인(frgn)/기관(orgn)/개인(prsn) 순매수 TOP10 각각 반환
+ */
+async function fetchNaverInvestorStock(sosok: "0" | "1"): Promise<{
+  foreignBuy: RankItem[]; foreignSell: RankItem[];
+  instBuy: RankItem[];    instSell: RankItem[];
+  indivBuy: RankItem[];   indivSell: RankItem[];
+}> {
+  const url = `https://finance.naver.com/sise/investorStock.naver?sosok=${sosok}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": UA,
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "ko-KR,ko;q=0.9",
+      "Referer": "https://finance.naver.com/sise/",
+    },
+    signal: AbortSignal.timeout(8000),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Naver investorStock HTTP ${res.status}`);
+  const html = await res.text();
 
-/** 주 수량 파싱 */
-function toQty(s: string): number {
-  const n = parseInt((s ?? "").replace(/,/g, "") || "0", 10);
-  return isNaN(n) ? 0 : n;
-}
+  // Parse rows from the investor stock table
+  // The page has a table with: 종목명 | 현재가 | 등락률 | 외국인순매수 | 기관순매수 | 개인순매수
+  const rows: Array<{
+    code: string; name: string; price: number; changePct: number;
+    frgn: number; orgn: number; prsn: number;
+  }> = [];
 
-async function fetchStockInvestor(code: string, token: string): Promise<{
-  code: string;
-  price: number; changePct: number;
-  dataDate: string;
-  frgn: number; frgnQty: number;
-  orgn: number; orgnQty: number;
-  prsn: number; prsnQty: number;
-} | null> {
-  try {
-    const res = await fetch(
-      `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-investor` +
-        `?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=${code}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          appkey: process.env.KIS_APP_KEY!,
-          appsecret: process.env.KIS_APP_SECRET!,
-          tr_id: "FHKST01010900",
-        },
-        cache: "no-store",
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rows: KISRow[] = data.output ?? [];
-    if (!rows.length) return null;
+  // Extract stock links for codes: /item/main.naver?code=XXXXXX
+  const rowRe = /<tr[^>]*class="[^"]*"[^>]*>([\s\S]*?)<\/tr>/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html)) !== null) {
+    const row = m[1];
 
-    // ── 실 데이터가 있는 가장 최근 row 선택 ─────────────────────────────────
-    // inquire-investor는 최신 영업일부터 내림차순으로 여러 row를 반환.
-    // 장전·장초반에는 당일 row가 있어도 모든 값이 0인 경우가 있으므로,
-    // 외국인·기관·개인 순매수 절댓값 합계 > 0인 첫 번째 row를 사용.
-    const hasData = (x: KISRow) => {
-      const f = Math.abs(parseInt((x.frgn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
-      const o = Math.abs(parseInt((x.orgn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
-      const p = Math.abs(parseInt((x.prsn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
-      return f + o + p > 0;
+    // Extract code from link
+    const codeM = /code=(\d{6})/.exec(row);
+    if (!codeM) continue;
+    const code = codeM[1];
+
+    // Extract stock name
+    const nameM = /title="([^"]+)"/.exec(row);
+    if (!nameM) continue;
+    const name = nameM[1].trim();
+
+    // Extract all numbers from td cells
+    const tds: string[] = [];
+    const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
+    let tdM: RegExpExecArray | null;
+    while ((tdM = tdRe.exec(row)) !== null) {
+      tds.push(tdM[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
+    }
+    if (tds.length < 6) continue;
+
+    const parseNum = (s: string) => {
+      const clean = s.replace(/[,\+\s]/g, "");
+      const n = parseInt(clean, 10);
+      return isNaN(n) ? 0 : n;
     };
-    const r = rows.find(hasData) ?? rows[0];
-    if (!r) return null;
-
-    // 가격: stck_clpr는 종가 → 장중에는 전일 종가.
-    // 실시간 주가는 이후 Yahoo Finance 배치 조회로 덮어씀.
-    const price = parseInt(r.stck_clpr, 10) || 0;
-    const vrss  = parseInt(r.prdy_vrss, 10) || 0;
-    const sign  = r.prdy_vrss_sign;
-    const signed = ["1","2"].includes(sign) ? vrss : ["4","5"].includes(sign) ? -vrss : 0;
-    const prevPrice = price - signed;
-    const changePct = prevPrice > 0 ? parseFloat(((signed / prevPrice) * 100).toFixed(2)) : 0;
-
-    return {
-      code, price, changePct,
-      dataDate: r.stck_bsop_date,          // YYYYMMDD — 데이터 기준일
-      frgn:    toUk(r.frgn_ntby_tr_pbmn), frgnQty: toQty(r.frgn_ntby_qty),
-      orgn:    toUk(r.orgn_ntby_tr_pbmn), orgnQty: toQty(r.orgn_ntby_qty),
-      prsn:    toUk(r.prsn_ntby_tr_pbmn), prsnQty: toQty(r.prsn_ntby_qty),
+    const parsePct = (s: string) => {
+      const clean = s.replace(/[,%\s]/g, "").replace("▲", "").replace("▼", s.includes("▼") ? "-" : "");
+      return parseFloat(clean) || 0;
     };
-  } catch {
-    return null;
-  }
-}
 
-// ── Yahoo Finance 실시간 주가 배치 조회 (50개씩) ──────────────────────────────
-async function fetchYFPrices(
-  codes: string[]
-): Promise<Record<string, { price: number; changePct: number }>> {
-  const symbols = codes.map((c) => `${c}.KS`);
-  const map: Record<string, { price: number; changePct: number }> = {};
+    const price = parseNum(tds[1] ?? "0");
+    const changePct = parsePct(tds[2] ?? "0");
+    const frgn = parseNum(tds[3] ?? "0"); // 외국인 순매수 (백만원)
+    const orgn = parseNum(tds[4] ?? "0"); // 기관 순매수 (백만원)
+    const prsn = parseNum(tds[5] ?? "0"); // 개인 순매수 (백만원)
 
-  // 50개씩 분할
-  for (let i = 0; i < symbols.length; i += 50) {
-    const chunk = symbols.slice(i, i + 50);
-    try {
-      const res = await fetch(
-        `https://query2.finance.yahoo.com/v7/finance/spark` +
-          `?symbols=${encodeURIComponent(chunk.join(","))}&range=1d&interval=5m`,
-        { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" }
-      );
-      if (!res.ok) continue;
-      const j = await res.json();
-      for (const item of j?.spark?.result ?? []) {
-        const meta = item?.response?.[0]?.meta ?? {};
-        const price: number = meta.regularMarketPrice ?? 0;
-        const prev: number  = meta.chartPreviousClose ?? meta.previousClose ?? price;
-        if (price > 0) {
-          const code = (item.symbol as string).replace(".KS", "");
-          map[code] = {
-            price,
-            changePct: prev > 0 ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0,
-          };
-        }
-      }
-    } catch { /* silent */ }
+    if (price > 0) {
+      rows.push({ code, name, price, changePct, frgn, orgn, prsn });
+    }
   }
-  return map;
+
+  // If we couldn't parse any rows, the HTML structure is different
+  // Return empty arrays to trigger graceful error handling
+  if (rows.length === 0) {
+    return { foreignBuy: [], foreignSell: [], instBuy: [], instSell: [], indivBuy: [], indivSell: [] };
+  }
+
+  const toItem = (r: typeof rows[0], amount: number, rank: number): RankItem => ({
+    rank, code: r.code, name: r.name, price: r.price, changePct: r.changePct,
+    netBuyAmount: Math.round(amount / 100), // 백만원 → 억원
+    netBuyQty: 0,
+  });
+
+  const sortDesc = (fn: (r: typeof rows[0]) => number) =>
+    [...rows].sort((a, b) => fn(b) - fn(a)).slice(0, 10).map((r, i) => toItem(r, fn(r), i + 1));
+  const sortAsc = (fn: (r: typeof rows[0]) => number) =>
+    [...rows].sort((a, b) => fn(a) - fn(b)).slice(0, 10).map((r, i) => toItem(r, fn(r), i + 1));
+
+  return {
+    foreignBuy:  sortDesc(r => r.frgn),
+    foreignSell: sortAsc(r => r.frgn),
+    instBuy:     sortDesc(r => r.orgn),
+    instSell:    sortAsc(r => r.orgn),
+    indivBuy:    sortDesc(r => r.prsn),
+    indivSell:   sortAsc(r => r.prsn),
+  };
 }
 
 export async function GET() {
   try {
-    const token = await getKisToken();
-    const codes = Object.keys(MAJOR_STOCKS);
+    const result = await fetchNaverInvestorStock("0"); // KOSPI
 
-    // 1. KIS 투자자 동향 (BATCH=10, 80ms 간격)
-    const BATCH = 10;
-    const results: Awaited<ReturnType<typeof fetchStockInvestor>>[] = [];
-    for (let i = 0; i < codes.length; i += BATCH) {
-      const batch = codes.slice(i, i + BATCH);
-      const batchResults = await Promise.all(batch.map((c) => fetchStockInvestor(c, token)));
-      results.push(...batchResults);
-      if (i + BATCH < codes.length) await new Promise((r) => setTimeout(r, 80));
+    const kst = new Date(Date.now() + 9 * 3_600_000);
+    const hh = String(kst.getUTCHours()).padStart(2, "0");
+    const mm = String(kst.getUTCMinutes()).padStart(2, "0");
+    const dataDateLabel = `오늘 ${hh}:${mm} 기준`;
+
+    // If parsing returned empty (HTML structure changed), return error
+    const total = result.foreignBuy.length + result.instBuy.length + result.indivBuy.length;
+    if (total === 0) {
+      return NextResponse.json({ error: "파싱 실패 — HTML 구조 변경" }, { status: 500 });
     }
-    const valid = results.filter(Boolean) as NonNullable<typeof results[0]>[];
-
-    // 2. Yahoo Finance 실시간 주가로 가격 덮어쓰기 (stck_clpr = 전일 종가 보정)
-    const yfPrices = await fetchYFPrices(valid.map((v) => v.code));
-    for (const v of valid) {
-      const yf = yfPrices[v.code];
-      if (yf) { v.price = yf.price; v.changePct = yf.changePct; }
-    }
-
-    const toItem = (
-      r: NonNullable<typeof valid[0]>, amount: number, qty: number, rank: number
-    ): RankItem => ({
-      rank,
-      code:         r.code,
-      name:         MAJOR_STOCKS[r.code] ?? r.code,
-      price:        r.price,
-      changePct:    r.changePct,
-      netBuyAmount: amount,
-      netBuyQty:    qty,
-    });
-
-    const sortDesc = (arr: typeof valid, fn: (x: typeof valid[0]) => number) =>
-      [...arr].sort((a, b) => fn(b) - fn(a));
-    const sortAsc = (arr: typeof valid, fn: (x: typeof valid[0]) => number) =>
-      [...arr].sort((a, b) => fn(a) - fn(b));
-
-    const foreignBuy  = sortDesc(valid, (x) => x.frgn).slice(0, 10).map((r, i) => toItem(r, r.frgn, r.frgnQty, i+1));
-    const instBuy     = sortDesc(valid, (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
-    const indivBuy    = sortDesc(valid, (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
-    const foreignSell = sortAsc(valid,  (x) => x.frgn).slice(0, 10).map((r, i) => toItem(r, r.frgn, r.frgnQty, i+1));
-    const instSell    = sortAsc(valid,  (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
-    const indivSell   = sortAsc(valid,  (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
-
-    // 대표 데이터 기준일 (most frequent dataDate 중 첫 번째)
-    const rawDate = valid[0]?.dataDate ?? "";
-    const dataDateLabel = rawDate.length === 8
-      ? `${rawDate.slice(0,4)}.${rawDate.slice(4,6)}.${rawDate.slice(6,8)}`
-      : "";
 
     return NextResponse.json(
-      { buy:  { foreign: foreignBuy,  institution: instBuy,  individual: indivBuy  },
-        sell: { foreign: foreignSell, institution: instSell, individual: indivSell },
-        dataDateLabel },
+      {
+        buy:  { foreign: result.foreignBuy,  institution: result.instBuy,  individual: result.indivBuy  },
+        sell: { foreign: result.foreignSell, institution: result.instSell, individual: result.indivSell },
+        dataDateLabel,
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
-    console.error("🚨 [investor-ranking] 오류:", String(err));
+    console.error("🚨 [investor-ranking]:", String(err));
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

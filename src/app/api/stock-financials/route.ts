@@ -39,33 +39,59 @@ async function getYahooCrumb(): Promise<{ cookie: string; crumb: string }> {
   const now = Date.now();
   if (yahooCache && yahooCache.expiresAt > now) return yahooCache;
 
-  // 1) guce 동의 페이지 302 리다이렉트에서 A3/A1 쿠키 획득
-  const guceRes = await fetch(
-    "https://guce.yahoo.com/consent?brandType=nonEu&gcrumb=&done=https%3A%2F%2Ffinance.yahoo.com%2F",
-    {
-      headers: { "User-Agent": YF_UA, "Accept-Language": "en-US,en;q=0.9" },
-      redirect: "manual",   // follow 하면 최종 응답에서 쿠키 소실
-      cache: "no-store",
-    }
-  );
-  const rawCookies = guceRes.headers.getSetCookie?.() ?? [];
-  const cookie = rawCookies.map((c: string) => c.split(";")[0]).join("; ");
-  if (!cookie) throw new Error("no cookie");
+  // Stage 1: Try crumb without cookies (works from some server IPs)
+  for (const host of ["query2", "query1"]) {
+    try {
+      const cr = await fetch(`https://${host}.finance.yahoo.com/v1/test/getcrumb`, {
+        headers: { "User-Agent": YF_UA, "Accept": "*/*" },
+        cache: "no-store",
+        signal: AbortSignal.timeout(4000),
+      });
+      if (cr.ok) {
+        const crumb = (await cr.text()).trim();
+        if (crumb && !crumb.includes("{") && crumb.length <= 20) {
+          yahooCache = { cookie: "", crumb, expiresAt: now + 6 * 3600 * 1000 };
+          return yahooCache;
+        }
+      }
+    } catch { /* try next */ }
+  }
 
-  // 2) crumb 획득 (query2 → query1 순서로 시도)
+  // Stage 2: Cookies from Yahoo Finance page → crumb
+  const homeRes = await fetch("https://finance.yahoo.com/quote/SPY/", {
+    headers: { "User-Agent": YF_UA, "Accept-Language": "en-US,en;q=0.9" },
+    redirect: "follow",
+    cache: "no-store",
+    signal: AbortSignal.timeout(8000),
+  });
+
+  // getSetCookie() is Node 18.14+ only; fall back to get("set-cookie")
+  let rawCookies: string[] = [];
+  const hdrs = homeRes.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof hdrs.getSetCookie === "function") {
+    rawCookies = hdrs.getSetCookie();
+  } else {
+    rawCookies = (homeRes.headers.get("set-cookie") ?? "")
+      .split(/,(?=\s*\w+=)/)
+      .filter(Boolean);
+  }
+  const cookie = rawCookies.map((c: string) => c.split(";")[0].trim()).join("; ");
+
   for (const host of ["query2", "query1"]) {
     try {
       const cr = await fetch(`https://${host}.finance.yahoo.com/v1/test/getcrumb`, {
         headers: { "User-Agent": YF_UA, Cookie: cookie, "Accept-Language": "en-US,en;q=0.9" },
         cache: "no-store",
+        signal: AbortSignal.timeout(4000),
       });
-      const crumb = await cr.text();
-      if (crumb && !crumb.includes("{") && !crumb.includes("Request") && crumb.length <= 20) {
-        yahooCache = { cookie, crumb, expiresAt: now + 20 * 3600 * 1000 };
+      const crumb = (await cr.text()).trim();
+      if (crumb && !crumb.includes("{") && crumb.length <= 20) {
+        yahooCache = { cookie, crumb, expiresAt: now + 6 * 3600 * 1000 };
         return yahooCache;
       }
-    } catch { /* try next host */ }
+    } catch { /* try next */ }
   }
+
   throw new Error("crumb unavailable");
 }
 

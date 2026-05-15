@@ -102,15 +102,22 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
 
         {/* ── 고정 헤더 ──────────────────────────────────────────────────────── */}
         <div className="px-6 pt-6 pb-0 shrink-0">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="text-xl font-bold text-white">{name}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {code} · {marketLabel}
-                {data?.marketState === "REGULAR" && (
-                  <span className="ml-2 text-signal-green">● 장중</span>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <p className="text-xs text-gray-500">
+                  {code} · {marketLabel}
+                  {data?.marketState === "REGULAR" && (
+                    <span className="ml-2 text-signal-green">● 장중</span>
+                  )}
+                </p>
+                {newsSummary?.summary && (
+                  <span className="text-[11px] px-2 py-0.5 bg-gold/10 border border-gold/30 text-gold rounded-full font-medium">
+                    ✦ {newsSummary.summary}
+                  </span>
                 )}
-              </p>
+              </div>
             </div>
             <button onClick={onClose}
               className="text-gray-500 hover:text-white text-2xl leading-none px-1 transition-colors">
@@ -165,12 +172,6 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
                           : data.change.toLocaleString("ko-KR") + "원"
                         })
                       </p>
-                      {/* AI 뉴스 요약 뱃지 */}
-                      {newsSummary?.summary && (
-                        <span className="text-xs px-2 py-0.5 bg-gold/10 border border-gold/30 text-gold rounded-full font-medium">
-                          ✦ {newsSummary.summary}
-                        </span>
-                      )}
                     </div>
                     {isUS && extPrice && extPct !== null && (
                       <p className="text-xs text-gray-500 mt-0.5 num">
