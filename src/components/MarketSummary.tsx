@@ -116,107 +116,142 @@ function heuristicBadge(pct: number): string {
   return "패닉 매도";
 }
 
-// ─── 상승 TOP 20 ──────────────────────────────────────────────────────────────
+// ─── 상승 / 하락 TOP 20 (2컬럼 패널) ─────────────────────────────────────────
 
-// CSS Grid 컬럼 정의: 반응형으로 거래량(sm+) · 오늘의이유(md+) 트랙 추가
-// 현재가 80px: "1,234,567원" 같은 7자리 가격도 한 줄에 표시
-const GAINERS_GRID =
-  "grid gap-x-2 items-center " +
-  "grid-cols-[20px_minmax(0,1fr)_80px_58px] " +
-  "sm:grid-cols-[20px_minmax(0,1fr)_80px_58px_54px] " +
-  "md:grid-cols-[20px_minmax(0,1fr)_80px_58px_54px_90px]";
+// 컴팩트 그리드: 2컬럼 배치에 최적화 (badge·거래량 제거, 컬럼 간격 축소)
+const COMPACT_GRID =
+  "grid gap-x-1.5 items-center " +
+  "grid-cols-[14px_minmax(0,1fr)_72px_52px]";
 
-function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+/** 상승/하락 공용 하프 컴포넌트 */
+function TopMoversHalf({
+  market, mode, ts, onSelect,
+}: {
+  market: string;
+  mode: "gainers" | "losers";
+  ts: string;
+  onSelect: (d: DrawerState) => void;
+}) {
   const [rows, setRows]     = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ts, setTs]         = useState("");
   const [badges, setBadges] = useState<Record<string, string>>({});
-
   const mkt = market === "KOSDAQ" ? "KQ" : "KS";
+  const isGainer = mode === "gainers";
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
-      const gainers: StockRow[] = json.topGainers ?? [];
-      setRows(gainers);
-      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+      const list: StockRow[] = (isGainer ? json.topGainers : json.topLosers) ?? [];
+      setRows(list);
 
-      // 즉시 heuristic 뱃지 세팅
       const init: Record<string, string> = {};
-      gainers.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
+      list.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
       setBadges(init);
 
-      // 백그라운드: AI 요약으로 교체 (병렬 20개, 30분 캐시로 실제론 빠름)
-      gainers.forEach(r => {
+      list.forEach(r => {
         const ticker = `${r.code}.${mkt}`;
         fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
           .then(res => res.ok ? res.json() : null)
-          .then(ns => {
-            if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary }));
-          })
+          .then(ns => { if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary })); })
           .catch(() => null);
       });
     } catch { /* silent */ } finally { setLoading(false); }
-  }, [market, mkt]);
+  }, [market, mkt, isGainer]);
 
   useEffect(() => {
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      const delay = isMarketOpen() ? 30_000 : 120_000;
-      tid = setTimeout(() => { load(); schedule(); }, delay);
+      tid = setTimeout(() => { load(); schedule(); }, isMarketOpen() ? 30_000 : 120_000);
     }
     schedule();
     return () => clearTimeout(tid);
   }, [load]);
 
+  const accentColor = isGainer ? "text-signal-green" : "text-signal-red";
+  const title       = isGainer ? "상승 TOP20" : "하락 TOP20";
+  const icon        = isGainer ? "▲" : "▼";
+
   return (
-    <div className="max-w-[700px]">
-      <div className="flex justify-between mb-3 text-xs"><StatusBadge />
-        {ts && <span className="text-gray-600">{ts} 기준</span>}
+    <div className="min-w-0">
+      {/* 섹션 제목 */}
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-bold ${accentColor}`}>{icon} {title}</span>
+        {ts && <span className="text-[10px] text-gray-600">{ts}</span>}
       </div>
+
       {/* 헤더 */}
-      <div className={`${GAINERS_GRID} py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40`}>
+      <div className={`${COMPACT_GRID} py-1 text-[10px] text-gray-600 font-medium border-b border-navy-border/40`}>
         <span className="text-center">#</span>
         <span>종목</span>
         <span className="text-right">현재가</span>
         <span className="text-right">등락률</span>
-        <span className="text-right hidden sm:block">거래량</span>
-        <span className="text-right hidden md:block">오늘의 이유</span>
       </div>
-      {loading ? <SkeletonRows /> : (
-        <div className="divide-y divide-navy-border/30">
+
+      {loading ? <SkeletonRows count={10} /> : (
+        <div className="divide-y divide-navy-border/20">
           {rows.map(r => (
             <div key={r.code}
-              className={`${GAINERS_GRID} py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors`}
+              className={`${COMPACT_GRID} py-1.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`}
               onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
             >
-              <RankBadge rank={r.rank} />
+              {/* 순위 */}
+              <span className={`text-[10px] font-bold text-center ${r.rank <= 3 ? accentColor : "text-gray-600"}`}>{r.rank}</span>
+
+              {/* 종목명 */}
               <div className="min-w-0">
-                <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600">{r.code}</p>
+                <p className="text-xs text-white font-medium truncate group-hover:text-cyan-brand transition-colors">{r.name}</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-gray-600">{r.code}</span>
+                  {badges[r.code] && (
+                    <span className="hidden lg:inline text-[9px] text-gold/70 truncate max-w-[80px]">
+                      · {badges[r.code]}
+                    </span>
+                  )}
+                </div>
               </div>
-              <span className="text-right text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
-              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+
+              {/* 현재가 */}
+              <span className="text-right text-xs text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+
+              {/* 등락률 */}
+              <span className={`text-right text-xs font-bold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
-              <span className="text-right text-xs text-gray-500 num hidden sm:block">{fmtVol(r.volume)}</span>
-              {/* 오늘의 이유 뱃지 */}
-              <div className="hidden md:flex justify-end">
-                {badges[r.code] ? (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
-                    ✦ {badges[r.code]}
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-gray-700">—</span>
-                )}
-              </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 상승/하락 2컬럼 패널 */
+function GainersLosersPanel({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+  const [ts, setTs] = useState("");
+
+  useEffect(() => {
+    fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); })
+      .catch(() => null);
+  }, [market]);
+
+  return (
+    <div>
+      {/* 장중/장마감 표시 */}
+      <div className="flex items-center gap-2 mb-3 text-xs">
+        <StatusBadge />
+      </div>
+
+      {/* 2컬럼 분할 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-6">
+        <TopMoversHalf market={market} mode="gainers" ts={ts} onSelect={onSelect} />
+        {/* 세로 구분선 (sm+) */}
+        <TopMoversHalf market={market} mode="losers"  ts={ts} onSelect={onSelect} />
+      </div>
     </div>
   );
 }
@@ -1193,7 +1228,7 @@ type USIndexType = "SP500" | "NASDAQ" | "DOW";
 type USContentTab = "gainers" | "losers" | "actives" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
-  { id: "top10",  label: "상승 TOP20"  },
+  { id: "top10",  label: "상승/하락"  },
   { id: "amount", label: "거래대금 TOP20" },
   { id: "volume", label: "거래량 급등" },
   { id: "sector", label: "섹터 흐름"  },
@@ -1252,7 +1287,7 @@ export default function MarketSummary() {
           </div>
         </div>
 
-        {mainTab === "top10"  && <TopGainersList   market={market} onSelect={setDrawer} />}
+        {mainTab === "top10"  && <GainersLosersPanel market={market} onSelect={setDrawer} />}
         {mainTab === "amount" && <TopByAmountList  market={market} onSelect={setDrawer} />}
         {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={setDrawer} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}

@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 // ── 서버사이드 캐시 (Vercel warm instance 내 공유 — YF rate-limit 방어) ─────
 interface CacheEntry {
-  data: { market: string; topGainers: TopGainerRow[]; timestamp: string };
+  data: { market: string; topGainers: TopGainerRow[]; topLosers: TopGainerRow[]; topByAmount: TopGainerRow[]; timestamp: string };
   ts: number;
 }
 const serverCache: Record<string, CacheEntry> = {};
@@ -140,12 +140,17 @@ export async function GET(request: Request) {
       .slice(0, 20)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
+    const topLosers: TopGainerRow[] = [...valid]
+      .sort((a, b) => a.changePct - b.changePct)   // 오름차순 = 하락폭 큰 순
+      .slice(0, 20)
+      .map((r, i) => ({ rank: i + 1, ...r }));
+
     const topByAmount: TopGainerRow[] = [...valid]
       .sort((a, b) => b.tradeAmount - a.tradeAmount)
       .slice(0, 20)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
-    const payload = { market, topGainers, topByAmount, timestamp: new Date().toISOString() };
+    const payload = { market, topGainers, topLosers, topByAmount, timestamp: new Date().toISOString() };
     serverCache[market] = { data: payload, ts: Date.now() };
 
     return NextResponse.json(payload, {
