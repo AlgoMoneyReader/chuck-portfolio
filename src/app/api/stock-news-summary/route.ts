@@ -9,52 +9,60 @@ const CACHE_TTL = 30 * 60 * 1000;
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36";
 
-// ── Yahoo Finance 뉴스 fetch ──────────────────────────────────────────────────
-async function fetchYahooNews(ticker: string): Promise<string[]> {
+// ── Yahoo Finance RSS (국내/해외 모두 작동) ───────────────────────────────────
+async function fetchYahooRSS(ticker: string): Promise<string[]> {
+  // Yahoo Finance RSS — 인증 불필요, 국내 종목도 지원
+  const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(ticker)}&region=US&lang=en-US`;
   try {
-    // v1 news endpoint (crumb 불필요)
-    const res = await fetch(
-      `https://query2.finance.yahoo.com/v1/finance/news?symbols=${encodeURIComponent(ticker)}&count=5`,
-      {
-        headers: { "User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9" },
-        signal: AbortSignal.timeout(5000),
-        cache: "no-store",
-      }
-    );
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9" },
+      signal: AbortSignal.timeout(6000),
+      cache: "no-store",
+    });
     if (!res.ok) throw new Error(`${res.status}`);
-    const j = await res.json() as {
-      data?: { main?: { stream?: Array<{ content?: { title?: string } }> } };
-      items?: Array<{ content?: { title?: string } }>;
-    };
-    const stream = j?.data?.main?.stream ?? j?.items ?? [];
-    return stream
-      .map(item => item?.content?.title ?? "")
-      .filter(t => t.length > 5)
-      .slice(0, 5);
+    const xml = await res.text();
+
+    // item 레벨 파싱
+    const titles: string[] = [];
+    const itemRe = /<item[^>]*>([\s\S]*?)<\/item>/g;
+    let m: RegExpExecArray | null;
+    while ((m = itemRe.exec(xml)) !== null && titles.length < 5) {
+      const tc = /<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/.exec(m[1]);
+      const tp = /<title>([\s\S]*?)<\/title>/.exec(m[1]);
+      const t  = (tc?.[1] ?? tp?.[1] ?? "").trim()
+        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/<[^>]+>/g, "").trim();
+      if (t.length > 8) titles.push(t);
+    }
+    return titles;
   } catch {
     return [];
   }
 }
 
-// ── Naver Finance RSS (국내 종목 백업) ────────────────────────────────────────
-async function fetchNaverNews(code: string): Promise<string[]> {
-  // code = 005930 (ticker 앞부분, .KS/.KQ 제거)
+// ── Naver Finance 뉴스 (국내 종목 백업) ──────────────────────────────────────
+async function fetchNaverRSS(code: string): Promise<string[]> {
+  // 네이버 금융 종목 뉴스 RSS
+  const url = `https://finance.naver.com/item/news_news.naver?code=${code}&page=1`;
   try {
-    const res = await fetch(
-      `https://finance.naver.com/item/news_news.naver?code=${code}&page=1&sm=title_entity_id.basic&clusterId=`,
-      {
-        headers: { "User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9", Referer: "https://finance.naver.com/" },
-        signal: AbortSignal.timeout(5000),
-        cache: "no-store",
-      }
-    );
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": UA,
+        "Accept-Language": "ko-KR,ko;q=0.9",
+        Referer: "https://finance.naver.com/",
+      },
+      signal: AbortSignal.timeout(6000),
+      cache: "no-store",
+    });
     if (!res.ok) throw new Error();
     const html = await res.text();
-    const titleRe = /class="title"[^>]*>([^<]+)</g;
+
+    // 뉴스 제목 추출 (네이버 종목 뉴스 HTML 구조)
     const titles: string[] = [];
-    let tm: RegExpExecArray | null;
-    while ((tm = titleRe.exec(html)) !== null && titles.length < 5) {
-      const t = tm[1].trim();
+    const re = /class="title"[^>]*>\s*<[^>]+>([\s\S]*?)<\/a>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) !== null && titles.length < 5) {
+      const t = m[1].replace(/<[^>]+>/g, "").trim();
       if (t.length > 5) titles.push(t);
     }
     return titles;
@@ -72,7 +80,10 @@ async function callGemini(prompt: string): Promise<string> {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 50 },
+      }),
       signal: AbortSignal.timeout(10000),
     }
   );
@@ -83,23 +94,23 @@ async function callGemini(prompt: string): Promise<string> {
   return j.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 }
 
-// ── 휴리스틱 폴백 ─────────────────────────────────────────────────────────────
-function heuristic(changePct: number): string {
-  if (changePct >= 7)  return "급등 모멘텀 폭발";
-  if (changePct >= 3)  return "강한 매수세 유입";
-  if (changePct >= 1)  return "외국인·기관 매수";
-  if (changePct >= 0)  return "소폭 강보합";
-  if (changePct >= -1) return "소폭 약보합";
-  if (changePct >= -3) return "차익 실현 매물";
-  if (changePct >= -7) return "기관 매물 출회";
+// ── 가격 방향 휴리스틱 ────────────────────────────────────────────────────────
+function heuristic(c: number): string {
+  if (c >= 7)   return "급등 모멘텀 폭발";
+  if (c >= 3)   return "강한 매수세 유입";
+  if (c >= 1)   return "외국인·기관 매수";
+  if (c >= 0)   return "소폭 강보합";
+  if (c >= -1)  return "소폭 약보합";
+  if (c >= -3)  return "차익 실현 매물";
+  if (c >= -7)  return "기관 매물 출회";
   return "급락 패닉 매도";
 }
 
 // ── GET handler ───────────────────────────────────────────────────────────────
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const ticker    = searchParams.get("ticker") ?? "";
-  const name      = searchParams.get("name")   ?? ticker;
+  const ticker    = searchParams.get("ticker")    ?? "";
+  const name      = searchParams.get("name")      ?? ticker;
   const changePct = parseFloat(searchParams.get("changePct") ?? "0");
 
   if (!ticker) return NextResponse.json({ error: "ticker required" }, { status: 400 });
@@ -110,16 +121,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...hit, cached: true });
   }
 
-  // 뉴스 수집 — 국내: Naver 우선, 해외: Yahoo
   const isKR = ticker.includes(".KS") || ticker.includes(".KQ");
-  let headlines: string[] = [];
 
+  // 뉴스 수집: Yahoo RSS 우선, 국내는 Naver 병행
+  let headlines: string[] = [];
   if (isKR) {
     const code = ticker.split(".")[0];
-    headlines = await fetchNaverNews(code);
-    if (headlines.length === 0) headlines = await fetchYahooNews(ticker);
+    const [yahoo, naver] = await Promise.all([
+      fetchYahooRSS(ticker),
+      fetchNaverRSS(code),
+    ]);
+    // Naver가 있으면 우선 (한국어 뉴스가 더 유용)
+    headlines = naver.length > 0 ? naver : yahoo;
   } else {
-    headlines = await fetchYahooNews(ticker);
+    headlines = await fetchYahooRSS(ticker);
   }
 
   // Gemini 요약
@@ -127,22 +142,20 @@ export async function GET(request: Request) {
 
   if (headlines.length > 0 && process.env.GEMINI_API_KEY) {
     try {
-      const dir   = changePct >= 0 ? "상승" : "하락";
+      const dir    = changePct >= 0 ? "상승" : "하락";
       const pctAbs = Math.abs(changePct).toFixed(1);
       const prompt = `다음은 ${name}(${ticker}) 주식 관련 최신 뉴스 헤드라인입니다:
 ${headlines.map((h, i) => `${i + 1}. ${h}`).join("\n")}
 
-이 종목이 오늘 ${pctAbs}% ${dir}한 이유를 8~15글자 한국어로 요약해주세요.
-예시 형식: "차익실현 매물 출회", "실적 개선 기대감", "외국인 순매수", "관세 우려 매도"
-한 줄만 반환. 인용부호나 부가설명 없이.`;
+이 종목이 오늘 ${pctAbs}% ${dir}한 핵심 이유를 8~15글자 한국어 명사형으로 요약하세요.
+예시: "로봇사업 기대감", "관세 우려 매도", "실적 서프라이즈", "기관 차익실현"
+인용부호나 마침표 없이 한 줄만 반환.`;
 
       const raw = await callGemini(prompt);
-      // 따옴표 제거 + 30자 이하만 허용
-      const cleaned = raw.replace(/^["']|["']$/g, "").trim();
-      if (cleaned.length >= 4 && cleaned.length <= 30) summary = cleaned;
+      const cleaned = raw.replace(/^["'.]+|["'.]+$/g, "").trim();
+      if (cleaned.length >= 4 && cleaned.length <= 25) summary = cleaned;
     } catch { /* fallback */ }
   } else if (headlines.length > 0) {
-    // Gemini 없을 때: 첫 헤드라인 20자 절삭
     summary = headlines[0].slice(0, 20);
   }
 
