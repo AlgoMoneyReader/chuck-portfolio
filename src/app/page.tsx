@@ -2,6 +2,7 @@ import LiveMarketPulse from "@/components/LiveMarketPulse";
 import MarketSummary from "@/components/MarketSummary";
 import StockSearchPanel from "@/components/StockSearchPanel";
 import DualBuyWidget from "@/components/DualBuyWidget";
+import MarketIssueWidget from "@/components/MarketIssueWidget";
 import Link from "next/link";
 
 const FEATURES = [
@@ -32,8 +33,15 @@ export default function Home() {
       {/* 실시간 시장 현황 */}
       <LiveMarketPulse />
 
-      {/* 쌍끌이 포착 — 전폭 와이드 테이블 */}
-      <DualBuyWidget />
+      {/* 실시간 이슈 + 쌍끌이 — 2컬럼 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1">
+          <MarketIssueWidget />
+        </div>
+        <div className="lg:col-span-2">
+          <DualBuyWidget />
+        </div>
+      </div>
 
       {/* 종목 검색 + 수급 분석 */}
       <StockSearchPanel />

@@ -14,6 +14,8 @@ interface StockDetail {
   postMarketPrice: number | null; postMarketChangePct: number | null;
 }
 
+interface NewsSummary { summary: string; headlines: string[] }
+
 interface Props {
   code: string;
   market: "KS" | "KQ" | "US";
@@ -31,19 +33,29 @@ const fmtVol = (n: number) =>
 type DrawerTab = "info" | "signal";
 
 export default function StockDetailDrawer({ code, market, name, onClose }: Props) {
-  const [data, setData]       = useState<StockDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(false);
-  const [tab, setTab]         = useState<DrawerTab>("info");
+  const [data, setData]             = useState<StockDetail | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(false);
+  const [tab, setTab]               = useState<DrawerTab>("info");
+  const [newsSummary, setNewsSummary] = useState<NewsSummary | null>(null);
 
   useEffect(() => {
-    setLoading(true); setError(false); setData(null);
+    setLoading(true); setError(false); setData(null); setNewsSummary(null);
     fetch(`/api/stock-detail?code=${code}&market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(j => { if ("error" in j) throw new Error(); setData(j); })
+      .then(j => {
+        if ("error" in j) throw new Error();
+        setData(j);
+        // 뉴스 요약 비동기 fetch (완료 안 돼도 드로어 열림)
+        const ticker = market === "US" ? code : `${code}.${market}`;
+        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}&changePct=${j.changePct ?? 0}`)
+          .then(r => r.json())
+          .then(ns => { if (ns.summary) setNewsSummary(ns as NewsSummary); })
+          .catch(() => null);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [code, market]);
+  }, [code, market, name]);
 
   // 종목 바뀌면 탭 초기화
   useEffect(() => { setTab("info"); }, [code]);
@@ -137,13 +149,21 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
                   {/* 현재가 */}
                   <div>
                     <p className="text-3xl font-bold text-white num">{fmt(data.price)}</p>
-                    <p className={`text-sm font-semibold num mt-1 ${color}`}>
-                      {isPos ? "▲" : "▼"} {Math.abs(data.changePct).toFixed(2)}%
-                      &nbsp;({isPos ? "+" : ""}{isUS
-                        ? `$${Math.abs(data.change).toFixed(2)}`
-                        : data.change.toLocaleString("ko-KR") + "원"
-                      })
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                      <p className={`text-sm font-semibold num ${color}`}>
+                        {isPos ? "▲" : "▼"} {Math.abs(data.changePct).toFixed(2)}%
+                        &nbsp;({isPos ? "+" : ""}{isUS
+                          ? `$${Math.abs(data.change).toFixed(2)}`
+                          : data.change.toLocaleString("ko-KR") + "원"
+                        })
+                      </p>
+                      {/* AI 뉴스 요약 뱃지 */}
+                      {newsSummary?.summary && (
+                        <span className="text-xs px-2 py-0.5 bg-gold/10 border border-gold/30 text-gold rounded-full font-medium">
+                          ✦ {newsSummary.summary}
+                        </span>
+                      )}
+                    </div>
                     {isUS && extPrice && extPct !== null && (
                       <p className="text-xs text-gray-500 mt-0.5 num">
                         {extLabel} {fmtUSD(extPrice)}
