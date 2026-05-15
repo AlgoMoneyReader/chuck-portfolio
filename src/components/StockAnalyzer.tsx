@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import StockSignalReport from "./StockSignalReport";
 
 interface AnalysisResult {
   analysis: string;
@@ -392,6 +393,20 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
           )}
         </button>
       </div>
+
+      {/* Signal Report — ticker가 입력되면 항상 표시 */}
+      {ticker && (() => {
+        // 티커에서 market 추출: "005930.KS" → code="005930" market="KS"
+        // "NVDA" → code="NVDA" market="US"
+        const dotIdx = ticker.lastIndexOf(".");
+        if (dotIdx > 0) {
+          const code = ticker.slice(0, dotIdx);
+          const mkt = ticker.slice(dotIdx + 1); // KS | KQ
+          return <StockSignalReport ticker={code} market={mkt} />;
+        }
+        // 점이 없으면 US 주식으로 간주
+        return <StockSignalReport ticker={ticker} market="US" />;
+      })()}
 
       {/* Result */}
       {result && (

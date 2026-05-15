@@ -51,6 +51,8 @@ function pbmnToUk(s: string): number {
 async function fetchKISInvestor(code: string): Promise<{
   foreign: number; institution: number; individual: number;
   foreignQty: number; institutionQty: number; individualQty: number;
+  foreign5D: number; foreign10D: number; foreign20D: number;
+  institution5D: number; institution10D: number; institution20D: number;
   date: string;
 } | null> {
   const token = await getKISToken();
@@ -81,6 +83,14 @@ async function fetchKISInvestor(code: string): Promise<{
   );
   if (!valid) return null;
 
+  // 유효 행만 추출 (최대 20개)
+  const validRows = rows
+    .filter(r => r.frgn_ntby_tr_pbmn !== "" && r.orgn_ntby_tr_pbmn !== "")
+    .slice(0, 20);
+
+  const sumF = (rs: InvestorRow[]) => rs.reduce((s, r) => s + pbmnToUk(r.frgn_ntby_tr_pbmn), 0);
+  const sumI = (rs: InvestorRow[]) => rs.reduce((s, r) => s + pbmnToUk(r.orgn_ntby_tr_pbmn), 0);
+
   return {
     date:           valid.stck_bsop_date,
     foreign:        pbmnToUk(valid.frgn_ntby_tr_pbmn),
@@ -89,6 +99,12 @@ async function fetchKISInvestor(code: string): Promise<{
     foreignQty:     parseInt(valid.frgn_ntby_qty ?? "0", 10) || 0,
     institutionQty: parseInt(valid.orgn_ntby_qty ?? "0", 10) || 0,
     individualQty:  parseInt(valid.prsn_ntby_qty ?? "0", 10) || 0,
+    foreign5D:      sumF(validRows.slice(0, 5)),
+    foreign10D:     sumF(validRows.slice(0, 10)),
+    foreign20D:     sumF(validRows.slice(0, 20)),
+    institution5D:  sumI(validRows.slice(0, 5)),
+    institution10D: sumI(validRows.slice(0, 10)),
+    institution20D: sumI(validRows.slice(0, 20)),
   };
 }
 
@@ -207,6 +223,12 @@ export async function GET(request: Request) {
         foreignQty:     inv?.foreignQty     ?? 0,
         institutionQty: inv?.institutionQty ?? 0,
         individualQty:  inv?.individualQty  ?? 0,
+        foreign5D:      inv?.foreign5D      ?? 0,
+        foreign10D:     inv?.foreign10D     ?? 0,
+        foreign20D:     inv?.foreign20D     ?? 0,
+        institution5D:  inv?.institution5D  ?? 0,
+        institution10D: inv?.institution10D ?? 0,
+        institution20D: inv?.institution20D ?? 0,
         invDate,
         volumeRatio,
         week52Pct,
