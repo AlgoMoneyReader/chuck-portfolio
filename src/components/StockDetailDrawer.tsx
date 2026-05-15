@@ -48,9 +48,17 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
         setData(j);
         // 뉴스 요약 비동기 fetch (완료 안 돼도 드로어 열림)
         const ticker = market === "US" ? code : `${code}.${market}`;
-        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}&changePct=${j.changePct ?? 0}`)
-          .then(r => r.json())
-          .then(ns => { if (ns.summary) setNewsSummary(ns as NewsSummary); })
+        const pct: number = j.changePct ?? 0;
+        const fallbackSummary =
+          pct >= 7 ? "급등 모멘텀 폭발" : pct >= 3 ? "강한 매수세 유입" :
+          pct >= 1 ? "외국인·기관 매수" : pct >= 0 ? "소폭 강보합" :
+          pct >= -1 ? "소폭 약보합" : pct >= -3 ? "차익 실현 매물" :
+          pct >= -7 ? "기관 매물 출회" : "급락 패닉 매도";
+        // 즉시 fallback 표시 (API 응답 오면 덮어씀)
+        setNewsSummary({ summary: fallbackSummary, headlines: [] });
+        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(name)}&changePct=${pct}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(ns => { if (ns?.summary) setNewsSummary(ns as NewsSummary); })
           .catch(() => null);
       })
       .catch(() => setError(true))

@@ -543,6 +543,7 @@ interface RankItem {
 interface RankData {
   buy: { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
   sell: { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
+  dataDateLabel?: string;
 }
 
 function fmtAmount(n: number): string {
@@ -614,7 +615,7 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
     setLoading(true);
     fetch("/api/investor-ranking", { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j && !j.error) setData(j); })
+      .then(j => { if (j && !j.error) setData(j as RankData); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -637,7 +638,12 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
             {m === "buy" ? "순매수" : "순매도"}
           </button>
         ))}
-        <span className="text-xs text-gray-600 ml-auto">KIS · KOSPI 상위 45종목</span>
+        <div className="ml-auto text-right">
+          <p className="text-xs text-gray-600">KIS · KOSPI 상위 45종목</p>
+          {data?.dataDateLabel && (
+            <p className="text-[10px] text-gray-700">{data.dataDateLabel} 기준</p>
+          )}
+        </div>
       </div>
 
       {loading ? (

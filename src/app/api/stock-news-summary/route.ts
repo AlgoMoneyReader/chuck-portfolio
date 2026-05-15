@@ -121,49 +121,58 @@ export async function GET(request: Request) {
     return NextResponse.json({ ...hit, cached: true });
   }
 
-  const isKR = ticker.includes(".KS") || ticker.includes(".KQ");
+  // 항상 응답을 보장하는 outer try-catch
+  try {
+    const isKR = ticker.includes(".KS") || ticker.includes(".KQ");
 
-  // 뉴스 수집: Yahoo RSS 우선, 국내는 Naver 병행
-  let headlines: string[] = [];
-  if (isKR) {
-    const code = ticker.split(".")[0];
-    const [yahoo, naver] = await Promise.all([
-      fetchYahooRSS(ticker),
-      fetchNaverRSS(code),
-    ]);
-    // Naver가 있으면 우선 (한국어 뉴스가 더 유용)
-    headlines = naver.length > 0 ? naver : yahoo;
-  } else {
-    headlines = await fetchYahooRSS(ticker);
-  }
+    // 뉴스 수집: Yahoo RSS 우선, 국내는 Naver 병행 (각 2.5s 제한, 병렬)
+    let headlines: string[] = [];
+    if (isKR) {
+      const code = ticker.split(".")[0];
+      const [yahoo, naver] = await Promise.all([
+        fetchYahooRSS(ticker),
+        fetchNaverRSS(code),
+      ]);
+      headlines = naver.length > 0 ? naver : yahoo;
+    } else {
+      headlines = await fetchYahooRSS(ticker);
+    }
 
-  // Gemini 요약
-  let summary = heuristic(changePct);
+    // Gemini 요약 (5s 제한 — 합계 최대 7.5s < Vercel 10s)
+    let summary = heuristic(changePct);
 
-  if (headlines.length > 0 && process.env.GEMINI_API_KEY) {
-    try {
-      const dir    = changePct >= 0 ? "상승" : "하락";
-      const pctAbs = Math.abs(changePct).toFixed(1);
-      const prompt = `다음은 ${name}(${ticker}) 주식 관련 최신 뉴스 헤드라인입니다:
+    if (headlines.length > 0 && process.env.GEMINI_API_KEY) {
+      try {
+        const dir    = changePct >= 0 ? "상승" : "하락";
+        const pctAbs = Math.abs(changePct).toFixed(1);
+        const prompt = `다음은 ${name}(${ticker}) 주식 관련 최신 뉴스 헤드라인입니다:
 ${headlines.map((h, i) => `${i + 1}. ${h}`).join("\n")}
 
 이 종목이 오늘 ${pctAbs}% ${dir}한 핵심 이유를 8~15글자 한국어 명사형으로 요약하세요.
 예시: "로봇사업 기대감", "관세 우려 매도", "실적 서프라이즈", "기관 차익실현"
 인용부호나 마침표 없이 한 줄만 반환.`;
 
-      const raw = await callGemini(prompt);
-      const cleaned = raw.replace(/^["'.]+|["'.]+$/g, "").trim();
-      if (cleaned.length >= 4 && cleaned.length <= 25) summary = cleaned;
-    } catch { /* fallback */ }
-  } else if (headlines.length > 0) {
-    summary = headlines[0].slice(0, 20);
+        const raw = await callGemini(prompt);
+        const cleaned = raw.replace(/^["'.]+|["'.]+$/g, "").trim();
+        if (cleaned.length >= 4 && cleaned.length <= 25) summary = cleaned;
+      } catch { /* Gemini 실패 → heuristic 유지 */ }
+    } else if (headlines.length > 0) {
+      summary = headlines[0].slice(0, 20);
+    }
+
+    const entry: CacheEntry = { summary, headlines, cachedAt: Date.now() };
+    cache.set(ticker, entry);
+
+    return NextResponse.json(
+      { summary, headlines, cached: false },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch {
+    // 예외 발생 시에도 heuristic 기반 응답 반환 (뱃지는 반드시 표시)
+    const summary = heuristic(changePct);
+    return NextResponse.json(
+      { summary, headlines: [], cached: false },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   }
-
-  const entry: CacheEntry = { summary, headlines, cachedAt: Date.now() };
-  cache.set(ticker, entry);
-
-  return NextResponse.json(
-    { summary, headlines, cached: false },
-    { headers: { "Cache-Control": "no-store" } }
-  );
 }

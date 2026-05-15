@@ -73,6 +73,7 @@ function toQty(s: string): number {
 async function fetchStockInvestor(code: string, token: string): Promise<{
   code: string;
   price: number; changePct: number;
+  dataDate: string;
   frgn: number; frgnQty: number;
   orgn: number; orgnQty: number;
   prsn: number; prsnQty: number;
@@ -121,6 +122,7 @@ async function fetchStockInvestor(code: string, token: string): Promise<{
 
     return {
       code, price, changePct,
+      dataDate: r.stck_bsop_date,          // YYYYMMDD — 데이터 기준일
       frgn:    toUk(r.frgn_ntby_tr_pbmn), frgnQty: toQty(r.frgn_ntby_qty),
       orgn:    toUk(r.orgn_ntby_tr_pbmn), orgnQty: toQty(r.orgn_ntby_qty),
       prsn:    toUk(r.prsn_ntby_tr_pbmn), prsnQty: toQty(r.prsn_ntby_qty),
@@ -212,9 +214,16 @@ export async function GET() {
     const instSell    = sortAsc(valid,  (x) => x.orgn).slice(0, 10).map((r, i) => toItem(r, r.orgn, r.orgnQty, i+1));
     const indivSell   = sortAsc(valid,  (x) => x.prsn).slice(0, 10).map((r, i) => toItem(r, r.prsn, r.prsnQty, i+1));
 
+    // 대표 데이터 기준일 (most frequent dataDate 중 첫 번째)
+    const rawDate = valid[0]?.dataDate ?? "";
+    const dataDateLabel = rawDate.length === 8
+      ? `${rawDate.slice(0,4)}.${rawDate.slice(4,6)}.${rawDate.slice(6,8)}`
+      : "";
+
     return NextResponse.json(
       { buy:  { foreign: foreignBuy,  institution: instBuy,  individual: indivBuy  },
-        sell: { foreign: foreignSell, institution: instSell, individual: indivSell } },
+        sell: { foreign: foreignSell, institution: instSell, individual: indivSell },
+        dataDateLabel },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
