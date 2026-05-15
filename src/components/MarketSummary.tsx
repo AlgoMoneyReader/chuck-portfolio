@@ -17,6 +17,7 @@ interface SectorStockLive {
 interface StockRow {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
+  tradeAmount?: number; // 거래대금 (원)
 }
 interface SpikeRow {
   rank: number; code: string; name: string;
@@ -194,6 +195,107 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
               </span>
               <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block">{fmtVol(r.volume)}</span>
               {/* 오늘의 이유 뱃지 */}
+              <div className="w-24 text-right hidden md:flex justify-end shrink-0">
+                {badges[r.code] ? (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
+                    ✦ {badges[r.code]}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-gray-700">—</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 거래대금 TOP 20 ──────────────────────────────────────────────────────────
+
+function fmtTradeAmt(n: number): string {
+  if (n >= 1e12) return `${(n / 1e12).toFixed(1)}조`;
+  if (n >= 1e8)  return `${Math.round(n / 1e8)}억`;
+  if (n >= 1e4)  return `${Math.round(n / 1e4)}만`;
+  return n.toLocaleString("ko-KR");
+}
+
+function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+  const [rows, setRows]       = useState<StockRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [ts, setTs]           = useState("");
+  const [badges, setBadges]   = useState<Record<string, string>>({});
+
+  const mkt = market === "KOSDAQ" ? "KQ" : "KS";
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      const list: StockRow[] = json.topByAmount ?? [];
+      setRows(list);
+      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+
+      const init: Record<string, string> = {};
+      list.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
+      setBadges(init);
+
+      list.forEach(r => {
+        const ticker = `${r.code}.${mkt}`;
+        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(ns => { if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary })); })
+          .catch(() => null);
+      });
+    } catch { /* silent */ } finally { setLoading(false); }
+  }, [market, mkt]);
+
+  useEffect(() => {
+    setLoading(true); load();
+    let tid: ReturnType<typeof setTimeout>;
+    function schedule() {
+      const delay = isMarketOpen() ? 60_000 : 300_000;
+      tid = setTimeout(() => { load(); schedule(); }, delay);
+    }
+    schedule();
+    return () => clearTimeout(tid);
+  }, [load]);
+
+  return (
+    <div>
+      <div className="flex justify-between mb-3 text-xs">
+        <span className="text-gray-500">당일 거래대금 기준 상위 20종목</span>
+        {ts && <span className="text-gray-600">{ts} 기준</span>}
+      </div>
+      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+        <span className="w-5 text-center">#</span>
+        <span className="flex-1">종목</span>
+        <span className="w-20 text-right">현재가</span>
+        <span className="w-14 text-right">등락률</span>
+        <span className="w-20 text-right hidden sm:block">거래대금</span>
+        <span className="w-24 text-right hidden md:block">오늘의 이유</span>
+      </div>
+      {loading ? <SkeletonRows count={10} /> : (
+        <div className="divide-y divide-navy-border/30">
+          {rows.map(r => (
+            <div key={r.code}
+              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
+            >
+              <RankBadge rank={r.rank} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-medium truncate">{r.name}</p>
+                <p className="text-xs text-gray-600">{r.code}</p>
+              </div>
+              <span className="w-20 text-right text-sm text-white num">{fmtPrice(r.price)}</span>
+              <span className={`w-14 text-right text-sm font-semibold num ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+                {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
+              </span>
+              <span className="w-20 text-right text-xs text-gray-300 num hidden sm:block">
+                {r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
+              </span>
               <div className="w-24 text-right hidden md:flex justify-end shrink-0">
                 {badges[r.code] ? (
                   <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
@@ -1068,13 +1170,14 @@ function USSectorHeatmap() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RegionTabType = "KR" | "US";
-type MainTabType = "top10" | "volume" | "sector" | "high52" | "flow";
+type MainTabType = "top10" | "amount" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 type USIndexType = "SP500" | "NASDAQ" | "DOW";
 type USContentTab = "gainers" | "losers" | "actives" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
-  { id: "top10",  label: "상승 TOP10"  },
+  { id: "top10",  label: "상승 TOP20"  },
+  { id: "amount", label: "거래대금 TOP20" },
   { id: "volume", label: "거래량 급등" },
   { id: "sector", label: "섹터 흐름"  },
   { id: "high52", label: "52주 신고가" },
@@ -1132,7 +1235,8 @@ export default function MarketSummary() {
           </div>
         </div>
 
-        {mainTab === "top10"  && <TopGainersList  market={market} onSelect={setDrawer} />}
+        {mainTab === "top10"  && <TopGainersList   market={market} onSelect={setDrawer} />}
+        {mainTab === "amount" && <TopByAmountList  market={market} onSelect={setDrawer} />}
         {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={setDrawer} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}
         {mainTab === "high52" && <Week52HighList   market={market} onSelect={setDrawer} />}

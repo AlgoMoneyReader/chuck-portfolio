@@ -61,6 +61,7 @@ interface TopGainerRow {
   rank: number; code: string; symbol: string;
   name: string; price: number; change: number;
   changePct: number; volume: number;
+  tradeAmount: number; // 거래대금 (원) = price × volume
 }
 
 async function fetchOneChart(symbol: string): Promise<Omit<TopGainerRow, "rank"> | null> {
@@ -98,16 +99,18 @@ async function fetchOneChart(symbol: string): Promise<Omit<TopGainerRow, "rank">
     const change    = price - prev;
     const changePct = (change / prev) * 100;
 
+    const roundedPrice = Math.round(price);
     return {
       symbol,
       code: symbol.replace(/\.(KS|KQ)$/, ""),
       name: KR_NAMES[symbol] ??
         (meta.longName ?? meta.shortName ?? symbol)
           .replace(/\s*(Co\.?|Ltd\.?|Corp\.?|Inc\.?|Holdings?|Hldgs?)\.?$/i, ""),
-      price:     Math.round(price),
-      change:    Math.round(change),
-      changePct: parseFloat(changePct.toFixed(2)),
+      price:       roundedPrice,
+      change:      Math.round(change),
+      changePct:   parseFloat(changePct.toFixed(2)),
       volume,
+      tradeAmount: roundedPrice * volume,  // 거래대금 (원)
     };
   } catch {
     return null;
@@ -130,13 +133,19 @@ export async function GET(request: Request) {
     const symbols = market === "KOSDAQ" ? KOSDAQ_SYMBOLS : KOSPI_SYMBOLS;
     const results  = await Promise.all(symbols.map(fetchOneChart));
 
-    const topGainers: TopGainerRow[] = results
-      .filter((r): r is NonNullable<typeof r> => r !== null)
+    const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
+
+    const topGainers: TopGainerRow[] = [...valid]
       .sort((a, b) => b.changePct - a.changePct)
-      .slice(0, 10)
+      .slice(0, 20)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
-    const payload = { market, topGainers, timestamp: new Date().toISOString() };
+    const topByAmount: TopGainerRow[] = [...valid]
+      .sort((a, b) => b.tradeAmount - a.tradeAmount)
+      .slice(0, 20)
+      .map((r, i) => ({ rank: i + 1, ...r }));
+
+    const payload = { market, topGainers, topByAmount, timestamp: new Date().toISOString() };
     serverCache[market] = { data: payload, ts: Date.now() };
 
     return NextResponse.json(payload, {
