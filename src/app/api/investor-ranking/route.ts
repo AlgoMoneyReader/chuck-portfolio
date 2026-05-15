@@ -39,52 +39,60 @@ async function fetchNaverInvestorStock(sosok: "0" | "1"): Promise<{
   const html = await res.text();
 
   // Parse rows from the investor stock table
-  // The page has a table with: 종목명 | 현재가 | 등락률 | 외국인순매수 | 기관순매수 | 개인순매수
+  // 열 구조: [0]순위 [1]종목명 [2]현재가 [3]등락률 [4]외국인 [5]기관 [6]개인 (백만원)
   const rows: Array<{
     code: string; name: string; price: number; changePct: number;
     frgn: number; orgn: number; prsn: number;
   }> = [];
 
-  // Extract stock links for codes: /item/main.naver?code=XXXXXX
-  const rowRe = /<tr[^>]*class="[^"]*"[^>]*>([\s\S]*?)<\/tr>/g;
+  // class 속성 없는 <tr>도 포함하도록 느슨하게 매칭
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
     const row = m[1];
 
-    // Extract code from link
+    // 종목 코드 링크가 있는 행만 처리
     const codeM = /code=(\d{6})/.exec(row);
     if (!codeM) continue;
     const code = codeM[1];
 
-    // Extract stock name
+    // 종목명 (title 속성 또는 링크 텍스트)
     const nameM = /title="([^"]+)"/.exec(row);
     if (!nameM) continue;
     const name = nameM[1].trim();
 
-    // Extract all numbers from td cells
+    // td 텍스트 추출 (HTML 태그 제거)
     const tds: string[] = [];
     const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
     let tdM: RegExpExecArray | null;
     while ((tdM = tdRe.exec(row)) !== null) {
-      tds.push(tdM[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
+      tds.push(tdM[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim());
     }
-    if (tds.length < 6) continue;
+    // 최소 7개 td 필요: 순위(0) 종목(1) 현재가(2) 등락률(3) 외국인(4) 기관(5) 개인(6)
+    if (tds.length < 7) continue;
 
+    // 숫자 파싱: 삼각형 기호 처리 포함
     const parseNum = (s: string) => {
-      const clean = s.replace(/[,\+\s]/g, "");
+      const isNeg = s.includes("▼") || s.includes("△") || (s.trim().startsWith("-"));
+      const clean = s.replace(/[,\+\s▲▼△▽]/g, "").replace(/^-/, "");
       const n = parseInt(clean, 10);
-      return isNaN(n) ? 0 : n;
+      if (isNaN(n) || n === 0) return 0;
+      return isNeg ? -n : n;
     };
     const parsePct = (s: string) => {
-      const clean = s.replace(/[,%\s]/g, "").replace("▲", "").replace("▼", s.includes("▼") ? "-" : "");
-      return parseFloat(clean) || 0;
+      const isNeg = s.includes("▼") || s.includes("하락");
+      const clean = s.replace(/[▲▼△▽,%\s+\-]/g, "");
+      const n = parseFloat(clean);
+      if (isNaN(n)) return 0;
+      return isNeg ? -n : n;
     };
 
-    const price = parseNum(tds[1] ?? "0");
-    const changePct = parsePct(tds[2] ?? "0");
-    const frgn = parseNum(tds[3] ?? "0"); // 외국인 순매수 (백만원)
-    const orgn = parseNum(tds[4] ?? "0"); // 기관 순매수 (백만원)
-    const prsn = parseNum(tds[5] ?? "0"); // 개인 순매수 (백만원)
+    // 인덱스: tds[0]=순위, tds[1]=종목명, tds[2]=현재가, tds[3]=등락률, tds[4]=외국인, tds[5]=기관, tds[6]=개인
+    const price     = parseNum(tds[2] ?? "0");
+    const changePct = parsePct(tds[3] ?? "0");
+    const frgn      = parseNum(tds[4] ?? "0"); // 외국인 순매수 (백만원)
+    const orgn      = parseNum(tds[5] ?? "0"); // 기관 순매수 (백만원)
+    const prsn      = parseNum(tds[6] ?? "0"); // 개인 순매수 (백만원)
 
     if (price > 0) {
       rows.push({ code, name, price, changePct, frgn, orgn, prsn });

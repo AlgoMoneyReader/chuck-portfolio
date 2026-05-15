@@ -116,7 +116,15 @@ function heuristicBadge(pct: number): string {
   return "패닉 매도";
 }
 
-// ─── 상승 TOP 10 ──────────────────────────────────────────────────────────────
+// ─── 상승 TOP 20 ──────────────────────────────────────────────────────────────
+
+// CSS Grid 컬럼 정의: 반응형으로 거래량(sm+) · 오늘의이유(md+) 트랙 추가
+// 현재가 80px: "1,234,567원" 같은 7자리 가격도 한 줄에 표시
+const GAINERS_GRID =
+  "grid gap-x-2 items-center " +
+  "grid-cols-[20px_minmax(0,1fr)_80px_58px] " +
+  "sm:grid-cols-[20px_minmax(0,1fr)_80px_58px_54px] " +
+  "md:grid-cols-[20px_minmax(0,1fr)_80px_58px_54px_90px]";
 
 function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows]     = useState<StockRow[]>([]);
@@ -140,7 +148,7 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
       gainers.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
       setBadges(init);
 
-      // 백그라운드: AI 요약으로 교체 (병렬 10개, 30분 캐시로 실제론 빠름)
+      // 백그라운드: AI 요약으로 교체 (병렬 20개, 30분 캐시로 실제론 빠름)
       gainers.forEach(r => {
         const ticker = `${r.code}.${mkt}`;
         fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
@@ -165,37 +173,38 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
   }, [load]);
 
   return (
-    <div>
+    <div className="max-w-[700px]">
       <div className="flex justify-between mb-3 text-xs"><StatusBadge />
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-        <span className="w-5 text-center">#</span>
-        <span className="flex-1">종목</span>
-        <span className="w-20 text-right">현재가</span>
-        <span className="w-14 text-right">등락률</span>
-        <span className="w-14 text-right hidden sm:block">거래량</span>
-        <span className="w-24 text-right hidden md:block">오늘의 이유</span>
+      {/* 헤더 */}
+      <div className={`${GAINERS_GRID} py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40`}>
+        <span className="text-center">#</span>
+        <span>종목</span>
+        <span className="text-right">현재가</span>
+        <span className="text-right">등락률</span>
+        <span className="text-right hidden sm:block">거래량</span>
+        <span className="text-right hidden md:block">오늘의 이유</span>
       </div>
       {loading ? <SkeletonRows /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
             <div key={r.code}
-              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              className={`${GAINERS_GRID} py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors`}
               onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
             >
               <RankBadge rank={r.rank} />
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className="w-20 text-right text-sm text-white num">{fmtPrice(r.price)}</span>
-              <span className={`w-14 text-right text-sm font-semibold num ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+              <span className="text-right text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
-              <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block">{fmtVol(r.volume)}</span>
+              <span className="text-right text-xs text-gray-500 num hidden sm:block">{fmtVol(r.volume)}</span>
               {/* 오늘의 이유 뱃지 */}
-              <div className="w-24 text-right hidden md:flex justify-end shrink-0">
+              <div className="hidden md:flex justify-end">
                 {badges[r.code] ? (
                   <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
                     ✦ {badges[r.code]}
@@ -220,6 +229,13 @@ function fmtTradeAmt(n: number): string {
   if (n >= 1e4)  return `${Math.round(n / 1e4)}만`;
   return n.toLocaleString("ko-KR");
 }
+
+// 거래대금 컬럼: "1,234억" 형태 표시
+const AMOUNT_GRID =
+  "grid gap-x-2 items-center " +
+  "grid-cols-[20px_minmax(0,1fr)_80px_58px] " +
+  "sm:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px] " +
+  "md:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px_90px]";
 
 function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows]       = useState<StockRow[]>([]);
@@ -264,39 +280,40 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
   }, [load]);
 
   return (
-    <div>
+    <div className="max-w-[700px]">
       <div className="flex justify-between mb-3 text-xs">
         <span className="text-gray-500">당일 거래대금 기준 상위 20종목</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-        <span className="w-5 text-center">#</span>
-        <span className="flex-1">종목</span>
-        <span className="w-20 text-right">현재가</span>
-        <span className="w-14 text-right">등락률</span>
-        <span className="w-20 text-right hidden sm:block">거래대금</span>
-        <span className="w-24 text-right hidden md:block">오늘의 이유</span>
+      {/* 헤더 */}
+      <div className={`${AMOUNT_GRID} py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40`}>
+        <span className="text-center">#</span>
+        <span>종목</span>
+        <span className="text-right">현재가</span>
+        <span className="text-right">등락률</span>
+        <span className="text-right hidden sm:block">거래대금</span>
+        <span className="text-right hidden md:block">오늘의 이유</span>
       </div>
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
             <div key={r.code}
-              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              className={`${AMOUNT_GRID} py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors`}
               onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
             >
               <RankBadge rank={r.rank} />
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className="w-20 text-right text-sm text-white num">{fmtPrice(r.price)}</span>
-              <span className={`w-14 text-right text-sm font-semibold num ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+              <span className="text-right text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
-              <span className="w-20 text-right text-xs text-gray-300 num hidden sm:block">
+              <span className="text-right text-xs text-gray-300 num hidden sm:block whitespace-nowrap">
                 {r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
               </span>
-              <div className="w-24 text-right hidden md:flex justify-end shrink-0">
+              <div className="hidden md:flex justify-end">
                 {badges[r.code] ? (
                   <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
                     ✦ {badges[r.code]}

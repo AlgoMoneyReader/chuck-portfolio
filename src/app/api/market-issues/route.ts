@@ -101,7 +101,7 @@ async function callGemini(prompt: string): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1200 },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2400 },
       }),
       signal: AbortSignal.timeout(20000),
     }
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
       seen.add(item.title);
       finItems.push(item);
     }
-    if (finItems.length >= 30) break;
+    if (finItems.length >= 60) break;
   }
 
   if (finItems.length === 0) {
@@ -175,8 +175,8 @@ ${finItems.map((h, i) => `${i + 1}. ${h.title}`).join("\n")}
 [규칙]
 - 주식·경제·기업·산업에 직접 영향을 주는 이슈만 선택하세요.
 - 연예, 스포츠, 정치인 개인사, 사건·사고는 절대 포함하지 마세요.
-- 관련 뉴스가 없으면 그 수만큼만 반환하세요 (5개 미만도 가능).
-- 한국 주식 투자자 관점에서 중요한 순서로 정렬하세요.
+- 한국 주식 투자자 관점에서 중요한 순서로 최대 15개 반환하세요.
+- 관련 뉴스가 부족하면 가능한 만큼만 반환하세요 (최소 1개).
 
 아래 JSON 배열만 반환 (마크다운·설명 없이):
 [
@@ -205,7 +205,7 @@ sectors 최대 3개, relatedStocks 최대 4개`;
     }
   } catch {
     // Gemini 실패 시 finItems에서 단순 구성
-    rawIssues = finItems.slice(0, 5).map((item, i) => ({
+    rawIssues = finItems.slice(0, 15).map((item, i) => ({
       rank: i + 1, title: item.title.slice(0, 15), summary: item.title.slice(0, 35),
       direction: "mixed" as const, sectors: [], relatedStocks: [],
     }));
