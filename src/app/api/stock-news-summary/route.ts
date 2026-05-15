@@ -16,7 +16,7 @@ async function fetchYahooRSS(ticker: string): Promise<string[]> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9" },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(2500),
       cache: "no-store",
     });
     if (!res.ok) throw new Error(`${res.status}`);
@@ -51,7 +51,7 @@ async function fetchNaverRSS(code: string): Promise<string[]> {
         "Accept-Language": "ko-KR,ko;q=0.9",
         Referer: "https://finance.naver.com/",
       },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(2500),
       cache: "no-store",
     });
     if (!res.ok) throw new Error();
@@ -84,7 +84,7 @@ async function callGemini(prompt: string): Promise<string> {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 50 },
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(5000),
     }
   );
   if (!res.ok) throw new Error(`Gemini ${res.status}`);

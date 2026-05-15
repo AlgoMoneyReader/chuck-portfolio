@@ -70,12 +70,6 @@ function toQty(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-/** 오늘 날짜 KST 기준 YYYYMMDD */
-function todayKST(): string {
-  return new Date(Date.now() + 9 * 3_600_000)
-    .toISOString().slice(0, 10).replace(/-/g, "");
-}
-
 async function fetchStockInvestor(code: string, token: string): Promise<{
   code: string;
   price: number; changePct: number;
@@ -103,14 +97,17 @@ async function fetchStockInvestor(code: string, token: string): Promise<{
     const rows: KISRow[] = data.output ?? [];
     if (!rows.length) return null;
 
-    // ── 당일 row 우선 선택 ────────────────────────────────────────────────────
+    // ── 실 데이터가 있는 가장 최근 row 선택 ─────────────────────────────────
     // inquire-investor는 최신 영업일부터 내림차순으로 여러 row를 반환.
-    // 장중에는 rows[0]이 당일이지만 flow가 아직 소수일 수 있고,
-    // 장 개시 전에는 rows[0]가 전일인 경우도 있음.
-    const today = todayKST();
-    const r = rows.find((x) => x.stck_bsop_date === today)
-           ?? rows.find((x) => x.frgn_ntby_tr_pbmn !== "" || x.orgn_ntby_tr_pbmn !== "")
-           ?? rows[0];
+    // 장전·장초반에는 당일 row가 있어도 모든 값이 0인 경우가 있으므로,
+    // 외국인·기관·개인 순매수 절댓값 합계 > 0인 첫 번째 row를 사용.
+    const hasData = (x: KISRow) => {
+      const f = Math.abs(parseInt((x.frgn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
+      const o = Math.abs(parseInt((x.orgn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
+      const p = Math.abs(parseInt((x.prsn_ntby_tr_pbmn ?? "").replace(/,/g, "") || "0", 10));
+      return f + o + p > 0;
+    };
+    const r = rows.find(hasData) ?? rows[0];
     if (!r) return null;
 
     // 가격: stck_clpr는 종가 → 장중에는 전일 종가.
