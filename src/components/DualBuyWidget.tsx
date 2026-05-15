@@ -156,10 +156,10 @@ export default function DualBuyWidget() {
         </div>
       </div>
 
-      {/* ── Table Header ── */}
+      {/* ── Table Header (desktop only) ── */}
       {!loading && !apiError && data && data.stocks.length > 0 && (
         <div
-          className="grid items-center gap-3 px-5 py-2 bg-navy-sub/40 border-b border-navy-border/30"
+          className="hidden sm:grid items-center gap-3 px-5 py-2 bg-navy-sub/40 border-b border-navy-border/30"
           style={{ gridTemplateColumns: COLS }}
         >
           <span className="text-xs text-gray-600 text-center">#</span>
@@ -191,87 +191,112 @@ export default function DualBuyWidget() {
             <p className="text-xs text-gray-600 mt-1">장 마감 후 또는 수급 신호 미발생 상태입니다.</p>
           </div>
         ) : (
-          <div className="divide-y divide-navy-border/20">
-            {data.stocks.map((stock, idx) => {
-              const isPos = stock.changePct >= 0;
-              const totalFlow = stock.foreign + stock.institution;
-              const fPct = totalFlow > 0 ? Math.round((stock.foreign / totalFlow) * 100) : 50;
-
-              return (
-                <button
-                  key={stock.code}
-                  onClick={() => goAnalyze(stock)}
-                  className="w-full grid items-center gap-3 py-3 px-0
-                    hover:bg-navy-sub/70 rounded-lg -mx-0 transition-all duration-150
-                    cursor-pointer group text-left"
-                  style={{ gridTemplateColumns: COLS }}
-                  title={`${stock.name} AI 분석 →`}
-                >
-                  {/* 순위 */}
-                  <span className="text-xs font-bold text-gray-500 text-center">
-                    {idx + 1}
-                  </span>
-
-                  {/* 종목명 + 코드 */}
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white truncate group-hover:text-cyan-brand transition-colors duration-150">
-                      {stock.name}
-                    </p>
-                    <p className="text-xs text-gray-600 font-mono mt-0.5">
-                      {stock.code}
-                    </p>
-                  </div>
-
-                  {/* 시장 */}
-                  <span className={`text-xs font-medium text-center px-1.5 py-0.5 rounded
-                    ${stock.market === "KS"
-                      ? "text-blue-400 bg-blue-400/10"
-                      : "text-purple-400 bg-purple-400/10"
-                    }`}>
-                    {stock.market === "KS" ? "KOSPI" : "KOSDAQ"}
-                  </span>
-
-                  {/* 현재가 */}
-                  <span className="text-sm font-semibold text-white text-right num tabular-nums">
-                    {stock.price > 0
-                      ? stock.price.toLocaleString("ko-KR") + "원"
-                      : "—"
-                    }
-                  </span>
-
-                  {/* 등락률 */}
-                  <span className={`text-sm font-bold text-right num tabular-nums ${
-                    isPos ? "text-signal-green" : "text-signal-red"
-                  }`}>
-                    {isPos ? "▲" : "▼"}{Math.abs(stock.changePct).toFixed(2)}%
-                  </span>
-
-                  {/* 외국인 순매수 */}
-                  <div className="text-right">
-                    <span className="text-sm font-semibold text-cyan-brand num tabular-nums">
-                      +{fmtUk(stock.foreign)}
-                    </span>
-                  </div>
-
-                  {/* 기관 순매수 */}
-                  <div className="text-right">
-                    <span className="text-sm font-semibold text-signal-green num tabular-nums">
-                      +{fmtUk(stock.institution)}
-                    </span>
-                  </div>
-
-                  {/* 비율 바 + 퍼센트 */}
-                  <div className="flex flex-col gap-1 min-w-0">
-                    <RatioBar foreign={stock.foreign} institution={stock.institution} />
-                    <div className="flex justify-between text-[10px] text-gray-600 tabular-nums">
-                      <span className="text-cyan-brand/70">{fPct}%</span>
-                      <span className="text-signal-green/70">{100 - fPct}%</span>
+          <>
+            {/* ── 모바일 카드형 (sm 미만) ── */}
+            <div className="sm:hidden divide-y divide-navy-border/20">
+              {data.stocks.map((stock, idx) => {
+                const isPos    = stock.changePct >= 0;
+                const totalFlow = stock.foreign + stock.institution;
+                const fPct     = totalFlow > 0 ? Math.round((stock.foreign / totalFlow) * 100) : 50;
+                return (
+                  <button key={stock.code} onClick={() => goAnalyze(stock)}
+                    className="w-full py-3 text-left hover:bg-navy-sub/70 active:bg-navy-sub/90 transition-colors rounded-lg group">
+                    {/* 상단: 순위+종목명 / 시장뱃지  |  가격+등락률 */}
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <span className="text-xs font-bold text-gray-500 pt-0.5 shrink-0 w-4 text-center">{idx + 1}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate group-hover:text-cyan-brand transition-colors">
+                            {stock.name}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                              stock.market === "KS" ? "text-blue-400 bg-blue-400/10" : "text-purple-400 bg-purple-400/10"
+                            }`}>
+                              {stock.market === "KS" ? "KOSPI" : "KOSDAQ"}
+                            </span>
+                            <span className="text-xs text-gray-600 font-mono">{stock.code}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-white num whitespace-nowrap">
+                          {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
+                        </p>
+                        <p className={`text-sm font-bold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                          {isPos ? "▲" : "▼"}{Math.abs(stock.changePct).toFixed(2)}%
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                    {/* 하단: 비율바 + 순매수 금액 */}
+                    <div className="flex items-center gap-2 pl-6">
+                      <div className="flex-1">
+                        <RatioBar foreign={stock.foreign} institution={stock.institution} />
+                        <div className="flex justify-between text-[10px] mt-0.5 tabular-nums">
+                          <span className="text-cyan-brand/70">{fPct}%</span>
+                          <span className="text-signal-green/70">{100 - fPct}%</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 text-xs tabular-nums">
+                        <span className="text-cyan-brand">외 <span className="font-semibold">+{fmtUk(stock.foreign)}</span></span>
+                        <span className="text-signal-green">기 <span className="font-semibold">+{fmtUk(stock.institution)}</span></span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── 데스크탑 테이블형 (sm 이상) ── */}
+            <div className="hidden sm:block divide-y divide-navy-border/20">
+              {data.stocks.map((stock, idx) => {
+                const isPos    = stock.changePct >= 0;
+                const totalFlow = stock.foreign + stock.institution;
+                const fPct     = totalFlow > 0 ? Math.round((stock.foreign / totalFlow) * 100) : 50;
+                return (
+                  <button
+                    key={stock.code}
+                    onClick={() => goAnalyze(stock)}
+                    className="w-full grid items-center gap-3 py-3 px-0
+                      hover:bg-navy-sub/70 rounded-lg transition-all duration-150
+                      cursor-pointer group text-left"
+                    style={{ gridTemplateColumns: COLS }}
+                    title={`${stock.name} AI 분석 →`}
+                  >
+                    <span className="text-xs font-bold text-gray-500 text-center">{idx + 1}</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-white truncate group-hover:text-cyan-brand transition-colors duration-150">{stock.name}</p>
+                      <p className="text-xs text-gray-600 font-mono mt-0.5">{stock.code}</p>
+                    </div>
+                    <span className={`text-xs font-medium text-center px-1.5 py-0.5 rounded ${
+                      stock.market === "KS" ? "text-blue-400 bg-blue-400/10" : "text-purple-400 bg-purple-400/10"
+                    }`}>
+                      {stock.market === "KS" ? "KOSPI" : "KOSDAQ"}
+                    </span>
+                    <span className="text-sm font-semibold text-white text-right num tabular-nums">
+                      {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
+                    </span>
+                    <span className={`text-sm font-bold text-right num tabular-nums ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                      {isPos ? "▲" : "▼"}{Math.abs(stock.changePct).toFixed(2)}%
+                    </span>
+                    <div className="text-right">
+                      <span className="text-sm font-semibold text-cyan-brand num tabular-nums">+{fmtUk(stock.foreign)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-semibold text-signal-green num tabular-nums">+{fmtUk(stock.institution)}</span>
+                    </div>
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <RatioBar foreign={stock.foreign} institution={stock.institution} />
+                      <div className="flex justify-between text-[10px] text-gray-600 tabular-nums">
+                        <span className="text-cyan-brand/70">{fPct}%</span>
+                        <span className="text-signal-green/70">{100 - fPct}%</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

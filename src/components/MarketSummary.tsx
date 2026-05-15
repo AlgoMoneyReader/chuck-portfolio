@@ -713,6 +713,10 @@ interface USStockRow {
   postMarketChangePct: number | null;
 }
 interface USSectorRow { sector: string; symbol: string; changePct: number; price: number; }
+interface USSectorStockRow {
+  rank: number; code: string; name: string;
+  price: number; changePct: number; volume: number;
+}
 
 function fmtUSD(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -835,8 +839,11 @@ const US_SECTOR_ICONS: Record<string, string> = {
 };
 
 function USSectorHeatmap() {
-  const [sectors, setSectors] = useState<USSectorRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sectors, setSectors]         = useState<USSectorRow[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [modal, setModal]             = useState<USSectorRow | null>(null);
+  const [modalStocks, setModalStocks] = useState<USSectorStockRow[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -853,6 +860,26 @@ function USSectorHeatmap() {
     return () => clearInterval(iv);
   }, [load]);
 
+  // ESC closes modal
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setModal(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function openModal(s: USSectorRow) {
+    setModal(s);
+    setModalStocks([]);
+    setModalLoading(true);
+    fetch(`/api/us-sector-stocks?etf=${encodeURIComponent(s.symbol)}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then((j: { stocks?: USSectorStockRow[] } | null) => {
+        if (j?.stocks) setModalStocks(j.stocks);
+      })
+      .catch(() => {})
+      .finally(() => setModalLoading(false));
+  }
+
   if (loading) return (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
       {Array.from({ length: 11 }).map((_, i) => (
@@ -862,34 +889,131 @@ function USSectorHeatmap() {
   );
 
   return (
-    <div>
-      <p className="text-xs text-gray-600 mb-3">SPDR 섹터 ETF 기준 오늘 등락률 (지수 무관 동일)</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {sectors.map(s => {
-          const isPos    = s.changePct >= 0;
-          const intensity = Math.min(Math.abs(s.changePct) / 5, 1);
-          const color    = US_SECTOR_COLORS[s.sector] ?? "#6b7280";
-          return (
-            <div key={s.symbol} className="p-3 rounded-lg border relative overflow-hidden"
-              style={{
-                backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2, "0") : "08"}`,
-                borderColor: "rgba(255,255,255,0.1)",
-              }}>
-              <div className="absolute bottom-0 left-0 h-1 rounded-b-lg"
-                style={{ width: `${intensity * 100}%`, backgroundColor: color, opacity: 0.7 }} />
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-sm">{US_SECTOR_ICONS[s.sector] ?? "📊"}</span>
-                <p className="text-xs font-semibold text-white">{s.sector}</p>
-              </div>
-              <p className={`text-lg font-bold num ${isPos ? "text-signal-green" : "text-signal-red"}`}>
-                {isPos ? "+" : ""}{s.changePct.toFixed(2)}%
-              </p>
-              <p className="text-xs text-gray-500">{s.symbol}</p>
-            </div>
-          );
-        })}
+    <>
+      <div>
+        <p className="text-xs text-gray-600 mb-3">SPDR 섹터 ETF 기준 오늘 등락률 · 클릭하면 구성 종목 보기</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {sectors.map(s => {
+            const isPos     = s.changePct >= 0;
+            const intensity = Math.min(Math.abs(s.changePct) / 5, 1);
+            const color     = US_SECTOR_COLORS[s.sector] ?? "#6b7280";
+            return (
+              <button key={s.symbol}
+                onClick={() => openModal(s)}
+                className="p-3 rounded-lg border relative overflow-hidden text-left transition-all active:scale-[0.97] hover:brightness-110"
+                style={{
+                  backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2, "0") : "08"}`,
+                  borderColor: "rgba(255,255,255,0.1)",
+                }}>
+                <div className="absolute bottom-0 left-0 h-1 rounded-b-lg"
+                  style={{ width: `${intensity * 100}%`, backgroundColor: color, opacity: 0.7 }} />
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-sm">{US_SECTOR_ICONS[s.sector] ?? "📊"}</span>
+                  <p className="text-xs font-semibold text-white">{s.sector}</p>
+                </div>
+                <p className={`text-lg font-bold num ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                  {isPos ? "+" : ""}{s.changePct.toFixed(2)}%
+                </p>
+                <p className="text-xs text-gray-500">{s.symbol}</p>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* ── 섹터 구성 종목 모달 ── */}
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setModal(null)} />
+          <div className="relative z-10 w-full max-w-lg bg-[#0f1923] border border-white/10 rounded-2xl shadow-2xl flex flex-col"
+            style={{ maxHeight: "85vh" }}>
+
+            {/* 헤더 */}
+            <div className="px-5 pt-5 pb-0 shrink-0">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{US_SECTOR_ICONS[modal.sector] ?? "📊"}</span>
+                    <h2 className="text-lg font-bold text-white">{modal.sector} TOP 10</h2>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className={`text-sm font-bold num ${modal.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+                      {modal.symbol} 오늘 {modal.changePct >= 0 ? "+" : ""}{modal.changePct.toFixed(2)}%
+                    </span>
+                    {!modalLoading && modalStocks.length > 0 && (
+                      <span className="text-xs text-gray-500">시가총액 상위 {modalStocks.length}개</span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setModal(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all shrink-0 mt-0.5">
+                  <span className="text-sm leading-none">✕</span>
+                </button>
+              </div>
+              {/* 테이블 헤더 */}
+              <div className="flex items-center gap-2 py-2 border-y border-white/10 text-xs text-gray-500 font-medium">
+                <span className="w-5 shrink-0" />
+                <span className="flex-1">종목명</span>
+                <span className="w-[86px] text-right shrink-0">현재가</span>
+                <span className="w-[60px] text-right shrink-0">등락률</span>
+                <span className="hidden sm:block w-[76px] text-right shrink-0">거래량</span>
+              </div>
+            </div>
+
+            {/* 종목 리스트 */}
+            <div className="overflow-y-auto flex-1 pb-3"
+              style={{ scrollbarWidth: "thin", scrollbarColor: "#1A2D42 transparent" }}>
+              {modalLoading ? (
+                <div className="space-y-0 pt-1">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-2 px-5 py-2.5 animate-pulse">
+                      <div className="w-5 h-3 bg-white/10 rounded shrink-0" />
+                      <div className="flex-1 h-3 bg-white/10 rounded" />
+                      <div className="w-[90px] h-3 bg-white/5 rounded shrink-0" />
+                      <div className="w-[62px] h-3 bg-white/5 rounded shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              ) : modalStocks.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm text-gray-500">종목 데이터를 불러올 수 없습니다</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/[0.05]">
+                  {modalStocks.map((stock, idx) => {
+                    const isUp = stock.changePct >= 0;
+                    return (
+                      <div key={stock.code}
+                        className="flex items-center gap-2 px-5 py-2.5"
+                      >
+                        <span className="text-xs text-gray-600 w-5 shrink-0 text-center">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{stock.name}</p>
+                          <p className="text-xs text-gray-600">{stock.code}</p>
+                        </div>
+                        <span className="w-[86px] text-right text-sm text-white num shrink-0 whitespace-nowrap">
+                          {stock.price > 0 ? fmtUSD(stock.price) : "—"}
+                        </span>
+                        <span className={`w-[60px] text-right text-sm font-bold num shrink-0 whitespace-nowrap ${isUp ? "text-signal-green" : "text-signal-red"}`}>
+                          {stock.price > 0 ? `${isUp ? "▲" : "▼"}${Math.abs(stock.changePct).toFixed(2)}%` : "—"}
+                        </span>
+                        <span className="hidden sm:block w-[76px] text-right text-xs text-gray-400 num shrink-0 whitespace-nowrap">
+                          {stock.volume > 0 ? fmtVolUS(stock.volume) : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-2.5 border-t border-white/10 shrink-0">
+              <p className="text-xs text-gray-600">시가총액 기준 상위 종목 · SPDR {modal.symbol} ETF 구성</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
