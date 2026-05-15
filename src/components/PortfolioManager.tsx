@@ -5,6 +5,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
 } from "recharts";
 import staticMaster from "@/data/stock_master.json";
+import FundingScenario from "./FundingScenario";
 
 type StockItem = { code: string; name: string; market: "KS" | "KQ"; type: string };
 const ALL_KR_STOCKS = staticMaster.stocks as StockItem[];
@@ -488,6 +489,9 @@ export default function PortfolioManager() {
           </div>
         </div>
       )}
+
+      {/* ── 자금 계획 분석 시나리오 ──────────────────────────────────────── */}
+      <FundingScenario holdings={holdings} />
 
       {/* Add/Edit Modal */}
       {showForm && (
