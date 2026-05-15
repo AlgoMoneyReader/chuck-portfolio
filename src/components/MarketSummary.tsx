@@ -103,28 +103,59 @@ function StatusBadge() {
     : <span className="text-gray-600 text-xs">○ 장마감</span>;
 }
 
+// ─── 등락률 → 즉시 heuristic 뱃지 ──────────────────────────────────────────
+function heuristicBadge(pct: number): string {
+  if (pct >= 7)  return "급등 모멘텀";
+  if (pct >= 3)  return "강한 매수세";
+  if (pct >= 1)  return "외국인 매수";
+  if (pct >= 0)  return "소폭 강보합";
+  if (pct >= -1) return "소폭 약보합";
+  if (pct >= -3) return "차익 실현";
+  if (pct >= -7) return "기관 매물";
+  return "패닉 매도";
+}
+
 // ─── 상승 TOP 10 ──────────────────────────────────────────────────────────────
 
 function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
-  const [rows, setRows] = useState<StockRow[]>([]);
+  const [rows, setRows]     = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ts, setTs] = useState("");
+  const [ts, setTs]         = useState("");
+  const [badges, setBadges] = useState<Record<string, string>>({});
+
+  const mkt = market === "KOSDAQ" ? "KQ" : "KS";
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
-      setRows(json.topGainers ?? []);
+      const gainers: StockRow[] = json.topGainers ?? [];
+      setRows(gainers);
       setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+
+      // 즉시 heuristic 뱃지 세팅
+      const init: Record<string, string> = {};
+      gainers.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
+      setBadges(init);
+
+      // 백그라운드: AI 요약으로 교체 (병렬 10개, 30분 캐시로 실제론 빠름)
+      gainers.forEach(r => {
+        const ticker = `${r.code}.${mkt}`;
+        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(ns => {
+            if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary }));
+          })
+          .catch(() => null);
+      });
     } catch { /* silent */ } finally { setLoading(false); }
-  }, [market]);
+  }, [market, mkt]);
 
   useEffect(() => {
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      // 매 tick마다 장 상태를 재평가 — mount 시점에 고정되지 않음
       const delay = isMarketOpen() ? 30_000 : 120_000;
       tid = setTimeout(() => { load(); schedule(); }, delay);
     }
@@ -143,13 +174,14 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
         <span className="w-20 text-right">현재가</span>
         <span className="w-14 text-right">등락률</span>
         <span className="w-14 text-right hidden sm:block">거래량</span>
+        <span className="w-24 text-right hidden md:block">오늘의 이유</span>
       </div>
       {loading ? <SkeletonRows /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
             <div key={r.code}
               className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
-              onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
+              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
             >
               <RankBadge rank={r.rank} />
               <div className="flex-1 min-w-0">
@@ -161,6 +193,16 @@ function TopGainersList({ market, onSelect }: { market: string; onSelect: (d: Dr
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
               <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block">{fmtVol(r.volume)}</span>
+              {/* 오늘의 이유 뱃지 */}
+              <div className="w-24 text-right hidden md:flex justify-end shrink-0">
+                {badges[r.code] ? (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
+                    ✦ {badges[r.code]}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-gray-700">—</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
