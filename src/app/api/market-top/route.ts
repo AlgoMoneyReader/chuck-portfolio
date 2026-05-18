@@ -2,126 +2,124 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// ── 서버사이드 캐시 (Vercel warm instance 내 공유 — YF rate-limit 방어) ─────
+// ── 서버사이드 캐시 ──────────────────────────────────────────────────────────
 interface CacheEntry {
   data: { market: string; topGainers: TopGainerRow[]; topLosers: TopGainerRow[]; topByAmount: TopGainerRow[]; timestamp: string };
   ts: number;
 }
 const serverCache: Record<string, CacheEntry> = {};
-const CACHE_TTL_MS = 15_000; // 15초: 클라이언트 10초 폴링에도 YF 호출은 최대 15초 1회
+const CACHE_TTL_MS = 10_000; // 10초
 
 // ── 종목명 매핑 ───────────────────────────────────────────────────────────────
 const KR_NAMES: Record<string, string> = {
-  "005930.KS": "삼성전자",      "000660.KS": "SK하이닉스",    "005380.KS": "현대차",
-  "035420.KS": "NAVER",         "051910.KS": "LG화학",         "207940.KS": "삼성바이오로직스",
-  "005490.KS": "POSCO홀딩스",   "000270.KS": "기아",           "006400.KS": "삼성SDI",
-  "068270.KS": "셀트리온",      "096770.KS": "SK이노베이션",   "035720.KS": "카카오",
-  "034730.KS": "SK스퀘어",      "003550.KS": "LG",             "012330.KS": "현대모비스",
-  "009150.KS": "삼성전기",      "042700.KS": "한미반도체",     "055550.KS": "신한지주",
-  "105560.KS": "KB금융",        "086790.KS": "하나금융지주",   "032830.KS": "삼성생명",
-  "066570.KS": "LG전자",        "028260.KS": "삼성물산",       "000810.KS": "삼성화재",
-  "003600.KS": "SK",            "011200.KS": "HMM",            "010130.KS": "고려아연",
-  "018260.KS": "삼성SDS",       "003490.KS": "대한항공",       "011070.KS": "LG이노텍",
-  "078930.KS": "GS",            "033780.KS": "KT&G",           "010950.KS": "S-Oil",
-  "036570.KS": "엔씨소프트",    "090430.KS": "아모레퍼시픽",   "024110.KS": "기업은행",
-  "097950.KS": "CJ제일제당",    "019170.KS": "신세계",         "047050.KS": "포스코인터내셔널",
-  "161390.KS": "한국타이어",    "316140.KS": "우리금융지주",   "032640.KS": "LG유플러스",
-  "030200.KS": "KT",            "017670.KS": "SK텔레콤",       "015760.KS": "한국전력",
+  "005930": "삼성전자",      "000660": "SK하이닉스",    "005380": "현대차",
+  "035420": "NAVER",         "051910": "LG화학",         "207940": "삼성바이오로직스",
+  "005490": "POSCO홀딩스",   "000270": "기아",           "006400": "삼성SDI",
+  "068270": "셀트리온",      "096770": "SK이노베이션",   "035720": "카카오",
+  "034730": "SK스퀘어",      "003550": "LG",             "012330": "현대모비스",
+  "009150": "삼성전기",      "042700": "한미반도체",     "055550": "신한지주",
+  "105560": "KB금융",        "086790": "하나금융지주",   "032830": "삼성생명",
+  "066570": "LG전자",        "028260": "삼성물산",       "000810": "삼성화재",
+  "003600": "SK",            "011200": "HMM",            "010130": "고려아연",
+  "018260": "삼성SDS",       "003490": "대한항공",       "011070": "LG이노텍",
+  "078930": "GS",            "033780": "KT&G",           "010950": "S-Oil",
+  "036570": "엔씨소프트",    "090430": "아모레퍼시픽",   "024110": "기업은행",
+  "097950": "CJ제일제당",    "019170": "신세계",         "047050": "포스코인터내셔널",
+  "161390": "한국타이어",    "316140": "우리금융지주",   "032640": "LG유플러스",
+  "030200": "KT",            "017670": "SK텔레콤",       "015760": "한국전력",
   // KOSDAQ
-  "247540.KQ": "에코프로비엠",  "086520.KQ": "에코프로",       "196170.KQ": "알테오젠",
-  "357780.KQ": "솔브레인",      "263750.KQ": "펄어비스",       "145020.KQ": "휴젤",
-  "214150.KQ": "클래시스",      "041510.KQ": "SM엔터",         "035900.KQ": "JYP엔터",
-  "122870.KQ": "와이지엔터",    "091990.KQ": "셀트리온헬스케어","005290.KQ": "동진쎄미켐",
-  "059270.KQ": "해성디에스",    "112040.KQ": "위메이드",       "220100.KQ": "퓨처켐",
-  "039030.KQ": "이오테크닉스",  "068760.KQ": "셀트리온제약",   "293490.KQ": "카카오게임즈",
-  "067310.KQ": "하나마이크론",  "036810.KQ": "에프에스티",     "183300.KQ": "코미팜",
-  "048260.KQ": "오스템임플란트","376300.KQ": "디어유",
+  "247540": "에코프로비엠",  "086520": "에코프로",       "196170": "알테오젠",
+  "357780": "솔브레인",      "263750": "펄어비스",       "145020": "휴젤",
+  "214150": "클래시스",      "041510": "SM엔터",         "035900": "JYP엔터",
+  "122870": "와이지엔터",    "091990": "셀트리온헬스케어","005290": "동진쎄미켐",
+  "059270": "해성디에스",    "112040": "위메이드",       "220100": "퓨처켐",
+  "039030": "이오테크닉스",  "068760": "셀트리온제약",   "293490": "카카오게임즈",
+  "067310": "하나마이크론",  "036810": "에프에스티",     "183300": "코미팜",
+  "048260": "오스템임플란트","376300": "디어유",
 };
 
-const KOSPI_SYMBOLS = [
-  "005930.KS","000660.KS","005380.KS","035420.KS","051910.KS",
-  "207940.KS","005490.KS","000270.KS","006400.KS","068270.KS",
-  "096770.KS","035720.KS","034730.KS","003550.KS","012330.KS",
-  "009150.KS","042700.KS","055550.KS","105560.KS","086790.KS",
-  "032830.KS","066570.KS","028260.KS","000810.KS","003600.KS",
-  "011200.KS","010130.KS","018260.KS","003490.KS","011070.KS",
-  "078930.KS","033780.KS","010950.KS","036570.KS","090430.KS",
-  "024110.KS","097950.KS","019170.KS","047050.KS","161390.KS",
-  "316140.KS","032640.KS","030200.KS","017670.KS","015760.KS",
+// 시장별 종목 코드 (6자리, .KS/.KQ 없이)
+const KOSPI_CODES = [
+  "005930","000660","005380","035420","051910",
+  "207940","005490","000270","006400","068270",
+  "096770","035720","034730","003550","012330",
+  "009150","042700","055550","105560","086790",
+  "032830","066570","028260","000810","003600",
+  "011200","010130","018260","003490","011070",
+  "078930","033780","010950","036570","090430",
+  "024110","097950","019170","047050","161390",
+  "316140","032640","030200","017670","015760",
 ];
-const KOSDAQ_SYMBOLS = [
-  "247540.KQ","086520.KQ","196170.KQ","357780.KQ","263750.KQ",
-  "145020.KQ","214150.KQ","041510.KQ","035900.KQ","122870.KQ",
-  "091990.KQ","005290.KQ","059270.KQ","112040.KQ","220100.KQ",
-  "039030.KQ","068760.KQ","293490.KQ","067310.KQ","036810.KQ",
-  "183300.KQ","048260.KQ","376300.KQ",
+const KOSDAQ_CODES = [
+  "247540","086520","196170","357780","263750",
+  "145020","214150","041510","035900","122870",
+  "091990","005290","059270","112040","220100",
+  "039030","068760","293490","067310","036810",
+  "183300","048260","376300",
 ];
 
 interface TopGainerRow {
   rank: number; code: string; symbol: string;
   name: string; price: number; change: number;
   changePct: number; volume: number;
-  tradeAmount: number; // 거래대금 (원) = price × volume
+  tradeAmount: number;
 }
 
-async function fetchOneChart(symbol: string): Promise<Omit<TopGainerRow, "rank"> | null> {
-  try {
-    // 타임스탬프로 Yahoo Finance / CDN 캐시 완전 무효화
-    const bust = Date.now();
-    const url =
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
-      `?interval=1d&range=1d&includePrePost=false&_=${bust}`;
+// ── Naver Finance 실시간 현재가 API ──────────────────────────────────────────
+// https://api.finance.naver.com/service/itemSummary.nhn?itemcode=005930
+// 반환: { now, diff, rate, quant, amount, high, low, ... }
+// now=현재가, diff=전일대비, rate=등락률(%), quant=거래량(주), amount=거래대금(백만원)
 
+interface NaverSummary {
+  now: number;      // 현재가
+  diff: number;     // 전일대비
+  rate: number;     // 등락률 (%)
+  quant: number;    // 거래량 (주)
+  amount: number;   // 거래대금 (백만원)
+}
+
+const NAVER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+const REFERER  = "https://finance.naver.com/";
+
+async function fetchNaverSummary(code: string): Promise<{ code: string; data: NaverSummary } | null> {
+  try {
+    const url = `https://api.finance.naver.com/service/itemSummary.nhn?itemcode=${code}`;
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      headers: { "User-Agent": NAVER_UA, "Referer": REFERER },
+      signal: AbortSignal.timeout(5000),
       cache: "no-store",
     });
     if (!res.ok) return null;
-    const json = await res.json();
-    const result = json?.chart?.result?.[0];
-    if (!result) return null;
-
-    const meta = result.meta;
-    const price: number = meta.regularMarketPrice;
-    const prev: number  = meta.chartPreviousClose ?? meta.previousClose;
-    if (!price || !prev) return null;
-
-    // ── 거래량 이중 폴백 (당일 누적 거래량, acml_vol 상당) ─────────────────
-    // 1순위: meta.regularMarketVolume (실시간 누적)
-    // 2순위: indicators.quote[0].volume 배열 마지막 유효값 (장 초반 meta=0일 때)
-    const metaVol = (meta.regularMarketVolume as number | undefined) ?? 0;
-    const indicatorVolumes: (number | null)[] =
-      result.indicators?.quote?.[0]?.volume ?? [];
-    const lastBarVol =
-      [...indicatorVolumes].reverse().find(v => v !== null && v > 0) ?? 0;
-    const volume = metaVol > 0 ? metaVol : (lastBarVol as number);
-
-    const change    = price - prev;
-    const changePct = (change / prev) * 100;
-
-    const roundedPrice = Math.round(price);
-    return {
-      symbol,
-      code: symbol.replace(/\.(KS|KQ)$/, ""),
-      name: KR_NAMES[symbol] ??
-        (meta.longName ?? meta.shortName ?? symbol)
-          .replace(/\s*(Co\.?|Ltd\.?|Corp\.?|Inc\.?|Holdings?|Hldgs?)\.?$/i, ""),
-      price:       roundedPrice,
-      change:      Math.round(change),
-      changePct:   parseFloat(changePct.toFixed(2)),
-      volume,
-      tradeAmount: roundedPrice * volume,  // 거래대금 (원)
-    };
+    const text = await res.text();
+    if (!text || text.trim().length < 5) return null;
+    const data = JSON.parse(text) as NaverSummary;
+    if (!data.now || data.now === 0) return null;
+    return { code, data };
   } catch {
     return null;
   }
+}
+
+// 청크 단위 병렬 수집 (한 번에 15개씩, 총 3~4 라운드)
+async function fetchAllCodes(codes: string[]): Promise<Map<string, NaverSummary>> {
+  const CHUNK = 15;
+  const map = new Map<string, NaverSummary>();
+
+  for (let i = 0; i < codes.length; i += CHUNK) {
+    const chunk = codes.slice(i, i + CHUNK);
+    const results = await Promise.all(chunk.map(fetchNaverSummary));
+    for (const r of results) {
+      if (r) map.set(r.code, r.data);
+    }
+  }
+  return map;
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const market = searchParams.get("market") ?? "KOSPI";
 
-  // 서버사이드 캐시 HIT → 즉시 반환 (YF 호출 생략)
+  // 서버사이드 캐시 HIT
   const cached = serverCache[market];
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return NextResponse.json(cached.data, {
@@ -130,10 +128,27 @@ export async function GET(request: Request) {
   }
 
   try {
-    const symbols = market === "KOSDAQ" ? KOSDAQ_SYMBOLS : KOSPI_SYMBOLS;
-    const results  = await Promise.all(symbols.map(fetchOneChart));
+    const codes = market === "KOSDAQ" ? KOSDAQ_CODES : KOSPI_CODES;
+    const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
 
-    const valid = results.filter((r): r is NonNullable<typeof r> => r !== null);
+    const dataMap = await fetchAllCodes(codes);
+
+    const valid: Omit<TopGainerRow, "rank">[] = [];
+    for (const code of codes) {
+      const d = dataMap.get(code);
+      if (!d) continue;
+
+      valid.push({
+        symbol:      code + mktSuffix,
+        code,
+        name:        KR_NAMES[code] ?? code,
+        price:       Math.round(d.now),
+        change:      Math.round(d.diff),
+        changePct:   parseFloat(d.rate.toFixed(2)),
+        volume:      d.quant,
+        tradeAmount: Math.round(d.now) * d.quant, // price × 거래량 (원)
+      });
+    }
 
     const topGainers: TopGainerRow[] = [...valid]
       .sort((a, b) => b.changePct - a.changePct)
@@ -141,7 +156,7 @@ export async function GET(request: Request) {
       .map((r, i) => ({ rank: i + 1, ...r }));
 
     const topLosers: TopGainerRow[] = [...valid]
-      .sort((a, b) => a.changePct - b.changePct)   // 오름차순 = 하락폭 큰 순
+      .sort((a, b) => a.changePct - b.changePct)
       .slice(0, 20)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
