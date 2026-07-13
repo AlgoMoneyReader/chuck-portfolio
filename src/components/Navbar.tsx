@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/", label: "홈", icon: "◈" },
   { href: "/portfolio", label: "포트폴리오", icon: "◉" },
   { href: "/analyze", label: "종목 분석", icon: "◎" },
+  { href: "/prompts", label: "프롬프트", icon: "✦", adminOnly: true },
   { href: "/admin", label: "운영자", icon: "🔒", adminOnly: true },
 ];
 
