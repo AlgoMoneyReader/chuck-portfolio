@@ -24,6 +24,7 @@ async function fetchFlow(market: string): Promise<{ label: string; netBuy: numbe
       "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "ko-KR,ko;q=0.9",
     },
+    signal: AbortSignal.timeout(8000),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -43,7 +44,11 @@ async function fetchFlow(market: string): Promise<{ label: string; netBuy: numbe
         tds.push(tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
       }
       const isDateRow = tds.length >= 4 &&
-        (/\d{4}\.\d{2}\.\d{2}/.test(tds[0]) || /^\d{2}\.\d{2}$/.test(tds[0]));
+        (
+          /^\d{4}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+          /^\d{2}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+          /^\d{2}\.\d{2}$/.test(tds[0])
+        );
       if (isDateRow) {
         return [
           { label: "개인",   netBuy: parseNum(tds[1] ?? "0") },

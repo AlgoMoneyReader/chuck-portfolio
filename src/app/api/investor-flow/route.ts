@@ -122,6 +122,7 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
       "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "ko-KR,ko;q=0.9",
     },
+    signal: AbortSignal.timeout(8000),
     cache: "no-store",
   });
 
@@ -152,10 +153,14 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
           tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()
         );
       }
-      // 날짜 패턴: YYYY.MM.DD 또는 MM.DD
+      // 날짜 패턴: YYYY.MM.DD 또는 YY.MM.DD 또는 MM.DD
       const isDateRow =
         localTds.length >= 4 &&
-        (/\d{4}\.\d{2}\.\d{2}/.test(localTds[0]) || /^\d{2}\.\d{2}$/.test(localTds[0]));
+        (
+          /^\d{4}\.\d{2}\.\d{2}$/.test(localTds[0]) ||
+          /^\d{2}\.\d{2}\.\d{2}$/.test(localTds[0]) ||
+          /^\d{2}\.\d{2}$/.test(localTds[0])
+        );
       if (isDateRow) {
         cells = localTds;
         break outer;
