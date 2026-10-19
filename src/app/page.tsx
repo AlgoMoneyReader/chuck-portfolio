@@ -56,7 +56,7 @@ export default function Home() {
           ALGORITHM · AI · INVESTMENT
         </div>
         <h1 className="text-4xl font-black text-white tracking-tight leading-tight">
-          알고리즘이 읽어주는 돈
+          알고리즘으로 읽어주는 남자
         </h1>
         <p className="text-gray-400 text-sm max-w-lg mx-auto leading-relaxed">
           복잡한 시장, 알읽남이 먼저 읽어드립니다.<br />
@@ -86,7 +86,7 @@ export default function Home() {
       <div className="card bg-navy-sub/50 border border-electric-blue/20">
         <h2 className="card-title mb-3">알읽남 채널 소개</h2>
         <p className="text-gray-300 text-sm leading-relaxed mb-4">
-          <span className="text-gold font-bold">알읽남</span>은 <span className="text-white font-semibold">알고리즘이 읽어주는 돈</span>의 줄임말입니다.<br />
+          <span className="text-gold font-bold">알읽남</span>은 <span className="text-white font-semibold">알고리즘으로 읽어주는 남자</span>의 줄임말입니다.<br />
           매일 쏟아지는 뉴스와 시장 데이터를 AI가 분석해 핵심 인사이트만 전달합니다.<br />
           주식이 어렵게 느껴졌다면, 이제 알읽남과 함께 읽어보세요.
         </p>
