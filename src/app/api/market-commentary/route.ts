@@ -32,31 +32,31 @@ async function fetchFlow(market: string): Promise<{ label: string; netBuy: numbe
   const buf = await res.arrayBuffer();
   const html = new TextDecoder("euc-kr").decode(buf);
 
-  const tbodyMatches = [...html.matchAll(/<tbody[^>]*>([\s\S]*?)<\/tbody>/gi)];
-  for (const tbodyMatch of tbodyMatches) {
-    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let trMatch: RegExpExecArray | null;
-    while ((trMatch = trPattern.exec(tbodyMatch[1])) !== null) {
-      const tds: string[] = [];
-      const tdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-      let tdMatch: RegExpExecArray | null;
-      while ((tdMatch = tdPat.exec(trMatch[1])) !== null) {
-        tds.push(tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
-      }
-      const isDateRow = tds.length >= 4 &&
-        (
-          /^\d{4}\.\d{2}\.\d{2}$/.test(tds[0]) ||
-          /^\d{2}\.\d{2}\.\d{2}$/.test(tds[0]) ||
-          /^\d{2}\.\d{2}$/.test(tds[0])
-        );
-      if (isDateRow) {
-        return [
-          { label: "개인",   netBuy: parseNum(tds[1] ?? "0") },
-          { label: "외국인", netBuy: parseNum(tds[2] ?? "0") },
-          { label: "기관",   netBuy: parseNum(tds[3] ?? "0") },
-        ];
-      }
+  // <tr> 전체 스캔 — tbody 유무에 관계없이 동작
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html)) !== null) {
+    const tds: string[] = [];
+    const tdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let tdMatch: RegExpExecArray | null;
+    while ((tdMatch = tdPat.exec(m[1])) !== null) {
+      tds.push(tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
     }
+    if (tds.length < 4) continue;
+    const isDateRow =
+      /^\d{4}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+      /^\d{2}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+      /^\d{2}\.\d{2}$/.test(tds[0]);
+    if (!isDateRow) continue;
+    const individual = parseNum(tds[1] ?? "0");
+    const foreign    = parseNum(tds[2] ?? "0");
+    const institution = parseNum(tds[3] ?? "0");
+    if (Math.abs(individual) + Math.abs(foreign) + Math.abs(institution) === 0) continue;
+    return [
+      { label: "개인",   netBuy: individual },
+      { label: "외국인", netBuy: foreign },
+      { label: "기관",   netBuy: institution },
+    ];
   }
   throw new Error("no data row");
 }

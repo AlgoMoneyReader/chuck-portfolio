@@ -111,6 +111,7 @@ async function fetchNaverMobileFlow2(market: string): Promise<FlowItem[]> {
 }
 
 // Attempt 3: Fallback — parse Naver Finance HTML table (EUC-KR 디코딩)
+// investor-ranking과 동일 방식: <tr> 전체 스캔, tbody 없어도 동작
 async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
   const sosok = market === "KOSDAQ" ? 1 : 0;
   const url = `https://finance.naver.com/sise/siseInvestorDealTrend.naver?sosok=${sosok}`;
@@ -128,62 +129,52 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
 
   if (!res.ok) throw new Error(`Naver HTML HTTP ${res.status}`);
 
-  // EUC-KR 디코딩 (investor-ranking과 동일한 방식)
+  // EUC-KR 디코딩 (investor-ranking과 동일)
   const buf = await res.arrayBuffer();
   const html = new TextDecoder("euc-kr").decode(buf);
 
-  // 모든 tbody 순회하여 날짜 행 탐색
-  const tbodyMatches = [...html.matchAll(/<tbody[^>]*>([\s\S]*?)<\/tbody>/gi)];
-  if (!tbodyMatches.length) throw new Error("tbody not found");
+  // <tr> 전체 스캔 — tbody 유무에 관계없이 동작 (investor-ranking 방식)
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
 
-  let cells: string[] = [];
-
-  outer:
-  for (const tbodyMatch of tbodyMatches) {
-    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let trMatch: RegExpExecArray | null;
-
-    while ((trMatch = trPattern.exec(tbodyMatch[1])) !== null) {
-      const innerHtml = trMatch[1];
-      const localTds: string[] = [];
-      const localTdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-      let tdMatch: RegExpExecArray | null;
-      while ((tdMatch = localTdPat.exec(innerHtml)) !== null) {
-        localTds.push(
-          tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()
-        );
-      }
-      // 날짜 패턴: YYYY.MM.DD 또는 YY.MM.DD 또는 MM.DD
-      const isDateRow =
-        localTds.length >= 4 &&
-        (
-          /^\d{4}\.\d{2}\.\d{2}$/.test(localTds[0]) ||
-          /^\d{2}\.\d{2}\.\d{2}$/.test(localTds[0]) ||
-          /^\d{2}\.\d{2}$/.test(localTds[0])
-        );
-      if (isDateRow) {
-        cells = localTds;
-        break outer;
-      }
+  while ((m = rowRe.exec(html)) !== null) {
+    const row = m[1];
+    const tds: string[] = [];
+    const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let tdM: RegExpExecArray | null;
+    while ((tdM = tdRe.exec(row)) !== null) {
+      tds.push(
+        tdM[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()
+      );
     }
+
+    if (tds.length < 4) continue;
+
+    // 날짜 패턴: YYYY.MM.DD / YY.MM.DD / MM.DD
+    const isDateRow =
+      /^\d{4}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+      /^\d{2}\.\d{2}\.\d{2}$/.test(tds[0]) ||
+      /^\d{2}\.\d{2}$/.test(tds[0]);
+
+    if (!isDateRow) continue;
+
+    // Column order: 날짜(0), 개인(1), 외국인(2), 기관합계(3)
+    const individual  = parseKoreanNum(tds[1] ?? "0");
+    const foreign     = parseKoreanNum(tds[2] ?? "0");
+    const institution = parseKoreanNum(tds[3] ?? "0");
+
+    if (Math.abs(individual) + Math.abs(foreign) + Math.abs(institution) === 0) {
+      continue; // 빈 행 스킵, 다음 날짜 행 탐색
+    }
+
+    return [
+      { type: "foreign",     label: "외국인", netBuy: foreign,     buy: 0, sell: 0 },
+      { type: "institution", label: "기관",   netBuy: institution, buy: 0, sell: 0 },
+      { type: "individual",  label: "개인",   netBuy: individual,  buy: 0, sell: 0 },
+    ];
   }
 
-  if (!cells.length) throw new Error("no data row found in HTML");
-
-  // Column order: date(0) individual(1) foreign(2) institution(3) ...
-  const individual  = parseKoreanNum(cells[1] ?? "0");
-  const foreign     = parseKoreanNum(cells[2] ?? "0");
-  const institution = parseKoreanNum(cells[3] ?? "0");
-
-  if (Math.abs(individual) + Math.abs(foreign) + Math.abs(institution) === 0) {
-    throw new Error("all zero values — likely wrong row");
-  }
-
-  return [
-    { type: "foreign",     label: "외국인", netBuy: foreign,     buy: 0, sell: 0 },
-    { type: "institution", label: "기관",   netBuy: institution, buy: 0, sell: 0 },
-    { type: "individual",  label: "개인",   netBuy: individual,  buy: 0, sell: 0 },
-  ];
+  throw new Error("no data row found in HTML");
 }
 
 export async function GET(request: Request) {
