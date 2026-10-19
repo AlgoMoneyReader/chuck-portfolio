@@ -15,11 +15,11 @@ export default function Navbar() {
   const pathname = usePathname();
 
   return (
-    <nav className="sticky top-0 z-50 bg-navy-sub/90 backdrop-blur-md border-b border-navy-border">
+    <nav className="sticky top-0 z-50 bg-navy-sub/95 backdrop-blur-md border-b border-navy-border">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-gold font-mono font-bold text-sm tracking-widest">알읽남</span>
-          <span className="text-gray-500 text-xs hidden sm:block">Investment Dashboard</span>
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="text-gold font-black text-base tracking-widest">알읽남</span>
+          <span className="text-electric-blue/60 text-xs hidden sm:block font-medium">@alliknam</span>
         </Link>
 
         <div className="flex items-center gap-1">
