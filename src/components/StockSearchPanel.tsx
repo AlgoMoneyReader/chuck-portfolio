@@ -254,6 +254,7 @@ export default function StockSearchPanel() {
   const searchContainerRef = useRef<HTMLDivElement>(null);
   // 종목 선택 직후 재검색 방지 (setSearchQuery(item.name) 트리거로 드롭다운 재오픈되는 버그 차단)
   const skipNextSearchRef = useRef(false);
+  const justSelectedRef = useRef(false);
 
   // ── 검색: 300ms 디바운스 API 검색 (항상 동작 — master 로드 여부 무관) ────
   useEffect(() => {
@@ -293,6 +294,11 @@ export default function StockSearchPanel() {
     const q = searchQuery.trim();
     if (!q || !masterLoaded || allStocks.length === 0) return;
 
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+
     const lq = q.toLowerCase();
     try {
       const hits = allStocks
@@ -303,6 +309,13 @@ export default function StockSearchPanel() {
         )
         .slice(0, 10);
 
+      // 영문 입력이면 hits가 0이어도 US stock 버튼을 위해 dropdown 열기
+      if (hits.length === 0 && /^[A-Za-z]/.test(lq)) {
+        setSuggestions([]);
+        setDropdownOpen(true);
+        setHighlightIdx(-1);
+        return;
+      }
       setSuggestions(hits);
       setDropdownOpen(hits.length > 0);
       setHighlightIdx(-1);
@@ -339,6 +352,7 @@ export default function StockSearchPanel() {
     };
     setSelected(stockItem);
     skipNextSearchRef.current = true;
+    justSelectedRef.current = true;
     setSearchQuery(isUS ? `${name} (${code.toUpperCase()})` : name);
     setDropdownOpen(false);
     setHighlightIdx(-1);
@@ -481,7 +495,7 @@ export default function StockSearchPanel() {
         )}
 
         {/* 드롭다운: 결과 있음 OR 미국주식 입력 감지 */}
-        {(dropdownOpen && suggestions.length > 0) || (searchQuery.trim() && /^[A-Za-z]/.test(searchQuery.trim())) ? (
+        {dropdownOpen ? (
           <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-2xl overflow-hidden animate-fade-in"
             style={{ zIndex: 60 }}>
             {suggestions.map((item, idx) => {
