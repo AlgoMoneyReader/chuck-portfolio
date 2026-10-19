@@ -183,19 +183,20 @@ export async function GET(request: Request) {
 
   const attempts = [fetchNaverMobileFlow, fetchNaverMobileFlow2, fetchNaverHTMLFlow];
 
+  const errors: string[] = [];
   for (const attempt of attempts) {
     try {
       const flow = await attempt(market);
       if (flow.length) {
         return NextResponse.json({ market, flow, timestamp: new Date().toISOString() });
       }
-    } catch {
-      // try next
+    } catch (e) {
+      errors.push(`${attempt.name}: ${String(e)}`);
     }
   }
 
   return NextResponse.json(
-    { error: "투자자 동향 데이터를 불러올 수 없습니다" },
+    { error: "투자자 동향 데이터를 불러올 수 없습니다", debug: errors },
     { status: 500 }
   );
 }
