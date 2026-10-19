@@ -2,10 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  --font-noto: 'Noto Sans KR', sans-serif;
+  --font-pretendard: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-jetbrains: 'JetBrains Mono', monospace;
 }
 
@@ -16,7 +17,7 @@
 body {
   background-color: #07111E;
   color: #E8EFF7;
-  font-family: var(--font-noto), sans-serif;
+  font-family: var(--font-pretendard), sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

@@ -8,7 +8,6 @@ const NAV_ITEMS = [
   { href: "/", label: "홈", icon: "◈" },
   { href: "/portfolio", label: "포트폴리오", icon: "◉" },
   { href: "/analyze", label: "종목 분석", icon: "◎" },
-  { href: "/prompts", label: "프롬프트", icon: "✦", adminOnly: true },
   { href: "/admin", label: "운영자", icon: "🔒", adminOnly: true },
 ];
 
@@ -50,7 +49,7 @@ export default function Navbar() {
 
         <div className="flex items-center gap-2">
           <a
-            href="https://www.instagram.com/algo_money_reader/"
+            href="https://www.instagram.com/alliknam"
             target="_blank"
             rel="noopener noreferrer"
             className="group flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:bg-white/5"

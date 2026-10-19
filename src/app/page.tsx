@@ -10,7 +10,7 @@ const FEATURES = [
     href: "/portfolio",
     icon: "◉",
     title: "포트폴리오 관리",
-    desc: "보유 종목 입력 시 실시간 손익 자동 계산. 국내·해외 통합 관리.",
+    desc: "보유 종목 입력하면 실시간 손익 자동 계산. 국내·해외 통합 관리.",
     color: "border-cyan-brand/30 hover:border-cyan-brand",
     badge: "무료",
     badgeColor: "text-cyan-brand bg-cyan-brand/10",
@@ -19,7 +19,7 @@ const FEATURES = [
     href: "/analyze",
     icon: "◎",
     title: "AI 종목 분석",
-    desc: "티커 입력 시 펀드매니저급 리서치 보고서 즉시 생성. 매수/보유/매도 추천.",
+    desc: "티커 하나면 펀드매니저급 리서치 보고서 즉시 생성. 매수·보유·매도 의견까지.",
     color: "border-gold/30 hover:border-gold",
     badge: "AI",
     badgeColor: "text-gold bg-gold/10",
@@ -51,12 +51,12 @@ export default function Home() {
 
       {/* 히어로 */}
       <div className="text-center space-y-3 py-4">
-        <h1 className="text-3xl font-bold text-white">
+        <h1 className="text-3xl font-bold text-white tracking-tight">
           알고리즘이 읽어주는 돈
         </h1>
         <p className="text-gray-400 text-sm max-w-xl mx-auto leading-relaxed">
-          실시간 시장 데이터 · AI 종목 분석 · 포트폴리오 손익 추적<br />
-          투자 의사결정에 필요한 모든 것을 한 곳에서
+          복잡한 시장, 내가 먼저 읽어드립니다<br />
+          실시간 시황 · AI 종목 분석 · 포트폴리오 손익 한눈에
         </p>
       </div>
 
@@ -82,8 +82,9 @@ export default function Home() {
       <div className="card bg-navy-sub/50">
         <h2 className="card-title mb-3">알읽남 채널 소개</h2>
         <p className="text-gray-300 text-sm leading-relaxed mb-4">
-          국내외 증시 핵심 정보를 AI와 함께 분석하는 투자 채널입니다.<br />
-          복잡한 시장 데이터를 누구나 이해할 수 있는 인사이트로 전달합니다.
+          알읽남은 <span className="text-gold font-semibold">알고리즘이 읽어주는 돈</span>의 줄임말입니다.<br />
+          매일 쏟아지는 경제 뉴스와 시장 데이터를 직접 분석해 핵심만 전달합니다.<br />
+          어렵게 느껴지는 투자, 알읽남과 함께라면 조금 더 쉬워집니다.
         </p>
         <div className="flex flex-wrap gap-2">
           {["실시간 시황", "AI 종목 분석", "포트폴리오 전략", "퀀트 투자", "ETF 분석"].map((tag) => (
