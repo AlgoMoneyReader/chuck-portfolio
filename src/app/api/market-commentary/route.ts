@@ -13,30 +13,47 @@ function parseNum(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-async function fetchFlow(market: string) {
-  const code = market === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    "Referer": "https://m.stock.naver.com/",
-    "Accept": "application/json",
-  };
-  const res = await fetch(`https://m.stock.naver.com/api/index/${code}/investorGroup`, { headers, cache: "no-store" });
-  if (!res.ok) throw new Error("flow fetch failed");
-  const json = await res.json();
-  const groups: { investorType: string; netBuy: string }[] = json?.investorGroup ?? [];
-  const TYPE_MAP: Record<string, string> = {
-    INDIVIDUAL: "개인", FOREIGN_RETAIL: "외국인", FOREIGN: "외국인",
-    INSTITUTION: "기관", INSTITUTION_SUM: "기관",
-  };
-  const seen = new Set<string>();
-  const result: { label: string; netBuy: number }[] = [];
-  for (const g of groups) {
-    const label = TYPE_MAP[g.investorType];
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    result.push({ label, netBuy: parseNum(g.netBuy ?? "0") });
+// finance.naver.com HTML 스크래핑 (EUC-KR, investor-ranking과 동일 방식)
+async function fetchFlow(market: string): Promise<{ label: string; netBuy: number }[]> {
+  const sosok = market === "KOSDAQ" ? 1 : 0;
+  const url = `https://finance.naver.com/sise/siseInvestorDealTrend.naver?sosok=${sosok}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Referer": "https://finance.naver.com/",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "ko-KR,ko;q=0.9",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const buf = await res.arrayBuffer();
+  const html = new TextDecoder("euc-kr").decode(buf);
+
+  const tbodyMatches = [...html.matchAll(/<tbody[^>]*>([\s\S]*?)<\/tbody>/gi)];
+  for (const tbodyMatch of tbodyMatches) {
+    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch: RegExpExecArray | null;
+    while ((trMatch = trPattern.exec(tbodyMatch[1])) !== null) {
+      const tds: string[] = [];
+      const tdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let tdMatch: RegExpExecArray | null;
+      while ((tdMatch = tdPat.exec(trMatch[1])) !== null) {
+        tds.push(tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim());
+      }
+      const isDateRow = tds.length >= 4 &&
+        (/\d{4}\.\d{2}\.\d{2}/.test(tds[0]) || /^\d{2}\.\d{2}$/.test(tds[0]));
+      if (isDateRow) {
+        return [
+          { label: "개인",   netBuy: parseNum(tds[1] ?? "0") },
+          { label: "외국인", netBuy: parseNum(tds[2] ?? "0") },
+          { label: "기관",   netBuy: parseNum(tds[3] ?? "0") },
+        ];
+      }
+    }
   }
-  return result;
+  throw new Error("no data row");
 }
 
 export async function GET(request: Request) {

@@ -110,7 +110,7 @@ async function fetchNaverMobileFlow2(market: string): Promise<FlowItem[]> {
   return ORDER.map(t => result.find(r => r.type === t)).filter(Boolean) as FlowItem[];
 }
 
-// Attempt 3: Fallback — parse Naver Finance HTML table
+// Attempt 3: Fallback — parse Naver Finance HTML table (EUC-KR 디코딩)
 async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
   const sosok = market === "KOSDAQ" ? 1 : 0;
   const url = `https://finance.naver.com/sise/siseInvestorDealTrend.naver?sosok=${sosok}`;
@@ -118,7 +118,7 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Referer": "https://finance.naver.com/sise/investorDealTrendDay.naver",
+      "Referer": "https://finance.naver.com/",
       "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "ko-KR,ko;q=0.9",
     },
@@ -126,26 +126,40 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
   });
 
   if (!res.ok) throw new Error(`Naver HTML HTTP ${res.status}`);
-  const html = await res.text();
 
-  const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
-  if (!tbodyMatch) throw new Error("tbody not found");
+  // EUC-KR 디코딩 (investor-ranking과 동일한 방식)
+  const buf = await res.arrayBuffer();
+  const html = new TextDecoder("euc-kr").decode(buf);
 
-  const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  // 모든 tbody 순회하여 날짜 행 탐색
+  const tbodyMatches = [...html.matchAll(/<tbody[^>]*>([\s\S]*?)<\/tbody>/gi)];
+  if (!tbodyMatches.length) throw new Error("tbody not found");
+
   let cells: string[] = [];
-  let trMatch: RegExpExecArray | null;
 
-  while ((trMatch = trPattern.exec(tbodyMatch[1])) !== null) {
-    const innerHtml = trMatch[1];
-    const localTds: string[] = [];
-    const localTdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    let tdMatch: RegExpExecArray | null;
-    while ((tdMatch = localTdPat.exec(innerHtml)) !== null) {
-      localTds.push(tdMatch[1].replace(/<[^>]+>/g, "").trim());
-    }
-    if (localTds.length >= 4 && /\d{4}\.\d{2}\.\d{2}/.test(localTds[0])) {
-      cells = localTds;
-      break;
+  outer:
+  for (const tbodyMatch of tbodyMatches) {
+    const trPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch: RegExpExecArray | null;
+
+    while ((trMatch = trPattern.exec(tbodyMatch[1])) !== null) {
+      const innerHtml = trMatch[1];
+      const localTds: string[] = [];
+      const localTdPat = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let tdMatch: RegExpExecArray | null;
+      while ((tdMatch = localTdPat.exec(innerHtml)) !== null) {
+        localTds.push(
+          tdMatch[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()
+        );
+      }
+      // 날짜 패턴: YYYY.MM.DD 또는 MM.DD
+      const isDateRow =
+        localTds.length >= 4 &&
+        (/\d{4}\.\d{2}\.\d{2}/.test(localTds[0]) || /^\d{2}\.\d{2}$/.test(localTds[0]));
+      if (isDateRow) {
+        cells = localTds;
+        break outer;
+      }
     }
   }
 
@@ -155,6 +169,10 @@ async function fetchNaverHTMLFlow(market: string): Promise<FlowItem[]> {
   const individual  = parseKoreanNum(cells[1] ?? "0");
   const foreign     = parseKoreanNum(cells[2] ?? "0");
   const institution = parseKoreanNum(cells[3] ?? "0");
+
+  if (Math.abs(individual) + Math.abs(foreign) + Math.abs(institution) === 0) {
+    throw new Error("all zero values — likely wrong row");
+  }
 
   return [
     { type: "foreign",     label: "외국인", netBuy: foreign,     buy: 0, sell: 0 },
