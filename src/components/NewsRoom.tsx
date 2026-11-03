@@ -10,6 +10,7 @@ interface NewsItem {
   title: string; url: string; source: string; publishedAt: string | null;
   category: Category; stocks: StockTag[];
 }
+interface Disclosure { corp: string; code: string; market: "KS" | "KQ"; report: string; date: string; url: string }
 interface IssueSector { name: string; impact: "positive" | "negative" }
 interface MarketIssue {
   rank: number; title: string; summary: string;
@@ -50,6 +51,8 @@ export default function NewsRoom() {
   const [limit, setLimit]         = useState(20);
   const [, setTick]               = useState(0);
   const [drawer, setDrawer]       = useState<StockTag | null>(null);
+  const [dart, setDart]           = useState<Disclosure[]>([]);
+  const [dartErr, setDartErr]     = useState("");
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true);
@@ -57,6 +60,10 @@ export default function NewsRoom() {
     await Promise.allSettled([
       fetch(`/api/news-feed${q}`, { cache: "no-store" }).then(r => r.json()).then(j => {
         if (Array.isArray(j.items)) { setItems(j.items); setStats(j.sourceStats ?? {}); }
+      }),
+      fetch("/api/dart-disclosures", { cache: "no-store" }).then(r => r.json()).then(j => {
+        setDart(Array.isArray(j.items) ? j.items : []);
+        setDartErr(j.error ?? "");
       }),
       fetch(`/api/market-issues${q}`, { cache: "no-store" }).then(r => r.json()).then(j => {
         if (Array.isArray(j.issues)) setIssues(j.issues.slice(0, 6));
@@ -132,6 +139,29 @@ export default function NewsRoom() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* 주요 공시 (DART) */}
+      {(dart.length > 0 || dartErr) && (
+        <div className="bg-navy-sub/40 border border-navy-border rounded-xl p-4">
+          <p className="text-sm font-semibold text-white">주요 공시</p>
+          <p className="text-[11px] text-gray-500 mb-3">금융감독원 DART · 실적·증자·계약 등 주가 영향이 큰 공시</p>
+          {dart.length === 0 ? (
+            <p className="text-xs text-gray-500">{dartErr}</p>
+          ) : (
+            <ul className="space-y-2">
+              {dart.slice(0, 6).map(d => (
+                <li key={d.url} className="flex items-baseline gap-2 text-xs">
+                  <button onClick={() => setDrawer({ code: d.code, name: d.corp, market: d.market })}
+                    className="shrink-0 font-semibold text-white hover:text-cyan-brand">{d.corp}</button>
+                  <a href={d.url} target="_blank" rel="noopener noreferrer"
+                    className="min-w-0 flex-1 truncate text-gray-400 hover:text-white">{d.report}</a>
+                  <span className="shrink-0 text-gray-500 num">{d.date.slice(5)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
