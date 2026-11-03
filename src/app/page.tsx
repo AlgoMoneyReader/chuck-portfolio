@@ -3,7 +3,7 @@ import AfterHoursWidget from "@/components/AfterHoursWidget";
 import MarketSummary from "@/components/MarketSummary";
 import StockSearchPanel from "@/components/StockSearchPanel";
 import DualBuyWidget from "@/components/DualBuyWidget";
-import MarketIssueWidget from "@/components/MarketIssueWidget";
+import NewsRoom from "@/components/NewsRoom";
 import Link from "next/link";
 
 const FEATURES = [
@@ -40,7 +40,7 @@ export default function Home() {
       {/* 실시간 이슈 + 쌍끌이 — 2컬럼 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
-          <MarketIssueWidget />
+          <NewsRoom />
         </div>
         <div className="lg:col-span-2">
           <DualBuyWidget />

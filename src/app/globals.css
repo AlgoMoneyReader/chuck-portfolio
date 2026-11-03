@@ -80,3 +80,8 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #F5B800;
 }
+
+@layer utilities {
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
