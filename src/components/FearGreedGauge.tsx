@@ -162,7 +162,7 @@ function GaugeSVG({ score }: { score: number }) {
         fill={color}
         fontSize="22"
         fontWeight="bold"
-        fontFamily="ui-monospace, monospace"
+        style={{ fontVariantNumeric: "tabular-nums" }}
       >{score}</text>
       <text
         x={CX} y={CY + 38}

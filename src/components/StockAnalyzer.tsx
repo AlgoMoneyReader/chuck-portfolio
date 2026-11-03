@@ -81,13 +81,13 @@ function printReport(result: AnalysisResult) {
 <meta charset="UTF-8">
 <title>${companyName} 리서치 리포트</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+  @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
   @page { margin: 18mm 22mm; size: A4; }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    font-family: 'Pretendard Variable', Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
     font-size: 10pt;
     line-height: 1.7;
     color: #1a1a1a;

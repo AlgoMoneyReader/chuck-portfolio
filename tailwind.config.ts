@@ -38,7 +38,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-pretendard)", "Pretendard Variable", "Pretendard", "-apple-system", "sans-serif"],
-        mono: ["var(--font-jetbrains)", "JetBrains Mono", "monospace"],
+        mono: ["var(--font-pretendard)", "Pretendard Variable", "Pretendard", "-apple-system", "sans-serif"],
       },
       boxShadow: {
         card: "0 4px 24px rgba(0, 0, 0, 0.4)",

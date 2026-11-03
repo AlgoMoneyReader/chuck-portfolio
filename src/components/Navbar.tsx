@@ -12,7 +12,7 @@ export default function Navbar() {
         <Link href="/" className="flex items-center gap-2">
           <Image src="/logo-mark.png" alt="" width={30} height={30} priority
             className="rounded-lg ring-1 ring-white/10" />
-          <span className="text-gold font-black text-base tracking-widest">알읽남</span>
+          <span className="text-gold font-black text-[17px] tracking-tight">알읽남</span>
           <span className="text-electric-blue/60 text-xs hidden sm:block font-medium">@alliknam</span>
         </Link>
 
