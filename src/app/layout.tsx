@@ -28,9 +28,6 @@ export default function RootLayout({
         {/* 글꼴은 CSS @import 대신 link 로: 빌드 CSS 에서 @import 가 다른 규칙 뒤로 밀리면 브라우저가 무시한다 */}
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="" />
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
       </head>
       <body className="antialiased bg-navy min-h-screen pb-24">
         {/* 전역 실시간 시세 폴링 — 렌더링 없음, 5초마다 Zustand 스토어 업데이트 */}

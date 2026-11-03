@@ -5,7 +5,6 @@
 
 :root {
   --font-pretendard: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-jetbrains: 'JetBrains Mono', monospace;
 }
 
 * {
@@ -28,8 +27,9 @@ body {
     @apply text-xs font-medium text-gray-400 uppercase tracking-widest mb-4;
   }
 
+  /* 숫자도 Pretendard. 같은 폭 숫자로 자릿수 정렬 유지 */
   .num {
-    font-family: var(--font-jetbrains), monospace;
+    font-variant-numeric: tabular-nums;
   }
 
   .badge-urgent {
