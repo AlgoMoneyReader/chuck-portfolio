@@ -23,6 +23,7 @@ interface BreadthData { advance: number; decline: number; unchanged: number; tot
 interface NightFuturesPoint { time: string; price: number; }
 interface NightFuturesData {
   label?: string;
+  debug?: string[];
   currentPrice: number;
   previousClose: number;
   changePct: number;
@@ -467,6 +468,9 @@ export default function ChartModal({ label, onClose }: Props) {
                     </span>
                     <span className="text-xs text-gray-500 ml-auto">{nightFutures.label ?? "미니 코스피200 야간선물"}</span>
                   </div>
+                  {nightFutures.debug?.length ? (
+                    <p className="text-[10px] text-gray-600 -mt-2 mb-3 break-all shrink-0">{nightFutures.debug.join(" | ")}</p>
+                  ) : null}
                   {nightFutures.points.length > 0 ? (
                     <div className="flex-1 min-h-0">
                       <ResponsiveContainer width="100%" height="100%">
