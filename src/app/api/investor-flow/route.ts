@@ -25,7 +25,7 @@ function kstDate(): string {
   return k.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
-// 1순위: 네이버 투자자별 매매동향(일별) — 시장 전체, 단위 억원
+// 네이버 투자자별 매매동향(일별) — 시장 전체, 단위 억원
 async function fromNaverDaily(market: string): Promise<Flow3> {
   const sosok = market === "KOSDAQ" ? "02" : "01";
   const url = `https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=${kstDate()}&sosok=${sosok}`;
@@ -51,50 +51,62 @@ async function fromNaverDaily(market: string): Promise<Flow3> {
   throw new Error("naver: no data row");
 }
 
-// 2순위: KIS 시장별 투자자매매동향(일별), 단위 백만원 → 억원
-async function fromKIS(market: string): Promise<Flow3> {
-  const key = process.env.KIS_APP_KEY, secret = process.env.KIS_APP_SECRET;
-  if (!key || !secret) throw new Error("KIS env missing");
-  const tokRes = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
+// KIS 시장별 투자자매매동향(일별) — alliknam collect/kis.py market_investor 와 동일 호출. 백만원 → 억원
+let kisToken: { value: string; exp: number } | null = null;
+
+async function getKISToken(key: string, secret: string): Promise<string> {
+  if (kisToken && kisToken.exp > Date.now() + 60_000) return kisToken.value;
+  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ grant_type: "client_credentials", appkey: key, appsecret: secret }),
     signal: AbortSignal.timeout(8000),
     cache: "no-store",
   });
-  if (!tokRes.ok) throw new Error(`KIS token ${tokRes.status}`);
-  const token = (await tokRes.json()).access_token;
-
-  const kosdaq = market === "KOSDAQ";
-  const d = kstDate();
-  const qs = new URLSearchParams({
-    FID_COND_MRKT_DIV_CODE: "U",
-    FID_INPUT_ISCD: kosdaq ? "1001" : "0001",
-    FID_INPUT_DATE_1: d,
-    FID_INPUT_ISCD_1: kosdaq ? "KSQ" : "KSP",
-    FID_INPUT_DATE_2: d,
-    FID_INPUT_ISCD_2: kosdaq ? "1001" : "0001",
-  });
-  const res = await fetch(
-    `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market?${qs}`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        appkey: key,
-        appsecret: secret,
-        tr_id: "FHPTJ04040000",
-        custtype: "P",
-      },
-      signal: AbortSignal.timeout(8000),
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) throw new Error(`KIS HTTP ${res.status}`);
   const j = await res.json();
-  const rows: Record<string, string>[] = Array.isArray(j.output) ? j.output : j.output ? [j.output] : [];
+  if (!j.access_token) throw new Error(`KIS token ${j.error_code ?? res.status} ${j.error_description ?? ""}`);
+  kisToken = { value: j.access_token, exp: Date.now() + (j.expires_in ?? 86400) * 1000 };
+  return kisToken.value;
+}
+
+async function fromKIS(market: string): Promise<Flow3> {
+  const key = process.env.KIS_APP_KEY, secret = process.env.KIS_APP_SECRET;
+  if (!key || !secret) throw new Error("KIS env missing");
+  const token = await getKISToken(key, secret);
+  const kosdaq = market === "KOSDAQ";
+  const code = kosdaq ? "1001" : "0001";
+  const isc = kosdaq ? "KSQ" : "KSP";
   const toUk = (s: string) => Math.round(parseNum(s ?? "0") / 100);
-  for (const r of rows) {
+
+  // 당일 값이 비어 있으면(장중/휴장) 최대 7일 전까지 거슬러 올라간다
+  for (let back = 0; back < 7; back++) {
+    const d = new Date(Date.now() + 9 * 3_600_000 - back * 86_400_000);
+    if ([0, 6].includes(d.getUTCDay())) continue;
+    const d8 = d.toISOString().slice(0, 10).replace(/-/g, "");
+    const qs = new URLSearchParams({
+      FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code,
+      FID_INPUT_DATE_1: d8, FID_INPUT_ISCD_1: isc,
+      FID_INPUT_DATE_2: d8, FID_INPUT_ISCD_2: code,
+    });
+    const res = await fetch(
+      `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market?${qs}`,
+      {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          authorization: `Bearer ${token}`,
+          appkey: key, appsecret: secret,
+          tr_id: "FHPTJ04040000", custtype: "P", tr_cont: "",
+        },
+        signal: AbortSignal.timeout(8000),
+        cache: "no-store",
+      }
+    );
+    const j = await res.json().catch(() => null);
+    if (!j || j.rt_cd !== "0") throw new Error(`KIS ${j?.msg_cd ?? res.status} ${(j?.msg1 ?? "").trim()}`);
+    let rows = j.output ?? j.output1 ?? [];
+    if (!Array.isArray(rows)) rows = [rows];
+    const r = rows.find((x: Record<string, string>) => x.stck_bsop_date === d8) ?? rows[0];
+    if (!r) continue;
     const f: Flow3 = {
       individual: toUk(r.prsn_ntby_tr_pbmn),
       foreign: toUk(r.frgn_ntby_tr_pbmn),
@@ -102,7 +114,7 @@ async function fromKIS(market: string): Promise<Flow3> {
     };
     if (Math.abs(f.individual) + Math.abs(f.foreign) + Math.abs(f.institution) > 0) return f;
   }
-  throw new Error(`KIS: no data (${j.msg1 ?? "empty"})`);
+  throw new Error("KIS: no data");
 }
 
 // 3순위: 순매수 상위 종목 합산 (근사치) — 요청 origin으로 호출해 배포 보호 우회
@@ -125,8 +137,8 @@ export async function GET(request: Request) {
   const errors: string[] = [];
 
   const sources: [string, () => Promise<Flow3>][] = [
-    ["naver", () => fromNaverDaily(market)],
     ["kis", () => fromKIS(market)],
+    ["naver", () => fromNaverDaily(market)],
     ["ranking", () => fromRanking(url.origin)],
   ];
 
