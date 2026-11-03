@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = "icn1";
 
 interface FlowItem {
   type: "foreign" | "institution" | "individual";
@@ -52,27 +54,10 @@ async function fromNaverDaily(market: string): Promise<Flow3> {
 }
 
 // KIS 시장별 투자자매매동향(일별) — alliknam collect/kis.py market_investor 와 동일 호출. 백만원 → 억원
-let kisToken: { value: string; exp: number } | null = null;
-
-async function getKISToken(key: string, secret: string): Promise<string> {
-  if (kisToken && kisToken.exp > Date.now() + 60_000) return kisToken.value;
-  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ grant_type: "client_credentials", appkey: key, appsecret: secret }),
-    signal: AbortSignal.timeout(8000),
-    cache: "no-store",
-  });
-  const j = await res.json();
-  if (!j.access_token) throw new Error(`KIS token ${j.error_code ?? res.status} ${j.error_description ?? ""}`);
-  kisToken = { value: j.access_token, exp: Date.now() + (j.expires_in ?? 86400) * 1000 };
-  return kisToken.value;
-}
-
 async function fromKIS(market: string): Promise<Flow3> {
   const key = process.env.KIS_APP_KEY, secret = process.env.KIS_APP_SECRET;
   if (!key || !secret) throw new Error("KIS env missing");
-  const token = await getKISToken(key, secret);
+  const token = await getKISToken();
   const kosdaq = market === "KOSDAQ";
   const code = kosdaq ? "1001" : "0001";
   const isc = kosdaq ? "KSQ" : "KSP";

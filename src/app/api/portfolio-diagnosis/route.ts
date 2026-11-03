@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
 // ─── KIS 토큰 캐시 ────────────────────────────────────────────────────────────
-let cachedToken: { value: string; expiresAt: number } | null = null;
-
-async function getKISToken(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.value;
-  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: process.env.KIS_APP_KEY,
-      appsecret: process.env.KIS_APP_SECRET,
-    }),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`KIS token HTTP ${res.status}`);
-  const data = await res.json();
-  cachedToken = { value: data.access_token, expiresAt: now + (data.expires_in ?? 86400) * 1000 };
-  return data.access_token;
-}
 
 interface InvestorRow {
   stck_bsop_date: string;
