@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
 import { unstable_cache } from "next/cache";
-import { inflateRawSync } from "zlib";
+import { unzipFirst } from "@/lib/zip";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -15,22 +15,6 @@ const TTL = 60_000;
 // ── KIS 지수선물 종목 마스터 (fo_idx_code_mts.mst, | 구분, cp949) ─────────────
 // 열: 상품종류|단축코드|표준코드|한글종목명|ATM구분|행사가|월물구분코드|기초자산 단축코드|기초자산 명
 type MstRow = string[];
-
-function unzipFirst(buf: Buffer): Buffer {
-  // 로컬 파일 헤더(0x04034b50) 하나짜리 zip. 크기가 0이면 중앙 디렉터리 값 사용
-  if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error("zip: bad header");
-  const method = buf.readUInt16LE(8);
-  let size = buf.readUInt32LE(18);
-  const nameLen = buf.readUInt16LE(26), extraLen = buf.readUInt16LE(28);
-  const start = 30 + nameLen + extraLen;
-  if (!size) {
-    const cd = buf.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
-    if (cd < 0) throw new Error("zip: no central dir");
-    size = buf.readUInt32LE(cd + 20);
-  }
-  const data = buf.subarray(start, start + size);
-  return method === 0 ? data : inflateRawSync(data);
-}
 
 const loadMaster = unstable_cache(async (): Promise<MstRow[]> => {
   const res = await fetch("https://new.real.download.dws.co.kr/common/master/fo_idx_code_mts.mst.zip", {
