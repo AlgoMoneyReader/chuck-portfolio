@@ -31,6 +31,19 @@ export async function GET(request: Request) {
   const ySym     = SYMBOL_MAP[label] ?? label;
   const interval = searchParams.get("interval") ?? DEFAULT_INTERVAL[range] ?? "1d";
 
+  // 전일 종가: 차트 범위와 무관하게 최근 일봉 2개로 계산
+  let prevDayClose: number | null = null;
+  try {
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
+      { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+    );
+    if (r.ok) {
+      const cs: (number | null)[] = ((await r.json())?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((c: number | null) => c != null);
+      if (cs.length >= 2) prevDayClose = cs[cs.length - 2];
+    }
+  } catch { /* meta 값으로 폴백 */ }
+
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     try {
       const url =
@@ -73,7 +86,7 @@ export async function GET(request: Request) {
       return NextResponse.json({
         label, symbol: ySym, data, intraday,
         currentPrice:  meta.regularMarketPrice ?? null,
-        previousClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
+        previousClose: prevDayClose ?? (range === "1d" ? meta.chartPreviousClose : null) ?? meta.previousClose ?? meta.chartPreviousClose ?? null,
         currency:      meta.currency ?? "",
         marketState:   meta.marketState ?? "CLOSED",
       }, {

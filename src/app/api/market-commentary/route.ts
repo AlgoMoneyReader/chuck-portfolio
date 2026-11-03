@@ -15,8 +15,9 @@ function parseNum(s: string): number {
 
 // finance.naver.com HTML 스크래핑 (EUC-KR, investor-ranking과 동일 방식)
 async function fetchFlow(market: string): Promise<{ label: string; netBuy: number }[]> {
-  const sosok = market === "KOSDAQ" ? 1 : 0;
-  const url = `https://finance.naver.com/sise/siseInvestorDealTrend.naver?sosok=${sosok}`;
+  const sosok = market === "KOSDAQ" ? "02" : "01";
+  const bizdate = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "");
+  const url = `https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=${bizdate}&sosok=${sosok}`;
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
