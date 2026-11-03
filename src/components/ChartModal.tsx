@@ -173,7 +173,7 @@ export default function ChartModal({ label, onClose }: Props) {
 
   const fmt = (p: number | null) => {
     if (p == null) return "-";
-    if (chartData?.currency === "KRW") return p.toLocaleString("ko-KR") + "원";
+    if (chartData?.currency === "KRW") return p.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) + (isIndex ? "" : "원");
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
@@ -280,7 +280,7 @@ export default function ChartModal({ label, onClose }: Props) {
                         tick={{ fill: "#6B7280", fontSize: 10 }}
                         tickFormatter={v =>
                           chartData?.currency === "KRW"
-                            ? v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)
+                            ? v >= 100000 ? Math.round(v / 1000).toLocaleString("ko-KR") + "K" : v.toLocaleString("ko-KR", { maximumFractionDigits: 0 })
                             : v.toLocaleString("en-US", { maximumFractionDigits: 0 })
                         }
                         axisLine={false} tickLine={false} width={52} />
@@ -459,7 +459,7 @@ export default function ChartModal({ label, onClose }: Props) {
                             tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
                           <YAxis domain={["auto", "auto"]}
                             tick={{ fill: "#6B7280", fontSize: 10 }}
-                            tickFormatter={v => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)}
+                            tickFormatter={v => v.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
                             axisLine={false} tickLine={false} width={48} />
                           <Tooltip content={<NightTooltip />} />
                           <Area type="monotone" dataKey="price"
