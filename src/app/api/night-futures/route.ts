@@ -6,7 +6,7 @@ import { inflateRawSync } from "zlib";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
 
-interface ChartPoint { time: string; price: number; }
+interface ChartPoint { time: string; price: number; full?: string; }
 
 let cache: { data: object; at: number } | null = null;
 const TTL = 60_000;
@@ -77,6 +77,49 @@ async function kisGet(path: string, trId: string, params: Record<string, string>
   return j;
 }
 
+// 야간장 시각은 거래일 기준 24:00~30:00 으로 온다(29:45 = 다음 날 05:45). 실제 날짜·시각으로 바꾼다
+function toClock(bsop: string, raw: string): { time: string; full: string } {
+  let hh = parseInt(raw.slice(0, 2), 10);
+  const mm = raw.slice(2, 4);
+  const d = new Date(Date.UTC(+bsop.slice(0, 4), +bsop.slice(4, 6) - 1, +bsop.slice(6, 8)));
+  if (hh >= 24) { hh -= 24; d.setUTCDate(d.getUTCDate() + 1); }
+  const time = `${String(hh).padStart(2, "0")}:${mm}`;
+  return { time, full: `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${time}` };
+}
+
+function minusOneMinute(raw: string): string {
+  let hh = parseInt(raw.slice(0, 2), 10), mm = parseInt(raw.slice(2, 4), 10) - 1;
+  if (mm < 0) { mm = 59; hh -= 1; }
+  return `${String(hh).padStart(2, "0")}${String(mm).padStart(2, "0")}00`;
+}
+
+// 분봉은 한 번에 100개 안팎이라, 가장 이른 봉 1분 전부터 다시 받아 18:00 세션 시작까지 이어붙인다
+async function nightBars(mkt: string, code: string, d8: string, hms: string): Promise<ChartPoint[]> {
+  const bars = new Map<string, { bsop: string; raw: string; price: number }>();
+  let session = "";
+  let date = d8, hour = hms;
+  for (let i = 0; i < 10; i++) {
+    const ch = await kisGet("/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice", "FHKIF03020200", {
+      FID_COND_MRKT_DIV_CODE: mkt, FID_INPUT_ISCD: code, FID_HOUR_CLS_CODE: "60",
+      FID_PW_DATA_INCU_YN: "Y", FID_FAKE_TICK_INCU_YN: "N", FID_INPUT_DATE_1: date, FID_INPUT_HOUR_1: hour,
+    });
+    const rows = ((ch.output2 ?? []) as Record<string, string>[])
+      .map(r => ({ bsop: r.stck_bsop_date ?? "", raw: r.stck_cntg_hour ?? "", price: num(r.futs_prpr ?? r.stck_prpr) }))
+      .filter(r => r.price > 0 && r.bsop && r.raw);
+    if (!session && rows.length) session = rows.reduce((m, r) => (r.bsop > m ? r.bsop : m), "");
+    const mine = rows.filter(r => r.bsop === session);
+    const before = bars.size;
+    for (const r of mine) bars.set(r.raw, r);
+    if (!mine.length || bars.size === before) break;
+    const earliest = mine.reduce((m, r) => (r.raw < m.raw ? r : m));
+    if (earliest.raw <= "180000" || mine.length < rows.length) break;
+    date = session; hour = minusOneMinute(earliest.raw);
+  }
+  return Array.from(bars.values())
+    .sort((x, y) => x.raw.localeCompare(y.raw))
+    .map(r => ({ ...toClock(r.bsop, r.raw), price: r.price }));
+}
+
 async function tryKIS(debug: string[]): Promise<object | null> {
   let cands: { code: string; name: string }[] = [];
   try {
@@ -105,19 +148,7 @@ async function tryKIS(debug: string[]): Promise<object | null> {
 
         let points: ChartPoint[] = [];
         try {
-          const ch = await kisGet("/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice", "FHKIF03020200", {
-            FID_COND_MRKT_DIV_CODE: mkt, FID_INPUT_ISCD: c.code, FID_HOUR_CLS_CODE: "60",
-            FID_PW_DATA_INCU_YN: "Y", FID_FAKE_TICK_INCU_YN: "N", FID_INPUT_DATE_1: d8, FID_INPUT_HOUR_1: hms,
-          });
-          points = ((ch.output2 ?? []) as Record<string, string>[])
-            .map(r => ({
-              key: `${r.stck_bsop_date ?? ""}${r.stck_cntg_hour ?? ""}`,
-              time: `${(r.stck_cntg_hour ?? "").slice(0, 2)}:${(r.stck_cntg_hour ?? "").slice(2, 4)}`,
-              price: num(r.futs_prpr ?? r.stck_prpr),
-            }))
-            .filter(p => p.price > 0)
-            .sort((x, y) => x.key.localeCompare(y.key))
-            .map(({ time, price }) => ({ time, price }));
+          points = await nightBars(mkt, c.code, d8, hms);
         } catch (e) { debug.push(`chart ${mkt}/${c.code}: ${String(e)}`); }
 
         return {
