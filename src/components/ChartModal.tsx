@@ -22,6 +22,7 @@ interface Commentary { title: string; subtitle: string; bullets: string[]; updat
 interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
 interface NightFuturesPoint { time: string; price: number; }
 interface NightFuturesData {
+  label?: string;
   currentPrice: number;
   previousClose: number;
   changePct: number;
@@ -441,7 +442,7 @@ export default function ChartModal({ label, onClose }: Props) {
                     <span className="text-sm font-semibold num" style={{ color: nightColor }}>
                       {nightIsPos ? "▲" : "▼"} {Math.abs(nightFutures.changePct).toFixed(2)}%
                     </span>
-                    <span className="text-xs text-gray-500 ml-auto">미니 코스피200 야간선물</span>
+                    <span className="text-xs text-gray-500 ml-auto">{nightFutures.label ?? "미니 코스피200 야간선물"}</span>
                   </div>
                   {nightFutures.points.length > 0 ? (
                     <div className="flex-1 min-h-0">

@@ -24,10 +24,10 @@ export async function GET() {
   try {
     const [stats, btcKlines] = await Promise.all([
       fetchBinance<{ symbol: string; lastPrice: string; priceChangePercent: string }[]>(
-        "https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D"
+        "https://data-api.binance.vision/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22%2C%22ETHUSDT%22%5D"
       ),
       fetchBinance<[number, string, string, string, string][]>(
-        "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24"
+        "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=24"
       ),
     ]);
 

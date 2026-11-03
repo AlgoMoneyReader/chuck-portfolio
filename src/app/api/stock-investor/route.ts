@@ -1,35 +1,9 @@
 import { NextResponse } from "next/server";
+import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
 // ─── KIS 토큰 캐시 (서버리스 웜 인스턴스 재사용) ─────────────────────────────
-let cachedToken: { value: string; expiresAt: number } | null = null;
-
-async function getKISToken(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) {
-    return cachedToken.value;
-  }
-  const res = await fetch(
-    "https://openapi.koreainvestment.com:9443/oauth2/tokenP",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "client_credentials",
-        appkey: process.env.KIS_APP_KEY,
-        appsecret: process.env.KIS_APP_SECRET,
-      }),
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) throw new Error(`KIS token HTTP ${res.status}`);
-  const data = await res.json();
-  const token: string = data.access_token;
-  const expiresIn: number = data.expires_in ?? 86400;
-  cachedToken = { value: token, expiresAt: now + expiresIn * 1000 };
-  return token;
-}
 
 // ─── KIS 투자자별 거래실적 조회 (FHKST01010900) ─────────────────────────────
 interface InvestorRow {

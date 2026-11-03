@@ -13,65 +13,51 @@
  * → _tok 캐시로 공유 — dual-buy 등 여러 모듈이 이 함수 하나만 호출
  */
 
+import { unstable_cache, revalidateTag } from "next/cache";
+
 // ── KIS OAuth 토큰 캐시 ───────────────────────────────────────────────────────
+// 인스턴스 메모리 캐시 + Vercel Data Cache(인스턴스 간 공유). 1분 1회 발급 제한(EGW00133) 회피
 let _tok: { value: string; exp: number } | null = null;
 
-/**
- * KIS access_token 반환 (인메모리 캐시, 만료 1분 전 자동 갱신)
- * 여러 API 모듈이 공유 — 절대 각 모듈에서 별도 발급하지 말 것
- */
-export async function getKisToken(): Promise<string> {
-  const now = Date.now();
-
-  // 환경변수 점검
-  console.log(
-    "🔑 KIS Key Load Status:",
-    process.env.KIS_APP_KEY    ? `Loaded (${process.env.KIS_APP_KEY.slice(0, 6)}…)`    : "❌ Missing",
-    "|",
-    process.env.KIS_APP_SECRET ? `Loaded (${process.env.KIS_APP_SECRET.slice(0, 6)}…)` : "❌ Missing"
-  );
-
-  if (_tok && _tok.exp > now + 60_000) {
-    console.log("🎟️  Token Status: Valid (cached, exp in", Math.round((_tok.exp - now) / 1000), "s)");
-    return _tok.value;
-  }
-
-  console.log("🎟️  Token Status: Fetching new token…");
-
-  const res = await fetch(
-    "https://openapi.koreainvestment.com:9443/oauth2/tokenP",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "client_credentials",
-        appkey: process.env.KIS_APP_KEY,
-        appsecret: process.env.KIS_APP_SECRET,
-      }),
-      cache: "no-store",
-    }
-  );
-
-  if (!res.ok) {
-    let body = "";
-    try { body = await res.text(); } catch { /* ignore */ }
-    console.error(`🚨 [KIS API ERROR] 토큰 발급 실패: HTTP ${res.status}`, body);
-    throw new Error(`[kis] 토큰 발급 실패: HTTP ${res.status} — ${body}`);
-  }
-
-  const data = await res.json();
+async function issueToken(): Promise<{ value: string; exp: number }> {
+  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      appkey: process.env.KIS_APP_KEY,
+      appsecret: process.env.KIS_APP_SECRET,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
   if (!data.access_token) {
-    console.error("🚨 [KIS API ERROR] 토큰 응답에 access_token 없음:", JSON.stringify(data));
-    throw new Error("[kis] access_token 없음");
+    throw new Error(`KIS token ${data.error_code ?? res.status} ${data.error_description ?? ""}`.trim());
   }
-
-  console.log("🎟️  Token Status: Valid (new, exp in", data.expires_in ?? 86400, "s)");
-  _tok = { value: data.access_token, exp: now + (data.expires_in ?? 86400) * 1000 };
-  return _tok.value;
+  return { value: data.access_token, exp: Date.now() + (data.expires_in ?? 86400) * 1000 };
 }
 
-/** 토큰 캐시 즉시 무효화 */
+const sharedToken = unstable_cache(issueToken, ["kis-token-v1"], { revalidate: 6 * 3600, tags: ["kis-token"] });
+
+export async function getKisToken(): Promise<string> {
+  if (_tok && _tok.exp > Date.now() + 60_000) return _tok.value;
+  let t: { value: string; exp: number };
+  try {
+    t = await sharedToken();
+  } catch (e) {
+    // 다른 인스턴스가 방금 발급했으면 잠시 뒤 공유 캐시에 들어와 있다
+    if (!String(e).includes("EGW00133")) throw e;
+    await new Promise(r => setTimeout(r, 2000));
+    t = await sharedToken();
+  }
+  if (t.exp <= Date.now() + 60_000) {
+    revalidateTag("kis-token");
+    t = await issueToken();
+  }
+  _tok = t;
+  return t.value;
+}
+
 export function invalidateKisToken() {
   _tok = null;
-  console.log("[kis] 토큰 캐시 무효화됨");
+  revalidateTag("kis-token");
 }

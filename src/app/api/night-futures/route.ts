@@ -1,32 +1,13 @@
 import { NextResponse } from "next/server";
+import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
 interface ChartPoint { time: string; price: number; }
 
-let cachedToken: { value: string; expiresAt: number } | null = null;
 let cache: { data: object; at: number } | null = null;
 const TTL = 60_000;
 
-async function getKISToken(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.value;
-  const res = await fetch("https://openapi.koreainvestment.com:9443/oauth2/tokenP", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "client_credentials",
-      appkey: process.env.KIS_APP_KEY,
-      appsecret: process.env.KIS_APP_SECRET,
-    }),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`KIS token HTTP ${res.status}`);
-  const data = await res.json();
-  const token = data.access_token;
-  cachedToken = { value: token, expiresAt: now + (data.expires_in ?? 86400) * 1000 };
-  return token;
-}
 
 function getFrontMonthCode(): string {
   const kst   = new Date(Date.now() + 9 * 3600000);
@@ -80,6 +61,7 @@ async function tryKIS(): Promise<object | null> {
       changePct: parseFloat(changePct.toFixed(2)),
       change: parseFloat((currentPrice - prevClose).toFixed(2)),
       marketState: "NIGHT",
+      label: "미니 코스피200 야간선물",
       points: [] as ChartPoint[],
     };
   } catch { return null; }
@@ -125,6 +107,7 @@ async function tryYahoo(): Promise<object | null> {
         previousClose: parseFloat(prevClose.toFixed(2)),
         changePct: parseFloat(changePct.toFixed(2)),
         marketState: meta.marketState ?? "CLOSED",
+        label: "코스피200 지수 (주간) · 야간선물 데이터 없음",
       };
     } catch { continue; }
   }
