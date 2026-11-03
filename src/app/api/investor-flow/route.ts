@@ -40,7 +40,7 @@ async function fromNaverDaily(market: string): Promise<Flow3> {
   const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html)) !== null) {
-    const tds = [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(t =>
+    const tds = Array.from(m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map(t =>
       t[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()
     );
     if (tds.length < 4 || !/^\d{2,4}\.\d{2}\.\d{2}$/.test(tds[0])) continue;
