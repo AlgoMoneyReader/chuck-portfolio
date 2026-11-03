@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getKisToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,36 @@ const SYMBOL_MAP: Record<string, string> = {
   "WTI 원유":    "CL=F",
   "USD/KRW":    "KRW=X",
 };
+
+const KIS_INDEX: Record<string, string> = { KOSPI: "0001", KOSDAQ: "1001" };
+
+// KIS 업종 현재가 — 공식 전일 대비 값 (alliknam collect/kis.py index_price 와 동일 호출)
+async function kisIndexQuote(code: string): Promise<{ price: number; prev: number } | null> {
+  try {
+    const token = await getKisToken();
+    const res = await fetch(
+      `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/inquire-index-price?FID_COND_MRKT_DIV_CODE=U&FID_INPUT_ISCD=${code}`,
+      {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          authorization: `Bearer ${token}`,
+          appkey: process.env.KIS_APP_KEY!,
+          appsecret: process.env.KIS_APP_SECRET!,
+          tr_id: "FHPUP02100000",
+          custtype: "P",
+        },
+        signal: AbortSignal.timeout(6000),
+        cache: "no-store",
+      }
+    );
+    const j = await res.json();
+    if (j.rt_cd !== "0") return null;
+    const price = parseFloat(String(j.output?.bstp_nmix_prpr ?? "").replace(/,/g, ""));
+    const diff = parseFloat(String(j.output?.bstp_nmix_prdy_vrss ?? "").replace(/,/g, ""));
+    if (!price || isNaN(diff)) return null;
+    return { price, prev: parseFloat((price - diff).toFixed(2)) };
+  } catch { return null; }
+}
 
 // range → 기본 interval 매핑 (클라이언트가 명시적으로 보낼 수도 있음)
 const DEFAULT_INTERVAL: Record<string, string> = {
@@ -31,18 +62,28 @@ export async function GET(request: Request) {
   const ySym     = SYMBOL_MAP[label] ?? label;
   const interval = searchParams.get("interval") ?? DEFAULT_INTERVAL[range] ?? "1d";
 
-  // 전일 종가: 차트 범위와 무관하게 최근 일봉 2개로 계산
+  const kisQuote = KIS_INDEX[label] ? await kisIndexQuote(KIS_INDEX[label]) : null;
+
+  // KIS 값이 없을 때: 최근 일봉에서 마지막 거래일의 바로 앞 종가
   let prevDayClose: number | null = null;
-  try {
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
-      { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
-    );
-    if (r.ok) {
-      const cs: (number | null)[] = ((await r.json())?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []).filter((c: number | null) => c != null);
-      if (cs.length >= 2) prevDayClose = cs[cs.length - 2];
-    }
-  } catch { /* meta 값으로 폴백 */ }
+  if (!kisQuote) {
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
+        { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+      );
+      if (r.ok) {
+        const res0 = (await r.json())?.chart?.result?.[0];
+        const ts: number[] = res0?.timestamp ?? [];
+        const cs: (number | null)[] = res0?.indicators?.quote?.[0]?.close ?? [];
+        const day = (t: number) => new Date((t + 9 * 3600) * 1000).toISOString().slice(0, 10);
+        const lastDay = res0?.meta?.regularMarketTime ? day(res0.meta.regularMarketTime) : null;
+        const bars = ts.map((t, i) => ({ d: day(t), c: cs[i] })).filter(b => b.c != null);
+        const before = bars.filter(b => lastDay && b.d < lastDay);
+        if (before.length) prevDayClose = before[before.length - 1].c!;
+      }
+    } catch { /* meta 값으로 폴백 */ }
+  }
 
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
     try {
@@ -85,8 +126,8 @@ export async function GET(request: Request) {
       const meta = result.meta;
       return NextResponse.json({
         label, symbol: ySym, data, intraday,
-        currentPrice:  meta.regularMarketPrice ?? null,
-        previousClose: prevDayClose ?? (range === "1d" ? meta.chartPreviousClose : null) ?? meta.previousClose ?? meta.chartPreviousClose ?? null,
+        currentPrice:  kisQuote?.price ?? meta.regularMarketPrice ?? null,
+        previousClose: kisQuote?.prev ?? prevDayClose ?? (range === "1d" ? meta.chartPreviousClose : null) ?? meta.previousClose ?? meta.chartPreviousClose ?? null,
         currency:      meta.currency ?? "",
         marketState:   meta.marketState ?? "CLOSED",
       }, {
