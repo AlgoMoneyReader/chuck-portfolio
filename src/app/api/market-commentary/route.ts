@@ -101,7 +101,7 @@ export async function GET(request: Request) {
 반환 형식: {"title":"${title}","subtitle":"${subtitle}","bullets":["...","...","..."],"updatedAt":"${updatedAt}"}`;
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim().replace(/```json\n?|\n?```/g, "");
     const json = JSON.parse(text);

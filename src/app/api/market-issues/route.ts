@@ -35,19 +35,12 @@ const EXCLUDE = [
   "농구", "올림픽", "살인", "사망", "범죄", "폭행", "성범죄", "사건", "사고",
   "화재", "지진", "태풍", "날씨",
 ];
-const FINANCE_KW = [
-  "주가", "증시", "코스피", "코스닥", "상장", "투자", "펀드", "채권", "금리",
-  "기준금리", "주식", "매수", "매도", "실적", "영업이익", "매출", "수익", "배당",
-  "시가총액", "공매도", "ETF", "IPO", "합병", "인수", "반도체", "배터리", "바이오",
-  "경제", "수출", "무역", "관세", "환율", "달러", "원화", "유가", "증권", "지수",
-  "섹터", "전기차", "자동차", "조선", "방산", "철강", "화학", "AI", "반도체",
-  "기업", "산업", "제조", "수주", "공장", "영업", "상반기", "하반기", "분기",
-];
+// 주식·시장에 직접 영향이 있는 헤드라인만 (일반 경제·사회 기사 제외)
+const MARKET_RE = /주가|증시|코스피|코스닥|지수|상장|공모|IPO|주식|ETF|채권|국채|금리|연준|FOMC|환율|달러|원화|엔화|유가|원유|실적|영업이익|매출|순이익|목표가|외국인|기관|순매수|순매도|공매도|시가총액|배당|자사주|증자|수주|반도체|2차전지|배터리|엔비디아|나스닥|S&P|다우|밸류업|물가|CPI|고용지표|GDP|수출|관세|인수|합병|비트코인|가상자산/;
 
 function isFinance(title: string): boolean {
-  const t = title;
-  if (EXCLUDE.some(w => t.includes(w))) return false;
-  return FINANCE_KW.some(w => t.includes(w));
+  if (EXCLUDE.some(w => title.includes(w))) return false;
+  return MARKET_RE.test(title);
 }
 
 // ── item 레벨 RSS 파싱 (채널 title 제외) ─────────────────────────────────────
@@ -95,18 +88,18 @@ async function callGemini(prompt: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("no GEMINI_API_KEY");
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 2400 },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2400, thinkingConfig: { thinkingBudget: 0 } },
       }),
       signal: AbortSignal.timeout(20000),
     }
   );
-  if (!res.ok) throw new Error(`Gemini ${res.status}`);
+  if (!res.ok) throw new Error(`Gemini ${res.status} ${(await res.text()).slice(0, 120)}`);
   const j = await res.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
@@ -173,9 +166,10 @@ export async function GET(request: Request) {
 ${finItems.map((h, i) => `${i + 1}. ${h.title}`).join("\n")}
 
 [규칙]
-- 주식·경제·기업·산업에 직접 영향을 주는 이슈만 선택하세요.
+- 한국 주식시장(지수, 업종, 상장 종목 주가)에 직접 영향을 주는 이슈만 선택하세요.
+- 지자체·기관 행사, 협약, 포럼, 일반 사회·생활 경제 기사는 제외하세요.
 - 연예, 스포츠, 정치인 개인사, 사건·사고는 절대 포함하지 마세요.
-- 한국 주식 투자자 관점에서 중요한 순서로 최대 15개 반환하세요.
+- 한국 주식 투자자 관점에서 중요한 순서로 최대 8개 반환하세요.
 - 관련 뉴스가 부족하면 가능한 만큼만 반환하세요 (최소 1개).
 
 아래 JSON 배열만 반환 (마크다운·설명 없이):
@@ -203,12 +197,12 @@ sectors 최대 3개, relatedStocks 최대 4개`;
           "rank" in item && "title" in item && "direction" in item
       );
     }
-  } catch {
-    // Gemini 실패 시 finItems에서 단순 구성
-    rawIssues = finItems.slice(0, 15).map((item, i) => ({
-      rank: i + 1, title: item.title.slice(0, 15), summary: item.title.slice(0, 35),
-      direction: "mixed" as const, sectors: [], relatedStocks: [],
-    }));
+  } catch (e) {
+    // 실패 시 헤드라인을 잘라 이슈처럼 보여주지 않는다
+    return NextResponse.json({
+      issues: [], error: "AI 이슈 요약 실패", debug: String(e).slice(0, 200),
+      fetchedAt: new Date().toISOString(), sourceCount: finItems.length,
+    });
   }
 
   // sourceItems 매칭

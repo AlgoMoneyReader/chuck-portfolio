@@ -30,6 +30,9 @@ const FEEDS: Feed[] = [
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
+// 일반 경제·사회 기사는 빼고 시장에 직접 영향이 있는 헤드라인만 (Investing.com 피드는 전부 시장 기사라 통과)
+const MARKET_RE = /주가|증시|코스피|코스닥|지수|상장|공모|IPO|주식|ETF|채권|국채|금리|연준|FOMC|환율|달러|원화|엔화|유가|원유|실적|영업이익|매출|순이익|목표가|외국인|기관|순매수|순매도|공매도|시가총액|배당|자사주|증자|수주|반도체|2차전지|배터리|엔비디아|나스닥|S&P|다우|밸류업|물가|CPI|고용지표|GDP|수출|관세|인수|합병|비트코인|가상자산/;
+
 const EXCLUDE = ["연예", "드라마", "영화", "가수", "배우", "아이돌", "야구", "축구", "농구", "살인", "폭행", "성범죄", "날씨"];
 
 // 순서대로 검사, 처음 맞는 분류 사용. 해외 키워드가 국내 증시 키워드보다 먼저
@@ -109,13 +112,15 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
     const url = decode(/<link[^>]*>([\s\S]*?)<\/link>/.exec(block)?.[1] ?? /<link[^>]+href="([^"]+)"/.exec(block)?.[1] ?? "");
     const date = decode(/<pubDate>([\s\S]*?)<\/pubDate>/.exec(block)?.[1] ?? /<dc:date>([\s\S]*?)<\/dc:date>/.exec(block)?.[1] ?? "");
     if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w))) continue;
+    const stocks = matchStocks(title);
+    if (f.source !== "Investing.com" && !stocks.length && !MARKET_RE.test(title)) continue;
     out.push({
       title,
       url,
       source: f.source,
       publishedAt: parseDate(date),
       category: classify(title, f.defaultCat),
-      stocks: matchStocks(title),
+      stocks,
     });
   }
   return out;
