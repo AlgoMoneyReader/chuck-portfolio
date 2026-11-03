@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PricePoller from "@/components/PricePoller";
+import BottomTabBar from "@/components/BottomTabBar";
 
 export const metadata: Metadata = {
   title: "알읽남 — 투자 대시보드",
@@ -15,11 +16,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className="antialiased bg-navy min-h-screen">
+      <body className="antialiased bg-navy min-h-screen pb-24">
         {/* 전역 실시간 시세 폴링 — 렌더링 없음, 5초마다 Zustand 스토어 업데이트 */}
         <PricePoller />
         <Navbar />
         {children}
+        <BottomTabBar />
       </body>
     </html>
   );

@@ -1,19 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { FaInstagram } from "react-icons/fa";
-
-const NAV_ITEMS = [
-  { href: "/", label: "홈", icon: "◈" },
-  { href: "/portfolio", label: "포트폴리오", icon: "◉" },
-  { href: "/analyze", label: "종목 분석", icon: "◎" },
-  { href: "/admin", label: "운영자", icon: "🔒", adminOnly: true },
-];
+import { FiSearch } from "react-icons/fi";
 
 export default function Navbar() {
-  const pathname = usePathname();
-
   return (
     <nav className="sticky top-0 z-50 bg-navy-sub/95 backdrop-blur-md border-b border-navy-border">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -23,46 +14,15 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-1">
-          {NAV_ITEMS.map((item) => {
-            const active = pathname === item.href;
-            const isAdmin = "adminOnly" in item && item.adminOnly;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  active
-                    ? isAdmin
-                      ? "bg-gold/20 text-gold border border-gold/50"
-                      : "bg-gold/15 text-gold border border-gold/30"
-                    : isAdmin
-                    ? "text-gold/50 hover:text-gold hover:bg-gold/10 border border-transparent hover:border-gold/20"
-                    : "text-gray-400 hover:text-gray-200 hover:bg-navy-card"
-                }`}
-              >
-                <span className="text-xs">{item.icon}</span>
-                <span className="hidden sm:block">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <a
-            href="https://www.instagram.com/alliknam"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex items-center justify-center w-8 h-8 rounded-lg transition-all hover:bg-white/5"
+          <Link href="/analyze" aria-label="종목 검색"
+            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-white hover:bg-white/5">
+            <FiSearch size={19} />
+          </Link>
+          <a href="https://www.instagram.com/alliknam" target="_blank" rel="noopener noreferrer"
             aria-label="알읽남 인스타그램"
-          >
-            <FaInstagram
-              size={18}
-              className="text-gray-500 group-hover:text-pink-400 transition-colors duration-200"
-              style={{ filter: "none" }}
-            />
+            className="group flex items-center justify-center w-9 h-9 rounded-lg hover:bg-white/5">
+            <FaInstagram size={18} className="text-gray-500 group-hover:text-pink-400 transition-colors" />
           </a>
-          <span className="w-2 h-2 rounded-full bg-signal-green animate-pulse" />
-          <span className="text-xs text-gray-500 hidden sm:block">실시간</span>
         </div>
       </div>
     </nav>
