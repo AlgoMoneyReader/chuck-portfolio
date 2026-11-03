@@ -31,11 +31,36 @@ const CHART_LABELS = new Set([
   "S&P500 선물", "나스닥 선물", "다우 선물", "금", "WTI 원유", "USD/KRW",
 ]);
 
+// ── 하루 흐름 미니 그래프 (첫 점 = 전일 종가) ─────────────────────────────────
+function Sparkline({ values, up }: { values: number[]; up: boolean }) {
+  const W = 120, H = 34;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * W, H - ((v - min) / span) * (H - 4) - 2]);
+  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const color = up ? "#1D9E75" : "#E24B4A";
+  const id = `sp${up ? "u" : "d"}`;
+  const baseY = H - ((values[0] - min) / span) * (H - 4) - 2;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-9 mt-1.5">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <line x1="0" x2={W} y1={baseY} y2={baseY} stroke="#4B5563" strokeWidth="0.6" strokeDasharray="2 2" />
+      <polygon points={`0,${H} ${line} ${W},${H}`} fill={`url(#${id})`} />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 // ── 풀 박스형 IndexCard ──────────────────────────────────────────────────────
 function IndexCard({
-  label, data, format = "number", unit, onSelect, sub,
+  label, data, format = "number", unit, onSelect, sub, line,
 }: {
-  label: string; data: IndexData | null;
+  label: string; data: IndexData | null; line?: number[];
   format?: "number" | "currency" | "usd"; unit?: string;
   onSelect: (label: string) => void; sub?: string;
 }) {
@@ -82,6 +107,7 @@ function IndexCard({
       <span className={`num text-xs font-semibold ${col}`}>
         {arrow} {Math.abs(data.changePct).toFixed(2)}%
       </span>
+      {line && line.length > 2 && <Sparkline values={line} up={isPos} />}
     </button>
   );
 }
@@ -143,6 +169,15 @@ export default function LiveMarketPulse() {
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [chart, setChart]         = useState<string | null>(null);
   const [btc, setBtc]             = useState<CryptoData | null>(null);
+  const [lines, setLines]         = useState<Record<string, number[]>>({});
+
+  useEffect(() => {
+    const load = () => fetch("/api/sparklines", { cache: "no-store" })
+      .then(r => r.json()).then(j => setLines(j.lines ?? {})).catch(() => {});
+    load();
+    const iv = setInterval(load, 3 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -190,8 +225,8 @@ export default function LiveMarketPulse() {
         <div>
           <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">국내</p>
           <div className="grid grid-cols-2 gap-2">
-            <IndexCard label="KOSPI"  data={data?.kospi  ?? null} onSelect={setChart} />
-            <IndexCard label="KOSDAQ" data={data?.kosdaq ?? null} onSelect={setChart} />
+            <IndexCard label="KOSPI" line={lines["KOSPI"]}  data={data?.kospi  ?? null} onSelect={setChart} />
+            <IndexCard label="KOSDAQ" line={lines["KOSDAQ"]} data={data?.kosdaq ?? null} onSelect={setChart} />
           </div>
         </div>
 
@@ -199,10 +234,10 @@ export default function LiveMarketPulse() {
         <div>
           <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">미국 지수</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <IndexCard label="S&P 500"    data={data?.sp500   ?? null} onSelect={setChart} />
-            <IndexCard label="NASDAQ"     data={data?.nasdaq  ?? null} onSelect={setChart} />
-            <IndexCard label="다우존스"   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
-            <IndexCard label="러셀 2000"  data={data?.russell ?? null} onSelect={setChart} sub="Russell 2000" />
+            <IndexCard label="S&P 500" line={lines["S&P 500"]}    data={data?.sp500   ?? null} onSelect={setChart} />
+            <IndexCard label="NASDAQ" line={lines["NASDAQ"]}     data={data?.nasdaq  ?? null} onSelect={setChart} />
+            <IndexCard label="다우존스" line={lines["다우존스"]}   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
+            <IndexCard label="러셀 2000" line={lines["러셀 2000"]}  data={data?.russell ?? null} onSelect={setChart} sub="Russell 2000" />
           </div>
         </div>
 
@@ -210,9 +245,9 @@ export default function LiveMarketPulse() {
         <div>
           <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">선물</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <IndexCard label="S&P500 선물" data={data?.esFut ?? null} onSelect={setChart} sub="ES Futures" />
-            <IndexCard label="나스닥 선물" data={data?.nqFut ?? null} onSelect={setChart} sub="NQ Futures" />
-            <IndexCard label="다우 선물"   data={data?.yjFut ?? null} onSelect={setChart} sub="YM Futures" />
+            <IndexCard label="S&P500 선물" line={lines["S&P500 선물"]} data={data?.esFut ?? null} onSelect={setChart} sub="ES Futures" />
+            <IndexCard label="나스닥 선물" line={lines["나스닥 선물"]} data={data?.nqFut ?? null} onSelect={setChart} sub="NQ Futures" />
+            <IndexCard label="다우 선물" line={lines["다우 선물"]}   data={data?.yjFut ?? null} onSelect={setChart} sub="YM Futures" />
           </div>
         </div>
 
