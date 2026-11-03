@@ -31,9 +31,24 @@ const SECTOR_ETFS = [
   { symbol: "XLRE", name: "부동산"     },
 ];
 
+// 거래대금 순위 대상: 주요 대형주 + 당일 거래량 상위(실적 등으로 갑자기 몰린 종목 포착)
+const NASDAQ_LARGE = [
+  "NVDA","AAPL","MSFT","AMZN","META","GOOGL","TSLA","AVGO","AMD","NFLX","COST","PLTR","MU","INTC","QCOM","ADBE",
+  "CSCO","PEP","TXN","AMAT","LRCX","KLAC","ASML","ARM","MRVL","PANW","CRWD","SNPS","CDNS","INTU","ISRG","BKNG",
+  "SBUX","GILD","AMGN","VRTX","PYPL","ABNB","MELI","COIN","MSTR","SMCI","HOOD","SOFI","DDOG","ZS","APP","AXON",
+  "TTD","ON","CEG","FTNT","OKTA","ADI","NXPI","WDC","STX",
+];
+const NYSE_LARGE = [
+  "JPM","V","MA","LLY","UNH","XOM","WMT","BRK-B","ORCL","JNJ","PG","HD","BAC","KO","CVX","ABBV","CRM","MRK","DIS",
+  "BA","GE","CAT","IBM","NKE","UBER","SHOP","SNOW","TSM","BABA","GS","MS","C","WFC","PFE","T","VZ","NOW","ANET",
+  "DELL","VST","GEV","RTX","LMT","MCD","AXP","SPOT","NET","PLD",
+];
+const NASDAQ_EXCH = new Set(["NMS", "NGM", "NCM"]);
+
 type Quote = {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
+  dollarVolume?: number;
   marketState: string;
   preMarketPrice:    number | null;
   preMarketChangePct: number | null;
@@ -153,6 +168,72 @@ async function fetchSpark(symbols: string[]): Promise<{ code: string; changePct:
   } catch { return []; }
 }
 
+// ── Spark 로 가격·거래량 (인증 불필요). 20개씩 나눠 호출 ─────────────────────────
+async function fetchSparkQuotes(symbols: string[]): Promise<Quote[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < symbols.length; i += 20) chunks.push(symbols.slice(i, i + 20));
+  const out = await Promise.all(chunks.map(async chunk => {
+    try {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.map(encodeURIComponent).join(",")}&range=1d&interval=1d`,
+        { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+      );
+      if (!res.ok) return [];
+      const j = await res.json();
+      return ((j?.spark?.result ?? []) as Record<string, unknown>[]).flatMap(r => {
+        const meta = ((r?.response as Record<string, unknown>[])?.[0]?.meta) as Record<string, unknown> | undefined;
+        if (!meta) return [];
+        const price = (meta.regularMarketPrice as number) ?? 0;
+        const prev = (meta.chartPreviousClose as number) ?? (meta.previousClose as number) ?? price;
+        const volume = (meta.regularMarketVolume as number) ?? 0;
+        if (!price || !volume) return [];
+        return [{
+          rank: 0, code: r.symbol as string,
+          name: ((meta.shortName ?? meta.longName ?? r.symbol) as string).slice(0, 30),
+          price: parseFloat(price.toFixed(2)),
+          change: parseFloat((price - prev).toFixed(2)),
+          changePct: prev ? parseFloat((((price - prev) / prev) * 100).toFixed(2)) : 0,
+          volume, dollarVolume: price * volume,
+          marketState: "REGULAR",
+          preMarketPrice: null, preMarketChangePct: null, postMarketPrice: null, postMarketChangePct: null,
+        } as Quote];
+      });
+    } catch { return []; }
+  }));
+  return out.flat();
+}
+
+// 당일 거래량 상위(주식 수) — 거래대금 후보 보강용. 거래소·종류 포함
+async function fetchMostActivesRaw(count = 50): Promise<{ symbol: string; exchange: string; quoteType: string }[]> {
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=false&scrIds=most_actives&count=${count}`,
+      { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+    );
+    if (!res.ok) return [];
+    const j = await res.json();
+    return ((j?.finance?.result?.[0]?.quotes ?? []) as Record<string, string>[])
+      .map(q => ({ symbol: q.symbol, exchange: q.exchange ?? "", quoteType: q.quoteType ?? "" }));
+  } catch { return []; }
+}
+
+async function topByDollarVolume(index: string): Promise<Quote[]> {
+  let universe: string[];
+  if (index === "DOW") universe = Object.keys(DOW30);
+  else {
+    const extra = (await fetchMostActivesRaw(50))
+      .filter(q => q.quoteType === "EQUITY" && (index !== "NASDAQ" || NASDAQ_EXCH.has(q.exchange)))
+      .map(q => q.symbol);
+    universe = Array.from(new Set([...(index === "NASDAQ" ? NASDAQ_LARGE : [...NASDAQ_LARGE, ...NYSE_LARGE]), ...extra]));
+  }
+  const quotes = await fetchSparkQuotes(universe);
+  return quotes
+    .map(q => (index === "DOW" ? { ...q, name: DOW30[q.code] ?? q.name } : q))
+    .sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0))
+    .slice(0, 10)
+    .map((q, i) => ({ ...q, rank: i + 1 }));
+}
+
 // ── Route ──────────────────────────────────────────────────────────────────────
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -172,7 +253,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ sectors, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
-  // ② DOW 30 — v7/finance/quote로 교체 (pre/post 포함)
+  // ② 거래대금(가격×거래량) 순위
+  if (type === "actives") {
+    const stocks = await topByDollarVolume(index);
+    return NextResponse.json({ stocks, timestamp: ts, basis: "dollarVolume" }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  // ③ DOW 30 — v7/finance/quote로 교체 (pre/post 포함)
   if (index === "DOW") {
     const tickers = Object.keys(DOW30);
     const quotes  = await fetchQuoteBatch(tickers, DOW30);

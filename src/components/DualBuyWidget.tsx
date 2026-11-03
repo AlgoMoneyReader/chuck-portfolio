@@ -14,12 +14,18 @@ interface DualBuyItem {
   foreign: number;
   institution: number;
   combined: number;
+  valueEok: number | null;
+  flowShare: number | null;
 }
 
 interface ApiResponse {
   stocks: DualBuyItem[];
   timestamp: string;
   threshold: number;
+  session?: string;
+  criteria?: string;
+  scanned?: number;
+  errors?: string[];
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ export default function DualBuyWidget() {
       const res = await fetch("/api/dual-buy", { cache: "no-store" });
       if (!res.ok) { setApiError(true); return; }
       const json: ApiResponse = await res.json();
-      if ((json as { error?: string })?.error) { setApiError(true); return; }
+      if ((json as { error?: string })?.error || (!json.stocks?.length && json.errors?.length)) { setApiError(true); setData(json); return; }
       setData(json);
       setApiError(false);
     } catch { setApiError(true); }
@@ -108,11 +114,8 @@ export default function DualBuyWidget() {
     return () => clearInterval(interval);
   }, [load]);
 
-  /** 종목 클릭 → /analyze?ticker=005930.KS&name=삼성전자 */
   function goAnalyze(stock: DualBuyItem) {
-    router.push(
-      `/analyze?ticker=${stock.code}.${stock.market}&name=${encodeURIComponent(stock.name)}`
-    );
+    router.push(`/stock/${stock.code}`);
   }
 
   const ts = data?.timestamp
@@ -131,11 +134,13 @@ export default function DualBuyWidget() {
       <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-navy-border/50">
         <div className="flex items-center gap-2.5">
           <span className="text-lg">🎯</span>
-          <h2 className="text-sm font-bold text-white tracking-tight">실시간 쌍끌이 포착</h2>
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-signal-green/15 text-signal-green border border-signal-green/30 rounded font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-signal-green animate-pulse" />
-            LIVE
-          </span>
+          <h2 className="text-sm font-bold text-white tracking-tight">쌍끌이 포착</h2>
+          {data?.session?.startsWith("장중") && (
+            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-signal-green/15 text-signal-green border border-signal-green/30 rounded font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-signal-green animate-pulse" />
+              LIVE
+            </span>
+          )}
           {refreshing && (
             <span className="w-3.5 h-3.5 border border-gray-600 border-t-cyan-brand/70 rounded-full animate-spin" />
           )}
@@ -155,6 +160,12 @@ export default function DualBuyWidget() {
           )}
         </div>
       </div>
+
+      {data?.criteria && (
+        <div className="px-5 py-2 border-b border-navy-border/40 text-[11px] text-gray-500 leading-relaxed">
+          {data.criteria}{data.session ? ` · ${data.session}` : ""}
+        </div>
+      )}
 
       {/* ── Table Header (desktop only) ── */}
       {!loading && !apiError && data && data.stocks.length > 0 && (
@@ -179,16 +190,13 @@ export default function DualBuyWidget() {
           <SkeletonTable />
         ) : apiError ? (
           <div className="py-10 text-center space-y-2">
-            <p className="text-sm text-orange-400/80 font-medium">⚠️ KIS API 연결 실패</p>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              KIS 인증정보를 확인하세요.<br />
-              Vercel → Settings → Environment Variables
-            </p>
+            <p className="text-sm text-orange-400/80 font-medium">⚠️ 수급 데이터를 불러오지 못했습니다</p>
+            {data?.errors?.length ? <p className="text-[10px] text-gray-600 break-all">{data.errors.join(" | ")}</p> : null}
           </div>
         ) : !data || data.stocks.length === 0 ? (
           <div className="py-10 text-center">
-            <p className="text-sm text-gray-500">현재 외국인·기관 동반 순매수 종목이 없습니다.</p>
-            <p className="text-xs text-gray-600 mt-1">장 마감 후 또는 수급 신호 미발생 상태입니다.</p>
+            <p className="text-sm text-gray-500">기준을 넘는 외국인·기관 동반 순매수 종목이 없습니다.</p>
+            <p className="text-xs text-gray-600 mt-1">작은 금액의 동반 매수는 신호로 보지 않습니다.</p>
           </div>
         ) : (
           <>
@@ -242,6 +250,11 @@ export default function DualBuyWidget() {
                         <span className="text-signal-green">기 <span className="font-semibold">+{fmtUk(stock.institution)}</span></span>
                       </div>
                     </div>
+                    {stock.flowShare != null && (
+                      <p className="pl-6 mt-1.5 text-[11px] text-gray-500 num">
+                        거래대금 {stock.valueEok != null ? fmtUk(stock.valueEok) : "—"} 중 외국인+기관 순매수 <span className="text-white font-semibold">{stock.flowShare}%</span>
+                      </p>
+                    )}
                   </button>
                 );
               })}
@@ -304,7 +317,7 @@ export default function DualBuyWidget() {
       {!loading && !apiError && data && data.stocks.length > 0 && (
         <div className="flex items-center justify-between px-5 py-2.5 border-t border-navy-border/40 bg-navy-sub/20">
           <p className="text-xs text-gray-600">
-            클릭 시 AI 종목 분석 페이지로 이동
+            클릭 시 종목 상세로 이동
           </p>
           <p className="text-xs text-gray-600">
             외국인·기관 동반 순매수 <span className="text-white font-medium">{data.stocks.length}</span>개 포착

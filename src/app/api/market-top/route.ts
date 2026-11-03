@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 
 // ── 서버사이드 캐시 ──────────────────────────────────────────────────────────
 interface CacheEntry {
-  data: { market: string; topGainers: TopGainerRow[]; topLosers: TopGainerRow[]; topByAmount: TopGainerRow[]; timestamp: string };
+  data: object;
   ts: number;
 }
 const serverCache: Record<string, CacheEntry> = {};
@@ -115,6 +116,53 @@ async function fetchAllCodes(codes: string[]): Promise<Map<string, NaverSummary>
   return map;
 }
 
+// ── KIS 시장 전체 순위 (실패하면 null → 고정 목록 계산으로 대체) ─────────────────
+type KisRow = Record<string, string>;
+
+function toRow(r: KisRow, i: number, suffix: string): TopGainerRow | null {
+  const code = (r.mksc_shrn_iscd ?? r.stck_shrn_iscd ?? "").trim();
+  const price = num(r.stck_prpr) ?? 0;
+  if (!/^\d{6}$/.test(code) || !price) return null;
+  const sign = r.prdy_vrss_sign;
+  const diff = Math.abs(num(r.prdy_vrss) ?? 0) * (sign === "4" || sign === "5" ? -1 : 1);
+  const vol = num(r.acml_vol) ?? 0;
+  return {
+    rank: i + 1, code, symbol: code + suffix, name: (r.hts_kor_isnm ?? "").trim(),
+    price, change: diff, changePct: num(r.prdy_ctrt) ?? 0, volume: vol,
+    tradeAmount: num(r.acml_tr_pbmn) ?? price * vol,
+  };
+}
+
+async function kisAmountRank(isc: string, suffix: string): Promise<TopGainerRow[] | null> {
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/quotations/volume-rank", "FHPST01710000", {
+      FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171", FID_INPUT_ISCD: isc,
+      FID_DIV_CLS_CODE: "0", FID_BLNG_CLS_CODE: "3", FID_TRGT_CLS_CODE: "111111111",
+      FID_TRGT_EXLS_CLS_CODE: "0000000000", FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "",
+      FID_VOL_CNT: "", FID_INPUT_DATE_1: "",
+    });
+    const rows = ((j.output ?? []) as KisRow[]).map((r, i) => toRow(r, i, suffix)).filter((r): r is TopGainerRow => !!r);
+    return rows.length ? rows.sort((a, b) => b.tradeAmount - a.tradeAmount).slice(0, 20).map((r, i) => ({ ...r, rank: i + 1 })) : null;
+  } catch { return null; }
+}
+
+async function kisFluctuation(isc: string, suffix: string, sort: "0000" | "0001"): Promise<TopGainerRow[] | null> {
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/ranking/fluctuation", "FHPST01700000", {
+      fid_cond_mrkt_div_code: "J", fid_cond_scr_div_code: "20170", fid_input_iscd: isc,
+      fid_rank_sort_cls_code: sort, fid_input_cnt_1: "0", fid_prc_cls_code: "0",
+      fid_input_price_1: "", fid_input_price_2: "", fid_vol_cnt: "10000",
+      fid_trgt_cls_code: "0", fid_trgt_exls_cls_code: "0", fid_div_cls_code: "0",
+      fid_rsfl_rate1: "", fid_rsfl_rate2: "",
+    });
+    const rows = ((j.output ?? []) as KisRow[]).map((r, i) => toRow(r, i, suffix)).filter((r): r is TopGainerRow => !!r);
+    const ok = sort === "0000" ? rows.filter(r => r.changePct > 0) : rows.filter(r => r.changePct < 0);
+    if (!ok.length) return null;
+    return ok.sort((a, b) => (sort === "0000" ? b.changePct - a.changePct : a.changePct - b.changePct))
+      .slice(0, 20).map((r, i) => ({ ...r, rank: i + 1 }));
+  } catch { return null; }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const market = searchParams.get("market") ?? "KOSPI";
@@ -130,6 +178,13 @@ export async function GET(request: Request) {
   try {
     const codes = market === "KOSDAQ" ? KOSDAQ_CODES : KOSPI_CODES;
     const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
+    const isc = market === "KOSDAQ" ? "1001" : "0001";
+
+    const [kAmount, kUp, kDown] = await Promise.all([
+      kisAmountRank(isc, mktSuffix),
+      kisFluctuation(isc, mktSuffix, "0000"),
+      kisFluctuation(isc, mktSuffix, "0001"),
+    ]);
 
     const dataMap = await fetchAllCodes(codes);
 
@@ -165,7 +220,14 @@ export async function GET(request: Request) {
       .slice(0, 20)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
-    const payload = { market, topGainers, topLosers, topByAmount, timestamp: new Date().toISOString() };
+    const payload = {
+      market,
+      topGainers: kUp ?? topGainers,
+      topLosers: kDown ?? topLosers,
+      topByAmount: kAmount ?? topByAmount,
+      source: { amount: kAmount ? "KIS 시장 전체" : "주요 종목 목록", gainers: kUp ? "KIS 시장 전체" : "주요 종목 목록", losers: kDown ? "KIS 시장 전체" : "주요 종목 목록" },
+      timestamp: new Date().toISOString(),
+    };
     serverCache[market] = { data: payload, ts: Date.now() };
 
     return NextResponse.json(payload, {
