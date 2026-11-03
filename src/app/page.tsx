@@ -1,4 +1,5 @@
 import LiveMarketPulse from "@/components/LiveMarketPulse";
+import AfterHoursWidget from "@/components/AfterHoursWidget";
 import MarketSummary from "@/components/MarketSummary";
 import StockSearchPanel from "@/components/StockSearchPanel";
 import DualBuyWidget from "@/components/DualBuyWidget";
@@ -32,6 +33,9 @@ export default function Home() {
 
       {/* 실시간 시장 현황 */}
       <LiveMarketPulse />
+
+      {/* 주요 종목 시세 */}
+      <AfterHoursWidget />
 
       {/* 실시간 이슈 + 쌍끌이 — 2컬럼 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

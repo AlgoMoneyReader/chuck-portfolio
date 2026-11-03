@@ -135,11 +135,14 @@ function SmallRow({
   );
 }
 
+interface CryptoData { price: number; changePct: number; }
+
 export default function LiveMarketPulse() {
   const [data, setData]           = useState<MarketData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [chart, setChart]         = useState<string | null>(null);
+  const [btc, setBtc]             = useState<CryptoData | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -149,6 +152,13 @@ export default function LiveMarketPulse() {
       setData(json);
       setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
     } catch { /* silent */ } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/crypto-prices", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.btc) setBtc({ price: j.btc.price, changePct: j.btc.changePct }); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -206,12 +216,15 @@ export default function LiveMarketPulse() {
           </div>
         </div>
 
-        {/* ④ 원자재·환율 (소형 행) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {/* ④ 원자재·환율·암호화폐 (소형 행) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <SmallRow label="금"       data={data?.gold   ?? null} emoji="🥇" unit="/oz"  onSelect={setChart} />
           <SmallRow label="WTI 원유" data={data?.oil    ?? null} emoji="🛢"  unit="/bbl" onSelect={setChart} />
           <SmallRow label="USD/KRW"  data={data?.usdKrw ?? null} emoji="💱"
             format="number" unit="원" onSelect={setChart} />
+          <SmallRow label="비트코인"
+            data={btc ? { price: btc.price, change: 0, changePct: btc.changePct, marketState: "REGULAR" } : null}
+            emoji="₿" onSelect={setChart} />
         </div>
       </section>
 
