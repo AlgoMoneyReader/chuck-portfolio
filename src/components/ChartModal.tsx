@@ -20,7 +20,7 @@ interface ChartData {
 interface FlowItem { type: string; label: string; netBuy: number; }
 interface Commentary { title: string; subtitle: string; bullets: string[]; updatedAt: string; }
 interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
-interface NightFuturesPoint { time: string; price: number; }
+interface NightFuturesPoint { time: string; price: number; full?: string; }
 interface NightFuturesData {
   label?: string;
   debug?: string[];
@@ -48,31 +48,46 @@ function fmtFlow(n: number): string {
   return `${sign}${abs.toLocaleString("ko-KR")}억`;
 }
 
-function CustomTooltip({ active, payload, label: dateStr, currency }: {
-  active?: boolean; payload?: { value: number }[]; label?: string; currency: string;
+function ChangeLine({ val, base }: { val: number; base: number | null }) {
+  if (!base) return null;
+  const diff = val - base;
+  const pct = diff / base * 100;
+  const up = diff >= 0;
+  return (
+    <p className={`num mt-0.5 ${up ? "text-signal-green" : "text-signal-red"}`}>
+      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%
+    </p>
+  );
+}
+
+function CustomTooltip({ active, payload, label: dateStr, currency, unit, base }: {
+  active?: boolean; payload?: { value: number }[]; label?: string;
+  currency: string; unit: string; base: number | null;
 }) {
   if (!active || !payload?.length || !dateStr) return null;
   const val = payload[0].value;
   const formatted = currency === "KRW"
-    ? val.toLocaleString("ko-KR")
+    ? val.toLocaleString("ko-KR", { maximumFractionDigits: 2 })
     : val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
       <p className="text-gray-400 mb-0.5">{dateStr}</p>
-      <p className="text-white font-bold">{formatted}{currency === "KRW" ? "원" : ""}</p>
+      <p className="text-white font-bold">{formatted}{unit}</p>
+      <ChangeLine val={val} base={base} />
     </div>
   );
 }
 
-function NightTooltip({ active, payload, label: timeStr }: {
-  active?: boolean; payload?: { value: number }[]; label?: string;
+function NightTooltip({ active, payload, label: timeStr, base }: {
+  active?: boolean; payload?: { value: number; payload?: { full?: string } }[]; label?: string; base: number | null;
 }) {
   if (!active || !payload?.length || !timeStr) return null;
   const val = payload[0].value;
   return (
     <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
-      <p className="text-gray-400 mb-0.5">{timeStr}</p>
-      <p className="text-white font-bold">{val.toLocaleString("ko-KR")}</p>
+      <p className="text-gray-400 mb-0.5">{payload[0].payload?.full ?? timeStr}</p>
+      <p className="text-white font-bold">{val.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</p>
+      <ChangeLine val={val} base={base} />
     </div>
   );
 }
@@ -307,7 +322,7 @@ export default function ChartModal({ label, onClose }: Props) {
                             : v.toLocaleString("en-US", { maximumFractionDigits: 0 })
                         }
                         axisLine={false} tickLine={false} width={52} />
-                      <Tooltip content={<CustomTooltip currency={chartData?.currency ?? ""} />} />
+                      <Tooltip content={<CustomTooltip currency={chartData?.currency ?? ""} unit={chartData?.currency === "KRW" && !isIndex ? "원" : ""} base={rangeBase} />} />
                       <Area type="monotone" dataKey="close"
                         stroke={color} strokeWidth={2} fill={`url(#${gradId})`}
                         dot={false}
@@ -488,7 +503,7 @@ export default function ChartModal({ label, onClose }: Props) {
                             tick={{ fill: "#6B7280", fontSize: 10 }}
                             tickFormatter={v => v.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
                             axisLine={false} tickLine={false} width={48} />
-                          <Tooltip content={<NightTooltip />} />
+                          <Tooltip content={<NightTooltip base={nightFutures.previousClose || null} />} />
                           <Area type="monotone" dataKey="price"
                             stroke={nightColor} strokeWidth={2} fill={`url(#${nightGradId})`}
                             dot={false}
