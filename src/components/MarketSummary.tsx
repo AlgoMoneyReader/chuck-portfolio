@@ -908,6 +908,7 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
 interface USStockRow {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
+  dollarVolume?: number;
   marketState: string;
   preMarketPrice:     number | null;
   preMarketChangePct: number | null;
@@ -957,9 +958,10 @@ function USStockList({
     return () => clearInterval(iv);
   }, [load]);
 
-  const subLabel =
-    index === "SP500"  ? "S&P 500 기준" :
-    index === "NASDAQ" ? "NASDAQ 기준"  : "다우존스 30 기준";
+  const isValue = type === "actives";
+  const subLabel = isValue
+    ? (index === "DOW" ? "다우존스 30 · 거래대금(가격×거래량) 순" : `${index === "NASDAQ" ? "나스닥 상장" : "미국"} 주요 대형주 + 당일 거래 급증 종목 · 거래대금 순`)
+    : index === "SP500" ? "S&P 500 기준" : index === "NASDAQ" ? "NASDAQ 기준" : "다우존스 30 기준";
 
   return (
     <div>
@@ -972,7 +974,7 @@ function USStockList({
         <span className="flex-1">종목</span>
         <span className="w-20 text-right">현재가</span>
         <span className="w-14 text-right">등락률</span>
-        <span className="w-14 text-right hidden sm:block">거래량</span>
+        <span className={`w-14 text-right ${isValue ? "" : "hidden sm:block"}`}>{isValue ? "거래대금" : "거래량"}</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">데이터를 불러올 수 없습니다</p>
@@ -1020,7 +1022,9 @@ function USStockList({
                 <span className={`w-14 text-right text-sm font-semibold num whitespace-nowrap ${isDisplayPos ? "text-signal-green" : "text-signal-red"}`}>
                   {isDisplayPos ? "▲" : "▼"}{Math.abs(displayPct!).toFixed(2)}%
                 </span>
-                <span className="w-14 text-right text-xs text-gray-500 num hidden sm:block whitespace-nowrap">{fmtVolUS(r.volume)}</span>
+                <span className={`w-14 text-right text-xs num whitespace-nowrap ${isValue ? "text-gray-300" : "text-gray-500 hidden sm:block"}`}>
+                  {isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
+                </span>
               </div>
             );
           })}
@@ -1245,7 +1249,7 @@ const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
 const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
   { id: "gainers", label: "상승 TOP10" },
   { id: "losers",  label: "하락 TOP10" },
-  { id: "actives", label: "거래량 TOP10" },
+  { id: "actives", label: "거래대금 TOP10" },
   { id: "sector",  label: "섹터 흐름"   },
 ];
 
