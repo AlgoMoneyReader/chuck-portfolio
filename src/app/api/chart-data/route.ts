@@ -43,7 +43,8 @@ async function kisIndexQuote(code: string): Promise<{ price: number; prev: numbe
     if (j.rt_cd !== "0") return null;
     const price = parseFloat(String(j.output?.bstp_nmix_prpr ?? "").replace(/,/g, ""));
     const diff = parseFloat(String(j.output?.bstp_nmix_prdy_vrss ?? "").replace(/,/g, ""));
-    if (!price || isNaN(diff)) return null;
+    // 장 시작 전 새벽엔 전일 대비가 0으로 초기화돼 들어온다 → 이 값은 쓰지 않고 일봉으로 계산
+    if (!price || isNaN(diff) || diff === 0) return null;
     return { price, prev: parseFloat((price - diff).toFixed(2)) };
   } catch { return null; }
 }
@@ -67,9 +68,26 @@ export async function GET(request: Request) {
 
   const kisQuote = KIS_INDEX[label] ? await kisIndexQuote(KIS_INDEX[label]) : null;
 
-  // KIS 값이 없을 때: 메인 카드(/api/market)와 같은 방식 — range=1d 의 chartPreviousClose 가 전일 종가
   let prevDayClose: number | null = null;
-  if (!kisQuote) {
+  if (!kisQuote && KIS_INDEX[label]) {
+    // 국내 지수: 일봉 날짜(KST)로 마지막 거래일 바로 앞 종가
+    try {
+      const r = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
+        { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
+      );
+      if (r.ok) {
+        const res0 = (await r.json())?.chart?.result?.[0];
+        const ts: number[] = res0?.timestamp ?? [];
+        const cs: (number | null)[] = res0?.indicators?.quote?.[0]?.close ?? [];
+        const day = (t: number) => new Date((t + 9 * 3600) * 1000).toISOString().slice(0, 10);
+        const lastDay = res0?.meta?.regularMarketTime ? day(res0.meta.regularMarketTime) : null;
+        const before = ts.map((t, i) => ({ d: day(t), c: cs[i] })).filter(b => b.c != null && lastDay && b.d < lastDay);
+        if (before.length) prevDayClose = before[before.length - 1].c!;
+      }
+    } catch { /* 아래 meta 값으로 폴백 */ }
+  } else if (!kisQuote) {
+    // 해외 지수·선물·환율: 메인 카드(/api/market)와 같은 방식 — range=1d 의 chartPreviousClose
     try {
       const r = await fetch(
         `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=1d`,
