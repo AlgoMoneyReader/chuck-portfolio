@@ -15,9 +15,20 @@ interface ChartData {
   previousClose: number | null;
   currency: string;
   marketState: string;
+  intraday?: boolean;
 }
 interface FlowItem { type: string; label: string; netBuy: number; }
 interface Commentary { title: string; subtitle: string; bullets: string[]; updatedAt: string; }
+interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
+interface NightFuturesPoint { time: string; price: number; }
+interface NightFuturesData {
+  currentPrice: number;
+  previousClose: number;
+  changePct: number;
+  change: number;
+  marketState: string;
+  points: NightFuturesPoint[];
+}
 
 const RANGES = [
   { key: "1d",  label: "1일"   },
@@ -29,7 +40,7 @@ const RANGES = [
 ];
 
 function fmtFlow(n: number): string {
-  const abs = Math.abs(n);
+  const abs  = Math.abs(n);
   const sign = n >= 0 ? "+" : "-";
   if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(1)}조`;
   return `${sign}${abs.toLocaleString("ko-KR")}억`;
@@ -46,7 +57,20 @@ function CustomTooltip({ active, payload, label: dateStr, currency }: {
   return (
     <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
       <p className="text-gray-400 mb-0.5">{dateStr}</p>
-      <p className="text-white font-bold">{formatted}</p>
+      <p className="text-white font-bold">{formatted}{currency === "KRW" ? "원" : ""}</p>
+    </div>
+  );
+}
+
+function NightTooltip({ active, payload, label: timeStr }: {
+  active?: boolean; payload?: { value: number }[]; label?: string;
+}) {
+  if (!active || !payload?.length || !timeStr) return null;
+  const val = payload[0].value;
+  return (
+    <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
+      <p className="text-gray-400 mb-0.5">{timeStr}</p>
+      <p className="text-white font-bold">{val.toLocaleString("ko-KR")}</p>
     </div>
   );
 }
@@ -54,15 +78,21 @@ function CustomTooltip({ active, payload, label: dateStr, currency }: {
 export default function ChartModal({ label, onClose }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
-  const [range, setRange]           = useState("3mo");
-  const [activeTab, setActiveTab]   = useState<"chart" | "flow">("chart");
-  const [chartData, setChartData]   = useState<ChartData | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState(false);
-  const [flow, setFlow]             = useState<FlowItem[] | null>(null);
-  const [flowLoading, setFlowLoading] = useState(false);
-  const [commentary, setCommentary]   = useState<Commentary | null>(null);
+  const [range, setRange]                       = useState("3mo");
+  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "night">("chart");
+  const [chartData, setChartData]               = useState<ChartData | null>(null);
+  const [loading, setLoading]                   = useState(true);
+  const [error, setError]                       = useState(false);
+  const [flow, setFlow]                         = useState<FlowItem[] | null>(null);
+  const [flowLoading, setFlowLoading]           = useState(false);
+  const [flowErr, setFlowErr]                   = useState("");
+  const [commentary, setCommentary]             = useState<Commentary | null>(null);
   const [commentaryLoading, setCommentaryLoading] = useState(false);
+  const [breadth, setBreadth]                   = useState<BreadthData | null>(null);
+  const [breadthLoading, setBreadthLoading]     = useState(false);
+  const [nightFutures, setNightFutures]         = useState<NightFuturesData | null>(null);
+  const [nightLoading, setNightLoading]         = useState(false);
+  const [nightError, setNightError]             = useState(false);
 
   // ── 차트 데이터 ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -74,21 +104,35 @@ export default function ChartModal({ label, onClose }: Props) {
       .finally(() => setLoading(false));
   }, [label, range]);
 
-  // ── 수급 데이터 (수급·시황 탭, 지수만) ────────────────────────────────────
+  // ── 수급 데이터 ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "flow" || !isIndex || flow !== null) return;
     setFlowLoading(true);
     fetch(`/api/investor-flow?market=${label}`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j?.flow) setFlow(j.flow); })
+      .then(r => r.json().catch(() => null))
+      .then(j => {
+        if (j?.flow) setFlow(j.flow);
+        else setFlowErr(Array.isArray(j?.debug) ? j.debug.join(" | ") : String(j?.debug ?? j?.error ?? "응답 없음"));
+      })
+      .catch(e => setFlowErr(String(e)))
       .finally(() => setFlowLoading(false));
   }, [activeTab, isIndex, label, flow]);
 
-  // ── AI 시황 (수급·시황 탭, 지수만, 차트 데이터 준비 후) ───────────────────
+  // ── 등락 현황 ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "flow" || !isIndex || breadth !== null) return;
+    setBreadthLoading(true);
+    fetch(`/api/market-breadth?market=${label}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.advance != null) setBreadth(j); })
+      .finally(() => setBreadthLoading(false));
+  }, [activeTab, isIndex, label, breadth]);
+
+  // ── AI 시황 ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (activeTab !== "flow" || !isIndex || commentary !== null || !chartData) return;
-    const cp = chartData.currentPrice;
-    const pc = chartData.previousClose;
+    const cp  = chartData.currentPrice;
+    const pc  = chartData.previousClose;
     const pct = cp && pc ? ((cp - pc) / pc * 100) : 0;
     setCommentaryLoading(true);
     fetch(
@@ -100,6 +144,17 @@ export default function ChartModal({ label, onClose }: Props) {
       .finally(() => setCommentaryLoading(false));
   }, [activeTab, isIndex, label, commentary, chartData]);
 
+  // ── 야간선물 데이터 ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "night" || !isIndex) return;
+    setNightLoading(true); setNightError(false);
+    fetch("/api/night-futures", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(j => { if (j.error) throw new Error(); setNightFutures(j); })
+      .catch(() => setNightError(true))
+      .finally(() => setNightLoading(false));
+  }, [activeTab, isIndex]);
+
   // ── ESC 닫기 ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -108,31 +163,40 @@ export default function ChartModal({ label, onClose }: Props) {
   }, [onClose]);
 
   // ── 파생값 ────────────────────────────────────────────────────────────────
-  const isPos   = (chartData?.currentPrice ?? 0) >= (chartData?.previousClose ?? 0);
-  const color   = isPos ? "#22c55e" : "#ef4444";
-  const gradId  = `grad_${label.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const isPos    = (chartData?.currentPrice ?? 0) >= (chartData?.previousClose ?? 0);
+  const color    = isPos ? "#22c55e" : "#ef4444";
+  const gradId   = `grad_${label.replace(/[^a-zA-Z0-9]/g, "")}`;
   const changePct = chartData?.currentPrice && chartData?.previousClose
     ? ((chartData.currentPrice - chartData.previousClose) / chartData.previousClose * 100)
     : null;
 
   const fmt = (p: number | null) => {
     if (p == null) return "-";
-    if (chartData?.currency === "KRW") return p.toLocaleString("ko-KR");
+    if (chartData?.currency === "KRW") return p.toLocaleString("ko-KR") + "원";
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const data = chartData?.data ?? [];
-  const tickCount = 6;
-  const step = data.length > tickCount ? Math.floor(data.length / tickCount) : 1;
-  const ticks = data.filter((_, i) => i % step === 0).map(d => d.date);
+  const data       = chartData?.data ?? [];
+  const tickCount  = 6;
+  const step       = data.length > tickCount ? Math.floor(data.length / tickCount) : 1;
+  const ticks      = data.filter((_, i) => i % step === 0).map(d => d.date);
   const maxFlowAbs = flow ? Math.max(...flow.map(f => Math.abs(f.netBuy)), 1) : 1;
+
+  const nightIsPos  = (nightFutures?.changePct ?? 0) >= 0;
+  const nightColor  = nightIsPos ? "#1D9E75" : "#E24B4A";
+  const nightGradId = `nightgrad_${label}`;
+  const nightTicks  = nightFutures?.points
+    ? nightFutures.points
+        .filter((_, i) => i % Math.max(1, Math.floor(nightFutures.points.length / 6)) === 0)
+        .map(p => p.time)
+    : [];
 
   return (
     <>
       <div className="fixed inset-0 bg-black/70 z-40 animate-fade-in" onClick={onClose} />
       <div className="fixed z-50 bottom-0 left-0 right-0 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
         <div
-          className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col"
+          className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up sm:animate-fade-in flex flex-col"
           style={{ height: "min(92vh, 640px)" }}
           onClick={e => e.stopPropagation()}
         >
@@ -162,7 +226,11 @@ export default function ChartModal({ label, onClose }: Props) {
           {/* 탭 (지수만) */}
           {isIndex && (
             <div className="flex gap-1 px-5 pt-3 pb-0 shrink-0">
-              {([{ key: "chart", label: "차트" }, { key: "flow", label: "수급·시황" }] as const).map(t => (
+              {([
+                { key: "chart" as const, label: "차트" },
+                { key: "flow"  as const, label: "수급·시황" },
+                { key: "night" as const, label: "야간선물" },
+              ]).map(t => (
                 <button key={t.key} onClick={() => setActiveTab(t.key)}
                   className={`px-4 py-1.5 text-xs rounded-full transition-all font-semibold ${
                     activeTab === t.key
@@ -204,7 +272,7 @@ export default function ChartModal({ label, onClose }: Props) {
                           <stop offset="95%" stopColor={color} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A2D42" vertical={false} />
                       <XAxis dataKey="date" ticks={ticks}
                         tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
                       <YAxis domain={["auto", "auto"]}
@@ -219,7 +287,7 @@ export default function ChartModal({ label, onClose }: Props) {
                       <Area type="monotone" dataKey="close"
                         stroke={color} strokeWidth={2} fill={`url(#${gradId})`}
                         dot={false}
-                        activeDot={{ r: 4, fill: color, stroke: "#04091A", strokeWidth: 2 }}
+                        activeDot={{ r: 4, fill: color, stroke: "#07111E", strokeWidth: 2 }}
                         connectNulls />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -232,6 +300,52 @@ export default function ChartModal({ label, onClose }: Props) {
           {activeTab === "flow" && isIndex && (
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
+              {/* 당일 등락 현황 */}
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">당일 등락 현황</p>
+                {breadthLoading ? (
+                  <div className="h-16 bg-navy-border/40 rounded-xl animate-pulse" />
+                ) : breadth ? (
+                  <div className="bg-navy-sub/50 rounded-xl p-3 border border-navy-border/30">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-signal-green text-sm font-semibold num">
+                        ▲ {breadth.advance.toLocaleString("ko-KR")}종목 상승
+                      </span>
+                      <span className="text-gray-500 text-xs num">
+                        {breadth.total > 0 ? `전체 ${breadth.total.toLocaleString("ko-KR")}종목` : ""}
+                      </span>
+                      <span className="text-signal-red text-sm font-semibold num">
+                        ▼ {breadth.decline.toLocaleString("ko-KR")}종목 하락
+                      </span>
+                    </div>
+                    <div className="h-3 bg-navy-border rounded-full overflow-hidden flex">
+                      {breadth.total > 0 && (
+                        <>
+                          <div className="h-full rounded-l-full transition-all"
+                            style={{ width: `${(breadth.advance / breadth.total) * 100}%`, backgroundColor: "#1D9E75" }} />
+                          {breadth.unchanged > 0 && (
+                            <div className="h-full transition-all"
+                              style={{ width: `${(breadth.unchanged / breadth.total) * 100}%`, backgroundColor: "#4B5563" }} />
+                          )}
+                          <div className="h-full rounded-r-full transition-all"
+                            style={{ width: `${(breadth.decline / breadth.total) * 100}%`, backgroundColor: "#E24B4A" }} />
+                        </>
+                      )}
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-xs text-signal-green/70">
+                        {breadth.total > 0 ? `${((breadth.advance / breadth.total) * 100).toFixed(1)}%` : "-"}
+                      </span>
+                      <span className="text-xs text-signal-red/70">
+                        {breadth.total > 0 ? `${((breadth.decline / breadth.total) * 100).toFixed(1)}%` : "-"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">등락 데이터를 불러올 수 없습니다</p>
+                )}
+              </div>
+
               {/* 투자자별 순매수 */}
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">투자자별 순매수 (당일)</p>
@@ -242,10 +356,10 @@ export default function ChartModal({ label, onClose }: Props) {
                 ) : flow ? (
                   <div className="space-y-2">
                     {flow.map(f => {
-                      const pos = f.netBuy >= 0;
+                      const pos      = f.netBuy >= 0;
                       const barColor = pos ? "#1D9E75" : "#E24B4A";
-                      const barPct = Math.abs(f.netBuy) / maxFlowAbs * 100;
-                      const icon = f.label === "외국인" ? "🌐" : f.label === "기관" ? "🏦" : "👤";
+                      const barPct   = Math.abs(f.netBuy) / maxFlowAbs * 100;
+                      const icon     = f.label === "외국인" ? "🌐" : f.label === "기관" ? "🏦" : "👤";
                       return (
                         <div key={f.type} className="bg-navy-sub/50 rounded-xl p-3 border border-navy-border/30">
                           <div className="flex justify-between items-center mb-2">
@@ -267,7 +381,10 @@ export default function ChartModal({ label, onClose }: Props) {
                     })}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-500">수급 데이터를 불러올 수 없습니다</p>
+                  <div>
+                    <p className="text-xs text-gray-500">수급 데이터를 불러올 수 없습니다</p>
+                    {flowErr && <p className="text-[10px] text-gray-600 mt-1 break-all">{flowErr}</p>}
+                  </div>
                 )}
               </div>
 
@@ -300,6 +417,70 @@ export default function ChartModal({ label, onClose }: Props) {
                   <p className="text-xs text-gray-500">시황 분석을 불러올 수 없습니다</p>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* 야간선물 탭 */}
+          {activeTab === "night" && isIndex && (
+            <div className="flex-1 flex flex-col min-h-0 px-5 py-4">
+              {nightLoading ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-cyan-brand/30 border-t-cyan-brand rounded-full animate-spin" />
+                </div>
+              ) : nightError || !nightFutures ? (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                  <p className="text-sm text-gray-500">야간선물 데이터를 불러올 수 없습니다</p>
+                  <p className="text-xs text-gray-600">야간 세션(18:00~06:00) 외 시간이거나 데이터 서버 오류입니다</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-3 mb-4 shrink-0">
+                    <span className="text-xl font-bold num" style={{ color: nightColor }}>
+                      {nightFutures.currentPrice.toLocaleString("ko-KR")}
+                    </span>
+                    <span className="text-sm font-semibold num" style={{ color: nightColor }}>
+                      {nightIsPos ? "▲" : "▼"} {Math.abs(nightFutures.changePct).toFixed(2)}%
+                    </span>
+                    <span className="text-xs text-gray-500 ml-auto">미니 코스피200 야간선물</span>
+                  </div>
+                  {nightFutures.points.length > 0 ? (
+                    <div className="flex-1 min-h-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={nightFutures.points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id={nightGradId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%"  stopColor={nightColor} stopOpacity={0.25} />
+                              <stop offset="95%" stopColor={nightColor} stopOpacity={0.02} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1A2D42" vertical={false} />
+                          <XAxis dataKey="time" ticks={nightTicks}
+                            tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis domain={["auto", "auto"]}
+                            tick={{ fill: "#6B7280", fontSize: 10 }}
+                            tickFormatter={v => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)}
+                            axisLine={false} tickLine={false} width={48} />
+                          <Tooltip content={<NightTooltip />} />
+                          <Area type="monotone" dataKey="price"
+                            stroke={nightColor} strokeWidth={2} fill={`url(#${nightGradId})`}
+                            dot={false}
+                            activeDot={{ r: 4, fill: nightColor, stroke: "#07111E", strokeWidth: 2 }}
+                            connectNulls />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold num mb-1" style={{ color: nightColor }}>
+                          {nightFutures.currentPrice.toLocaleString("ko-KR")}
+                        </p>
+                        <p className="text-xs text-gray-500">현재가 (차트 데이터 없음)</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
