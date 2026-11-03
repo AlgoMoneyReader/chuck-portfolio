@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, lazy, Suspense } from "react";
-
-const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Category = "거시경제" | "국내증시" | "국내기업" | "정책·이슈" | "해외증시";
 interface StockTag { code: string; name: string; market: "KS" | "KQ" }
@@ -50,7 +49,6 @@ export default function NewsRoom() {
   const [cat, setCat]             = useState<"모두" | Category>("모두");
   const [limit, setLimit]         = useState(20);
   const [, setTick]               = useState(0);
-  const [drawer, setDrawer]       = useState<StockTag | null>(null);
   const [dart, setDart]           = useState<Disclosure[]>([]);
   const [dartErr, setDartErr]     = useState("");
 
@@ -153,8 +151,8 @@ export default function NewsRoom() {
             <ul className="space-y-2">
               {dart.slice(0, 6).map(d => (
                 <li key={d.url} className="flex items-baseline gap-2 text-xs">
-                  <button onClick={() => setDrawer({ code: d.code, name: d.corp, market: d.market })}
-                    className="shrink-0 font-semibold text-white hover:text-cyan-brand">{d.corp}</button>
+                  <Link href={`/stock/${d.code}`}
+                    className="shrink-0 font-semibold text-white hover:text-cyan-brand">{d.corp}</Link>
                   <a href={d.url} target="_blank" rel="noopener noreferrer"
                     className="min-w-0 flex-1 truncate text-gray-400 hover:text-white">{d.report}</a>
                   <span className="shrink-0 text-gray-500 num">{d.date.slice(5)}</span>
@@ -205,10 +203,10 @@ export default function NewsRoom() {
                     </span>
                     <span className="text-[10px] text-gray-400 bg-navy-sub px-1.5 py-0.5 rounded">{n.category}</span>
                     {n.stocks.map(s => (
-                      <button key={s.code} onClick={() => setDrawer(s)}
+                      <Link key={s.code} href={`/stock/${s.code}`}
                         className="text-[10px] font-semibold text-cyan-brand bg-cyan-brand/10 px-1.5 py-0.5 rounded hover:bg-cyan-brand/20">
                         {s.name}
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -230,11 +228,6 @@ export default function NewsRoom() {
         </p>
       )}
 
-      {drawer && (
-        <Suspense fallback={null}>
-          <StockDetailDrawer code={drawer.code} market={drawer.market} name={drawer.name} onClose={() => setDrawer(null)} />
-        </Suspense>
-      )}
     </section>
   );
 }

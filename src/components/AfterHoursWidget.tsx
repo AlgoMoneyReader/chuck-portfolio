@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, lazy, Suspense } from "react";
-
-const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface StockItem {
   code: string;
@@ -17,7 +16,6 @@ interface StockItem {
 export default function AfterHoursWidget() {
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [drawer, setDrawer] = useState<{ code: string; market: "KS" | "KQ"; name: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/after-hours-stocks", { cache: "no-store" })
@@ -41,13 +39,10 @@ export default function AfterHoursWidget() {
               const colorCls     = isPos ? "text-signal-green" : "text-signal-red";
               const hasExt       = s.extPrice != null && s.extChangePct != null;
               return (
-                <button
+                <Link
                   key={s.code}
-                  onClick={() => {
-                    const [code, mk] = s.code.split(".");
-                    setDrawer({ code, market: mk === "KQ" ? "KQ" : "KS", name: s.name });
-                  }}
-                  className="text-left bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors"
+                  href={`/stock/${s.code.split(".")[0]}`}
+                  className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold text-white truncate">{s.name}</span>
@@ -66,16 +61,11 @@ export default function AfterHoursWidget() {
                       종가 {s.regularPrice.toLocaleString("ko-KR")}
                     </p>
                   )}
-                </button>
+                </Link>
               );
             })
         }
       </div>
-      {drawer && (
-        <Suspense fallback={null}>
-          <StockDetailDrawer code={drawer.code} market={drawer.market} name={drawer.name} onClose={() => setDrawer(null)} />
-        </Suspense>
-      )}
     </section>
   );
 }
