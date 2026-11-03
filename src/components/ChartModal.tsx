@@ -85,6 +85,7 @@ export default function ChartModal({ label, onClose }: Props) {
   const [error, setError]                       = useState(false);
   const [flow, setFlow]                         = useState<FlowItem[] | null>(null);
   const [flowLoading, setFlowLoading]           = useState(false);
+  const [flowErr, setFlowErr]                   = useState("");
   const [commentary, setCommentary]             = useState<Commentary | null>(null);
   const [commentaryLoading, setCommentaryLoading] = useState(false);
   const [breadth, setBreadth]                   = useState<BreadthData | null>(null);
