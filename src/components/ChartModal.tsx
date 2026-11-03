@@ -165,7 +165,18 @@ export default function ChartModal({ label, onClose }: Props) {
 
   // ── 파생값 ────────────────────────────────────────────────────────────────
   const isPos    = (chartData?.currentPrice ?? 0) >= (chartData?.previousClose ?? 0);
-  const color    = isPos ? "#22c55e" : "#ef4444";
+
+  // 선택 기간 등락: 1일은 전일 종가, 그 외는 차트 첫 종가 대비
+  const firstClose  = chartData?.data?.find(d => d.close != null)?.close ?? null;
+  const rangeBase   = range === "1d" ? chartData?.previousClose ?? null : firstClose;
+  const rangePct    = chartData?.currentPrice && rangeBase
+    ? (chartData.currentPrice - rangeBase) / rangeBase * 100
+    : null;
+  const rangeIsPos  = (rangePct ?? 0) >= 0;
+  const rangeLabel  = RANGES.find(r => r.key === range)?.label ?? "";
+  const showRange   = activeTab === "chart" && range !== "1d" && rangePct != null;
+  const color       = (showRange ? rangeIsPos : isPos) ? "#22c55e" : "#ef4444";
+  const dayColor    = isPos ? "#22c55e" : "#ef4444";
   const gradId   = `grad_${label.replace(/[^a-zA-Z0-9]/g, "")}`;
   const changePct = chartData?.currentPrice && chartData?.previousClose
     ? ((chartData.currentPrice - chartData.previousClose) / chartData.previousClose * 100)
@@ -213,7 +224,18 @@ export default function ChartModal({ label, onClose }: Props) {
               {chartData && (
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-2xl font-bold num" style={{ color }}>{fmt(chartData.currentPrice)}</span>
-                  {changePct != null && (
+                  {showRange ? (
+                    <>
+                      <span className="text-sm font-semibold num" style={{ color }}>
+                        {rangeLabel} {rangeIsPos ? "▲" : "▼"} {Math.abs(rangePct!).toFixed(2)}%
+                      </span>
+                      {changePct != null && (
+                        <span className="text-xs num" style={{ color: dayColor }}>
+                          (전일 {isPos ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%)
+                        </span>
+                      )}
+                    </>
+                  ) : changePct != null && (
                     <span className="text-sm font-semibold num" style={{ color }}>
                       {isPos ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
                     </span>
@@ -289,6 +311,7 @@ export default function ChartModal({ label, onClose }: Props) {
                         stroke={color} strokeWidth={2} fill={`url(#${gradId})`}
                         dot={false}
                         activeDot={{ r: 4, fill: color, stroke: "#07111E", strokeWidth: 2 }}
+                        isAnimationActive={false}
                         connectNulls />
                     </AreaChart>
                   </ResponsiveContainer>
