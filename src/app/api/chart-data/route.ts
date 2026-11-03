@@ -10,6 +10,9 @@ const SYMBOL_MAP: Record<string, string> = {
   "NASDAQ":     "^IXIC",
   "S&P500 선물": "ES=F",
   "나스닥 선물":  "NQ=F",
+  "다우 선물":    "YM=F",
+  "다우존스":     "^DJI",
+  "러셀 2000":   "^RUT",
   "금":          "GC=F",
   "WTI 원유":    "CL=F",
   "USD/KRW":    "KRW=X",
@@ -64,25 +67,19 @@ export async function GET(request: Request) {
 
   const kisQuote = KIS_INDEX[label] ? await kisIndexQuote(KIS_INDEX[label]) : null;
 
-  // KIS 값이 없을 때: 최근 일봉에서 마지막 거래일의 바로 앞 종가
+  // KIS 값이 없을 때: 메인 카드(/api/market)와 같은 방식 — range=1d 의 chartPreviousClose 가 전일 종가
   let prevDayClose: number | null = null;
   if (!kisQuote) {
     try {
       const r = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=5d`,
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySym)}?interval=1d&range=1d`,
         { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store" }
       );
       if (r.ok) {
-        const res0 = (await r.json())?.chart?.result?.[0];
-        const ts: number[] = res0?.timestamp ?? [];
-        const cs: (number | null)[] = res0?.indicators?.quote?.[0]?.close ?? [];
-        const day = (t: number) => new Date((t + 9 * 3600) * 1000).toISOString().slice(0, 10);
-        const lastDay = res0?.meta?.regularMarketTime ? day(res0.meta.regularMarketTime) : null;
-        const bars = ts.map((t, i) => ({ d: day(t), c: cs[i] })).filter(b => b.c != null);
-        const before = bars.filter(b => lastDay && b.d < lastDay);
-        if (before.length) prevDayClose = before[before.length - 1].c!;
+        const m = (await r.json())?.chart?.result?.[0]?.meta;
+        prevDayClose = m?.chartPreviousClose ?? m?.previousClose ?? null;
       }
-    } catch { /* meta 값으로 폴백 */ }
+    } catch { /* 아래 meta 값으로 폴백 */ }
   }
 
   for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
