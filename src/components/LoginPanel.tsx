@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { RiKakaoTalkFill } from "react-icons/ri";
-import { FcGoogle } from "react-icons/fc";
 import { useAuth } from "./AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 
@@ -16,10 +15,6 @@ export function LoginButtons({ next = "/me" }: { next?: string }) {
       <button onClick={() => signIn("kakao", next)}
         className="w-full h-12 rounded-xl bg-[#FEE500] text-[#191919] text-sm font-semibold flex items-center justify-center gap-2">
         <RiKakaoTalkFill size={20} /> 카카오로 시작하기
-      </button>
-      <button onClick={() => signIn("google", next)}
-        className="w-full h-12 rounded-xl bg-white text-[#1F1F1F] text-sm font-semibold flex items-center justify-center gap-2">
-        <FcGoogle size={20} /> 구글로 시작하기
       </button>
     </div>
   );

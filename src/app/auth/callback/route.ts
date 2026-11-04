@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 
 export const dynamic = "force-dynamic";
 
-// 카카오·구글 로그인 후 Supabase가 ?code= 를 붙여 이곳으로 돌려보낸다 → 세션 쿠키로 교환
+// 카카오 로그인 후 Supabase가 ?code= 를 붙여 이곳으로 돌려보낸다 → 세션 쿠키로 교환
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");

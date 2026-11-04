@@ -11,7 +11,7 @@ interface AuthState {
   loading: boolean;
   user: User | null;
   profile: Profile | null;
-  signIn: (provider: "kakao" | "google", next?: string) => Promise<void>;
+  signIn: (provider: "kakao", next?: string) => Promise<void>;
   signOut: () => Promise<void>;
   reloadProfile: () => Promise<void>;
 }
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, [supabase, loadProfile]);
 
-  const signIn = useCallback(async (provider: "kakao" | "google", next = "/me") => {
+  const signIn = useCallback(async (provider: "kakao", next = "/me") => {
     if (!supabase) return;
     await supabase.auth.signInWithOAuth({
       provider,
