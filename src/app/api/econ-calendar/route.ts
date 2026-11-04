@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
+import { curatedKR, fetchInvestingKR, type KrEcon } from "@/lib/krEcon";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,31 @@ const load = unstable_cache(async () => {
   return { events: all, errors };
 }, ["ff-calendar-v1"], { revalidate: 30 * 60 });
 
+// Forex Factory 는 미국 동부 시간 기준 날짜로 일별 페이지를 연다
+const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+function ffDayUrl(date: string): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  return `https://www.forexfactory.com/calendar?day=${MON[m - 1]}${d}.${y}`;
+}
+
+// 한국 지표: Investing.com 위젯(이번 주) → 실패하면 일정표. 위젯이 덮는 날짜 구간은 위젯 결과를 우선
+const KST = 9 * 3_600_000;
+const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86_400_000).toISOString().slice(0, 10);
+const loadKR = unstable_cache(async (today: string) => {
+  const from = addDays(today, -40), to = addDays(today, 60);
+  let live: KrEcon[] = [];
+  let note = "";
+  try { live = await fetchInvestingKR(); } catch (e) { note = `한국(Investing): ${String(e).slice(0, 60)}`; }
+  const curated = curatedKR(from, to);
+  if (!live.length) return { items: curated, note: note || "한국(Investing): 파싱 결과 없음 → 일정표 사용", live: false };
+  const lo = live.reduce((a, b) => (a < b.day ? a : b.day), live[0].day);
+  const hi = live.reduce((a, b) => (a > b.day ? a : b.day), live[0].day);
+  return { items: [...live, ...curated.filter(c => c.day < lo || c.day > hi)], note: "", live: true };
+}, ["kr-econ-v1"], { revalidate: 3 * 3600 });
+
 export async function GET() {
+  const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
+  const kr = await loadKR(today).catch(e => ({ items: curatedKR(addDays(today, -40), addDays(today, 60)), note: `한국: ${String(e).slice(0, 60)}`, live: false }));
   try {
     const { events, errors } = await load();
     const seen = new Set<string>();
@@ -118,12 +143,20 @@ export async function GET() {
           forecast: e.forecast || null,
           previous: e.previous || null,
           actual: e.actual || null,
+          url: ffDayUrl(e.date),
+          tentative: false,
+          source: "forexfactory",
         };
       })
-      .filter((x): x is NonNullable<typeof x> => x !== null)
-      .sort((a, b) => a.at.localeCompare(b.at));
-    return NextResponse.json({ items, errors });
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    const all = [...items.filter(e => e.country !== "KRW"), ...kr.items].sort((a, b) => a.at.localeCompare(b.at));
+    const days = items.map(e => e.day).sort();
+    return NextResponse.json({
+      items: all, errors: kr.note ? [...errors, kr.note] : errors,
+      coverage: { global: days.length ? { from: days[0], to: days[days.length - 1] } : null, krLive: kr.live },
+    });
   } catch (e) {
-    return NextResponse.json({ items: [], error: String(e) });
+    // 해외 일정이 막혀도 한국 일정은 보여준다
+    return NextResponse.json({ items: [...kr.items].sort((a, b) => a.at.localeCompare(b.at)), error: String(e), errors: kr.note ? [kr.note] : [], coverage: { global: null, krLive: kr.live } });
   }
 }
