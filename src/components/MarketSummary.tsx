@@ -798,7 +798,7 @@ const INVESTOR_TABS: { key: InvestorType; label: string }[] = [
   { key: "individual",  label: "개인"   },
 ];
 
-function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [data, setData]         = useState<RankData | null>(null);
   const [loading, setLoading]   = useState(true);
   const [mode, setMode]         = useState<"buy" | "sell">("buy");
@@ -806,11 +806,14 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
 
   useEffect(() => {
     setLoading(true);
-    fetch("/api/investor-ranking", { cache: "no-store" })
+    const load = () => fetch(`/api/investor-ranking?market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (j && !j.error) setData(j as RankData); })
       .finally(() => setLoading(false));
-  }, []);
+    load();
+    const iv = setInterval(() => { if (document.visibilityState === "visible" && isMarketOpen()) load(); }, 60_000);
+    return () => clearInterval(iv);
+  }, [market]);
 
   const cols = data?.[mode];
 
@@ -832,7 +835,7 @@ function InvestorFlowList({ onSelect }: { market: string; onSelect: (d: DrawerSt
           </button>
         ))}
         <div className="ml-auto text-right">
-          <p className="text-xs text-gray-600">KIS · KOSPI 상위 45종목</p>
+          <p className="text-xs text-gray-600">KIS · {market} · 개인은 추정</p>
           {data?.dataDateLabel && (
             <p className="text-[10px] text-gray-700">{data.dataDateLabel} 기준</p>
           )}

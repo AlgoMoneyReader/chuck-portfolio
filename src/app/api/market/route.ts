@@ -62,7 +62,7 @@ async function fetchYahoo(symbol: string) {
 }
 
 export async function GET() {
-  const [kospi, kosdaq, sp500, nasdaq, dow, russell, usdKrw, esFut, nqFut, yjFut, gold, oil, sox] =
+  const [kospi, kosdaq, sp500, nasdaq, dow, russell, usdKrw, esFut, nqFut, yjFut, gold, oil, sox, vix] =
     await Promise.all([
       fetchNaverIndex("KOSPI"),
       fetchNaverIndex("KOSDAQ"),
@@ -77,10 +77,11 @@ export async function GET() {
       fetchYahoo("GC=F"),    // 금
       fetchYahoo("CL=F"),    // WTI 원유
       fetchYahoo("^SOX"),    // 필라델피아 반도체
+      fetchYahoo("^VIX"),    // 변동성 지수
     ]);
 
   return NextResponse.json(
-    { kospi, kosdaq, sp500, nasdaq, dow, russell, sox, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() },
+    { kospi, kosdaq, sp500, nasdaq, dow, russell, sox, vix, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" } }
   );
 }
