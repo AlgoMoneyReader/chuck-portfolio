@@ -117,7 +117,7 @@ const load = unstable_cache(async (code: string) => {
     }));
   }
   return { quarters: quarters.slice(-8), annual: annual.filter(a => a.sales != null || a.op != null) };
-}, ["dart-quarterly-v2"], { revalidate: 6 * 3600 });
+}, ["dart-quarterly-v3"], { revalidate: 6 * 3600 });
 
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code") ?? "";

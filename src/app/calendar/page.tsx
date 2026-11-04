@@ -41,7 +41,7 @@ const STAR_FILTERS = [0, 3, 2, 1];
 interface MarketEvent {
   day: string; time: string; country: "US" | "KR"; kind: "실적" | "IR" | "잠정실적" | "실적예고";
   title: string; sub?: string; url?: string; code?: string; name?: string; market?: "KOSPI" | "KOSDAQ" | "US";
-  result?: { eps?: string | null; epsForecast?: string | null; surprisePct?: number | null; sales?: number | null; op?: number | null; net?: number | null; salesYoY?: number | null; opYoY?: number | null };
+  result?: { eps?: string | null; epsForecast?: string | null; surprisePct?: number | null; sales?: number | null; op?: number | null; net?: number | null; salesYoY?: number | null; opYoY?: number | null; opTurn?: string | null };
 }
 
 // 억원 → '3.2조' / '1,234억'
@@ -63,7 +63,9 @@ function EarningsResult({ r }: { r: NonNullable<MarketEvent["result"]> }) {
   return (
     <p className="text-xs mt-1 num flex flex-wrap gap-x-3">
       {r.sales != null && <span className="text-gray-400">매출 <b className="text-white">{eokTxt(r.sales)}</b><span className={toneOf(r.salesYoY)}>{yoyTxt(r.salesYoY)}</span></span>}
-      {r.op != null && <span className="text-gray-400">영업이익 <b className={r.op < 0 ? "text-signal-red" : "text-white"}>{eokTxt(r.op)}</b><span className={toneOf(r.opYoY)}>{yoyTxt(r.opYoY)}</span></span>}
+      {r.op != null && <span className="text-gray-400">영업이익 <b className={r.op < 0 ? "text-signal-red" : "text-white"}>{eokTxt(r.op)}</b>{r.opTurn
+        ? <span className={r.opTurn === "흑자전환" ? "text-signal-green" : "text-signal-red"}> ({r.opTurn})</span>
+        : <span className={toneOf(r.opYoY)}>{yoyTxt(r.opYoY)}</span>}</span>}
     </p>
   );
 }
