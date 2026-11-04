@@ -44,13 +44,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, [supabase, loadProfile]);
 
-  const signIn = useCallback(async (provider: "kakao", next = "/me") => {
-    if (!supabase) return;
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
-    });
-  }, [supabase]);
+  // 카카오 로그인은 서버 라우트가 직접 처리(닉네임만 요청) → Supabase 세션 쿠키 발급
+  const signIn = useCallback(async (_provider: "kakao", next = "/me") => {
+    window.location.href = `/auth/kakao?next=${encodeURIComponent(next)}`;
+  }, []);
 
   const signOut = useCallback(async () => {
     await supabase?.auth.signOut();
