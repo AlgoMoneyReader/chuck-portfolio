@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
+import { useChartColors } from "@/lib/theme";
 
 export const TIMEFRAMES = [
   ["1m", "1분"], ["2m", "2분"], ["5m", "5분"], ["30m", "30분"], ["60m", "1시간"], ["D", "일"], ["W", "주"], ["M", "월"],
@@ -9,7 +10,6 @@ export const TIMEFRAMES = [
 export type Timeframe = typeof TIMEFRAMES[number][0];
 
 interface Candle { time: number | string; open: number; high: number; low: number; close: number; volume?: number }
-const UP = "#1D9E75", DOWN = "#E24B4A";
 
 function fmtTime(t: Time | undefined, intraday: boolean): string {
   if (t == null) return "";
@@ -28,6 +28,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
   const [state, setState] = useState<{ candles: Candle[]; prevClose: number | null; source?: string; error?: string } | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
   const intraday = !["D", "W", "M"].includes(tf);
+  const cc = useChartColors();
 
   useEffect(() => {
     setState(null); setHover(null);
@@ -48,14 +49,15 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
       chartRef.current?.remove();
       const chart = createChart(box.current, {
         width: box.current.clientWidth, height,
-        layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8B93A7", fontFamily: "Pretendard Variable, Pretendard, sans-serif", fontSize: 11 },
-        grid: { vertLines: { color: "rgba(26,37,69,0.6)" }, horzLines: { color: "rgba(26,37,69,0.6)" } },
-        rightPriceScale: { borderColor: "#1A2545" },
-        timeScale: { borderColor: "#1A2545", timeVisible: intraday, secondsVisible: false, rightOffset: 2 },
-        crosshair: { mode: CrosshairMode.Normal },
+        layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: cc.text, fontFamily: "Pretendard Variable, Pretendard, sans-serif", fontSize: 11 },
+        grid: { vertLines: { color: cc.grid }, horzLines: { color: cc.grid } },
+        rightPriceScale: { borderColor: cc.border },
+        timeScale: { borderColor: cc.border, timeVisible: intraday, secondsVisible: false, rightOffset: 2 },
+        crosshair: { mode: CrosshairMode.Normal, ...(cc.crosshair && { vertLine: { color: cc.crosshair }, horzLine: { color: cc.crosshair } }) },
         localization: { locale: "ko-KR", priceFormatter: (p: number) => p.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits }) },
       });
       chartRef.current = chart;
+      const UP = cc.up, DOWN = cc.down;
       const series: ISeriesApi<"Candlestick"> = chart.addCandlestickSeries({
         upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
       });
@@ -64,10 +66,10 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
       if (state.candles.some(c => c.volume)) {
         const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false, priceLineVisible: false });
         vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-        vol.setData(state.candles.map(c => ({ time: c.time as Time, value: c.volume ?? 0, color: c.close >= c.open ? "rgba(29,158,117,0.35)" : "rgba(226,75,74,0.35)" })));
+        vol.setData(state.candles.map(c => ({ time: c.time as Time, value: c.volume ?? 0, color: c.close >= c.open ? cc.upVol : cc.downVol })));
       }
       if (intraday && state.prevClose) {
-        series.createPriceLine({ price: state.prevClose, color: "#9CA3AF", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "전일" });
+        series.createPriceLine({ price: state.prevClose, color: cc.refLine, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "전일" });
       }
       chart.timeScale().fitContent();
       chart.subscribeCrosshairMove(p => {
@@ -78,7 +80,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
       ro.observe(box.current);
     });
     return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; };
-  }, [state, height, intraday, digits]);
+  }, [state, height, intraday, digits, cc]);
 
   const last = state?.candles[state.candles.length - 1];
   const shown = hover ?? last;

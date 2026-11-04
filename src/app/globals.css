@@ -5,6 +5,74 @@
 
 :root {
   --font-pretendard: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* ── 테마 색 (RGB 채널) — tailwind.config.ts 의 색 토큰이 이 값을 쓴다. 기본 = 다크 ── */
+  --c-white: 255 255 255;
+  --c-gray-50: 249 250 251;
+  --c-gray-100: 243 244 246;
+  --c-gray-200: 229 231 235;
+  --c-gray-300: 209 213 219;
+  --c-gray-400: 156 163 175;
+  --c-gray-500: 107 114 128;
+  --c-gray-600: 75 85 99;
+  --c-gray-700: 55 65 81;
+  --c-gray-800: 31 41 55;
+  --c-gray-900: 17 24 39;
+  --c-gray-950: 3 7 18;
+  --c-navy: 4 9 26;
+  --c-navy-sub: 8 15 36;
+  --c-navy-card: 13 21 48;
+  --c-navy-border: 26 37 69;
+  --c-gold: 245 184 0;
+  --c-gold-light: 255 208 64;
+  --c-gold-dark: 200 144 0;
+  --c-cyan-brand: 37 99 255;
+  --c-cyan-light: 91 143 255;
+  --c-cyan-dark: 26 69 204;
+  --c-electric-purple: 124 58 237;
+  --c-signal-green: 29 158 117;
+  --c-signal-red: 226 75 74;
+  --c-signal-amber: 239 159 39;
+  --c-body-text: 232 239 247;
+  --tick-flash: rgba(255, 255, 255, 0.18);
+}
+
+/* ── 라이트 테마: 흰 카드 + 밝은 회청색 바탕. "white" 는 본문 글자색(진한 남색)으로, 회색 단계는 뒤집힌다 ── */
+html[data-theme="light"] {
+  color-scheme: light;
+  --c-white: 15 23 42;
+  --c-gray-50: 11 18 32;
+  --c-gray-100: 17 24 39;
+  --c-gray-200: 30 41 59;
+  --c-gray-300: 51 65 85;
+  --c-gray-400: 71 85 105;
+  --c-gray-500: 100 116 139;
+  --c-gray-600: 132 144 164;
+  --c-gray-700: 174 183 198;
+  --c-gray-800: 211 217 227;
+  --c-gray-900: 230 234 241;
+  --c-gray-950: 243 245 249;
+  --c-navy: 244 246 251;
+  --c-navy-sub: 236 240 247;
+  --c-navy-card: 255 255 255;
+  --c-navy-border: 220 226 238;
+  --c-gold: 184 132 0;
+  --c-gold-light: 204 150 0;
+  --c-gold-dark: 150 106 0;
+  --c-cyan-brand: 37 99 235;
+  --c-cyan-light: 59 111 240;
+  --c-cyan-dark: 29 78 216;
+  --c-signal-green: 12 138 98;
+  --c-signal-red: 220 50 50;
+  --c-signal-amber: 199 120 10;
+  --c-body-text: 15 23 42;
+  --tick-flash: rgba(37, 99, 235, 0.12);
+}
+
+/* 색이 꽉 찬 배경(버튼·배지·히트맵 타일) 위 글자는 라이트에서도 흰색/진한 남색 그대로 */
+html[data-theme="light"] :is(.on-color, .bg-gold, .bg-cyan-brand, .bg-signal-green, .bg-signal-red, .bg-signal-amber, .bg-electric-blue, .bg-electric-purple) {
+  --c-white: 255 255 255;
+  --c-navy: 4 9 26;
 }
 
 * {
@@ -12,8 +80,8 @@
 }
 
 body {
-  background-color: #04091A;
-  color: #E8EFF7;
+  background-color: rgb(var(--c-navy));
+  color: rgb(var(--c-body-text));
   font-family: var(--font-pretendard), sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -69,15 +137,52 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #080F24;
+  background: rgb(var(--c-navy-sub));
 }
 ::-webkit-scrollbar-thumb {
-  background: #1A2545;
+  background: rgb(var(--c-navy-border));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #F5B800;
+  background: rgb(var(--c-gold));
 }
+
+/* ── 라이트 테마 보정: 다크 전제로 짠 그림자·밝은 원색 글자·차트 기본색 ── */
+html[data-theme="light"] .card,
+html[data-theme="light"] .shadow-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+html[data-theme="light"] .shadow-2xl { box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); }
+
+/* 다크 배경용 400 계열 글자색은 흰 바탕에서 흐려서 한 단계 진하게 */
+html[data-theme="light"] .text-red-400 { color: #DC2626; }
+html[data-theme="light"] .text-green-400 { color: #16A34A; }
+html[data-theme="light"] .text-blue-400 { color: #2563EB; }
+html[data-theme="light"] :is(.text-cyan-400, .group:hover .group-hover\:text-cyan-400, .hover\:text-cyan-400:hover) { color: #0E7490; }
+html[data-theme="light"] :is(.text-purple-400, .text-purple-300) { color: #7C3AED; }
+html[data-theme="light"] .text-pink-400 { color: #DB2777; }
+html[data-theme="light"] .text-orange-400 { color: #EA580C; }
+html[data-theme="light"] :is(.text-amber-400, .text-amber-300) { color: #B45309; }
+html[data-theme="light"] .text-yellow-400 { color: #A16207; }
+html[data-theme="light"] .text-\[\#60a5fa\] { color: #2563EB; }
+html[data-theme="light"] .text-\[\#f43f5e\] { color: #E11D48; }
+html[data-theme="light"] .bg-\[\#0f1923\] { background-color: #FFFFFF; }
+
+/* recharts: 격자·축 글자·기준선·기본 툴팁 (CSS 가 SVG 속성·인라인 스타일보다 우선하도록) */
+html[data-theme="light"] .recharts-cartesian-grid line,
+html[data-theme="light"] .recharts-polar-grid :is(line, path, polygon, circle) { stroke: #E2E8F0; }
+html[data-theme="light"] .recharts-cartesian-axis-tick-value,
+html[data-theme="light"] .recharts-polar-angle-axis-tick-value,
+html[data-theme="light"] .recharts-polar-radius-axis-tick-value { fill: #64748B; }
+html[data-theme="light"] .recharts-reference-line line { stroke: #94A3B8; }
+html[data-theme="light"] .recharts-tooltip-cursor { fill: rgba(15, 23, 42, 0.05); }
+html[data-theme="light"] .recharts-default-tooltip {
+  background-color: #FFFFFF !important;
+  border-color: #DCE2EE !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+}
+html[data-theme="light"] .recharts-default-tooltip .recharts-tooltip-label { color: #475569 !important; }
+html[data-theme="light"] .sig-track { stroke: rgb(var(--c-navy-border)); }
 
 @layer utilities {
   .scrollbar-none { scrollbar-width: none; }

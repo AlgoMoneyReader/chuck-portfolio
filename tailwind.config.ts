@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+const v = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,32 +10,39 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // 색은 globals.css 의 CSS 변수(RGB 채널)로 정의 → html[data-theme="light"] 에서 한꺼번에 바뀐다.
+      // <alpha-value> 덕분에 bg-navy-sub/60 같은 투명도 표기도 그대로 동작.
       colors: {
+        white: v("white"),
+        gray: {
+          50: v("gray-50"), 100: v("gray-100"), 200: v("gray-200"), 300: v("gray-300"), 400: v("gray-400"),
+          500: v("gray-500"), 600: v("gray-600"), 700: v("gray-700"), 800: v("gray-800"), 900: v("gray-900"), 950: v("gray-950"),
+        },
         navy: {
-          DEFAULT: "#04091A",
-          sub: "#080F24",
-          card: "#0D1530",
-          border: "#1A2545",
+          DEFAULT: v("navy"),
+          sub: v("navy-sub"),
+          card: v("navy-card"),
+          border: v("navy-border"),
         },
         gold: {
-          DEFAULT: "#F5B800",
-          light: "#FFD040",
-          dark: "#C89000",
+          DEFAULT: v("gold"),
+          light: v("gold-light"),
+          dark: v("gold-dark"),
         },
         cyan: {
-          brand: "#2563FF",
-          light: "#5B8FFF",
-          dark: "#1A45CC",
+          brand: v("cyan-brand"),
+          light: v("cyan-light"),
+          dark: v("cyan-dark"),
         },
         electric: {
-          blue: "#2563FF",
-          purple: "#7C3AED",
+          blue: v("cyan-brand"),
+          purple: v("electric-purple"),
         },
         signal: {
-          green: "#1D9E75",
-          red: "#E24B4A",
-          amber: "#EF9F27",
-          blue: "#2563FF",
+          green: v("signal-green"),
+          red: v("signal-red"),
+          amber: v("signal-amber"),
+          blue: v("cyan-brand"),
         },
       },
       fontFamily: {
@@ -52,7 +61,7 @@ const config: Config = {
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
         tick: {
-          "0%": { backgroundColor: "rgba(255,255,255,0.18)" },
+          "0%": { backgroundColor: "var(--tick-flash)" },
           "100%": { backgroundColor: "transparent" },
         },
       },

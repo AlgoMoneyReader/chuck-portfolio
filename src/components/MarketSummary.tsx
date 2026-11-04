@@ -517,7 +517,7 @@ function SectorHeatmap({ market }: { market: string }) {
               className="p-3 rounded-lg border relative overflow-hidden text-left transition-all active:scale-[0.97] hover:brightness-110"
               style={{
                 backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2, "0") : "08"}`,
-                borderColor: "rgba(255,255,255,0.1)",
+                borderColor: "rgb(var(--c-white) / 0.1)",
               }}
             >
               <div className="absolute bottom-0 left-0 h-1 rounded-b-lg"
@@ -1109,7 +1109,7 @@ function USSectorHeatmap() {
                 className="p-3 rounded-lg border relative overflow-hidden text-left transition-all active:scale-[0.97] hover:brightness-110"
                 style={{
                   backgroundColor: `${color}${isPos ? Math.round(intensity * 25).toString(16).padStart(2, "0") : "08"}`,
-                  borderColor: "rgba(255,255,255,0.1)",
+                  borderColor: "rgb(var(--c-white) / 0.1)",
                 }}>
                 <div className="absolute bottom-0 left-0 h-1 rounded-b-lg"
                   style={{ width: `${intensity * 100}%`, backgroundColor: color, opacity: 0.7 }} />
