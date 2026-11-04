@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMarketPoll } from "@/lib/useMarketPoll";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 
 interface Props { label: string; onClose: () => void; }
@@ -127,6 +128,24 @@ export default function ChartModal({ label, onClose }: Props) {
       .catch(() => setNightError(true))
       .finally(() => setNightLoading(false));
   }, [activeTab, isIndex]);
+
+  // ── 창이 열려 있는 동안 자동 갱신 (로딩 표시 없이 값만 교체) ───────────────
+  useMarketPoll(() => {
+    fetch(`/api/chart-data?label=${encodeURIComponent(label)}&range=${range}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && !j.error) setChartData(j); })
+      .catch(() => {});
+  }, 15_000, { krxOnly: false });
+  useMarketPoll(() => {
+    fetch(`/api/investor-flow?market=${label}`, { cache: "no-store" })
+      .then(r => r.json()).then(j => { if (j?.flow) setFlow(j.flow); }).catch(() => {});
+    fetch(`/api/market-breadth?market=${label}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j?.advance != null) setBreadth(j); }).catch(() => {});
+  }, 60_000, { enabled: activeTab === "flow" && isIndex });
+  useMarketPoll(() => {
+    fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNightFutures(j); }).catch(() => {});
+  }, 20_000, { krxOnly: false, enabled: (activeTab === "night" || activeTab === "day") && isIndex });
 
   // ── ESC 닫기 ──────────────────────────────────────────────────────────────
   useEffect(() => {

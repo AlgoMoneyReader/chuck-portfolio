@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMarketPoll } from "@/lib/useMarketPoll";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -340,13 +341,21 @@ interface Flow {
 
 function FlowTab({ code, market }: { code: string; market: string }) {
   const [f, setF] = useState<Flow | null>(null);
-  const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; note?: string; error?: string } | null>(null);
+  const [live, setLive] = useState<{ available: boolean; asOf?: string; nextSlot?: string | null; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string; note?: string; error?: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadFlow = () => fetch(`/api/stock-investor?code=${code}&market=${market}`, { cache: "no-store" })
+    .then(r => r.json()).then(j => { if (!j.error) setF(j); });
+  const loadLive = () => fetch(`/api/stock-flow-live?code=${code}`, { cache: "no-store" })
+    .then(r => r.json()).then(j => { if (!j.error) setLive(j); }).catch(() => {});
   useEffect(() => {
-    fetch(`/api/stock-investor?code=${code}&market=${market}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => setF(j.error ? null : j)).finally(() => setLoading(false));
-    fetch(`/api/stock-flow-live?code=${code}`, { cache: "no-store" }).then(r => r.json()).then(setLive).catch(() => setLive(null));
+    setF(null); setLive(null); setLoading(true);
+    loadFlow().catch(() => {}).finally(() => setLoading(false));
+    loadLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, market]);
+  // 장중: 외국계 창구는 30초, 가집계·확정 수급은 2분마다 다시 받는다
+  useMarketPoll(loadLive, 30_000);
+  useMarketPoll(() => { loadFlow().catch(() => {}); }, 120_000);
   if (loading) return <div className="card h-48 animate-pulse" />;
   if (!f) return <div className="card text-sm text-gray-500 text-center py-10">수급 데이터를 불러올 수 없습니다</div>;
   const c = f.confirmed ?? { foreign: f.foreign, institution: f.institution, individual: f.individual ?? 0 };
@@ -357,16 +366,24 @@ function FlowTab({ code, market }: { code: string; market: string }) {
   return (
     <div className="space-y-4">
       {!confirmedToday && live && (
-        <Section title="오늘 장중 수급" note={live.available ? `${live.asOf} 가집계 · 추정 · 억원` : undefined}>
-          {live.available ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Stat label="외국인" value={`${(live.foreignEok ?? 0) > 0 ? "+" : ""}${eok(live.foreignEok)}`} subCls={tone(live.foreignEok)} sub={(live.foreignEok ?? 0) >= 0 ? "순매수" : "순매도"} />
-              <Stat label="기관" value={`${(live.institutionEok ?? 0) > 0 ? "+" : ""}${eok(live.institutionEok)}`} subCls={tone(live.institutionEok)} sub={(live.institutionEok ?? 0) >= 0 ? "순매수" : "순매도"} />
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500">{live.note ?? "장중 가집계를 불러오지 못했습니다"}</p>
-          )}
-          <p className="text-[10px] text-gray-600">거래소 가집계(09:30·10:00·11:20·13:20·14:30)를 현재가로 환산한 추정치 · 확정값은 장 마감 후</p>
+        <Section title="오늘 장중 수급" note={live.updatedAt ? `${live.updatedAt} 갱신 · 억원` : "억원"}>
+          <div className="grid grid-cols-3 gap-3">
+            {live.available ? (
+              <>
+                <Stat label={`외국인 (${live.asOf})`} value={`${(live.foreignEok ?? 0) > 0 ? "+" : ""}${eok(live.foreignEok)}`} subCls={tone(live.foreignEok)} sub={(live.foreignEok ?? 0) >= 0 ? "순매수" : "순매도"} />
+                <Stat label={`기관 (${live.asOf})`} value={`${(live.institutionEok ?? 0) > 0 ? "+" : ""}${eok(live.institutionEok)}`} subCls={tone(live.institutionEok)} sub={(live.institutionEok ?? 0) >= 0 ? "순매수" : "순매도"} />
+              </>
+            ) : (
+              <p className="col-span-2 text-xs text-gray-500 self-center">{live.note ?? "장중 가집계를 불러오지 못했습니다"}</p>
+            )}
+            {live.globalEok != null && (
+              <Stat label="외국계 창구 (실시간)" value={`${live.globalEok > 0 ? "+" : ""}${eok(live.globalEok)}`} subCls={tone(live.globalEok)} sub={live.globalEok >= 0 ? "순매수" : "순매도"} />
+            )}
+          </div>
+          <p className="text-[10px] text-gray-600 leading-relaxed">
+            외국인·기관은 거래소 가집계(09:30·10:00·11:20·13:20·14:30)라 정해진 시각에만 바뀝니다{live.nextSlot ? ` · 다음 집계 ${live.nextSlot}` : ""}.
+            외국계 창구는 외국계 증권사를 통한 순매수로 체결마다 바뀌는 실시간 근사치입니다. 확정값은 장 마감 후.
+          </p>
         </Section>
       )}
       <Section title={confirmedToday ? "투자자별 순매수 (오늘 확정)" : "투자자별 순매수 (직전 거래일 확정)"} note={f.invDate ? `${ymd(f.invDate)} 기준 · 억원` : "억원"}>
@@ -445,6 +462,11 @@ export default function StockPage({ params }: { params: { code: string } }) {
     fetch(`/api/stock-overview?code=${code}`, { cache: "no-store" })
       .then(r => r.json()).then(j => setD(j.error ? null : j)).finally(() => setLoading(false));
   }, [code]);
+  // 장중 현재가 15초마다 갱신(실패하면 기존 값 유지)
+  useMarketPoll(() => {
+    fetch(`/api/stock-overview?code=${code}&quote=1`, { cache: "no-store" })
+      .then(r => r.json()).then(j => { if (!j.error && j.quote) setD(prev => (prev ? { ...prev, quote: { ...prev.quote, ...j.quote } } : prev)); }).catch(() => {});
+  }, 15_000);
 
   useEffect(() => {
     const sb = getBrowserSupabase();

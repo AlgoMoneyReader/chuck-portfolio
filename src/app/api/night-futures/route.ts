@@ -27,7 +27,7 @@ function aggregate(cs: Candle[], minutes: number): Candle[] {
 }
 
 const cache: Partial<Record<"day" | "night", { data: object; at: number }>> = {};
-const TTL = 60_000;
+const TTL = 15_000;
 
 
 // ── KIS 지수선물 종목 마스터 (fo_idx_code_mts.mst, | 구분, cp949) ─────────────
