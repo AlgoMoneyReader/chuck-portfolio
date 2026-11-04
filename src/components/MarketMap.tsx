@@ -96,7 +96,7 @@ function Tile({ r, bg, title, sub, onClick, active }: { r: Rect; bg: string; tit
   const m = Math.min(r.w, r.h);
   // 한글은 영문보다 넓으니 글자 폭을 따로 셈해서 칸 너비 안에 들어가게
   const em = (t: string) => Array.from(t).reduce((a, ch) => a + (/[가-힣]/.test(ch) ? 1 : 0.62), 0);
-  const big = Math.max(9, Math.min(34, m / 3.2, (r.w - 8) / Math.max(1, em(title))));
+  const big = Math.max(9, Math.min(26, m / 3.4, (r.w - 8) / Math.max(1, em(title))));
   const subSize = Math.max(9, Math.min(big * 0.55, (r.w - 6) / Math.max(1, em(sub ?? "") * 0.95)));
   const showTitle = m > 18 && r.w > 26;
   const showSub = sub && m > 34 && r.w > 42;
@@ -134,7 +134,8 @@ export default function MarketMap() {
 
   const items = useMemo(() => (data?.items ?? []).filter(i => i.cap > 0), [data]);
   // 휴대폰은 세로로 길게, PC 처럼 넓은 화면은 가로로 넓적하게 + 최대 높이 제한
-  const H = Math.round(width < 640 ? width * (sector ? 1.05 : 0.85) : Math.min(width * (sector ? 0.55 : 0.45), sector ? 600 : 480));
+  // 업종 화면·종목 화면 모두 같은 크기로 고정
+  const H = Math.round(width < 640 ? Math.min(width * 0.85, 360) : Math.min(width * 0.45, 480));
 
   const sectors = useMemo(() => {
     const m = new Map<string, Item[]>();
