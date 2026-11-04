@@ -1,8 +1,9 @@
 // Gemini 공용 호출. 무료 등급은 모델마다 일일 한도가 따로라서(2.5-flash 20회/일 등)
 // 한도 초과(429)·장애가 나면 다음 모델로 넘어가고, 한도 걸린 모델은 잠시 건너뛴다.
-// 순서: Gemini 무료 모델들 → (검색 필요 작업은) Claude → Gemma / (가벼운 작업은) Gemma → Claude
-// Claude 는 ANTHROPIC_API_KEY 가 있을 때만 쓴다.
-import { claudeAvailable, claudeGenerate } from "./claude";
+// 순서: Claude Opus 5.5(ANTHROPIC_API_KEY 가 있을 때, 기본 엔진) → Gemini 무료 모델들 → Gemma
+// 모든 호출은 ai_logs 에 모델·토큰·추정 비용을 남긴다(운영자 대시보드).
+import { claudeAvailable, claudeGenerate, CLAUDE_MODEL, type AiUsage } from "./claude";
+import { logAI, type AiLogCtx } from "./aiLog";
 
 // 2.0-flash 는 지원 종료(404)라 뺐고, 최신 별칭 모델을 추가(한도 별도)
 export const QUALITY = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-flash-lite-latest"];
@@ -21,6 +22,8 @@ export interface GeminiOpts {
   maxTokens?: number;
   timeoutMs?: number;
   models?: string[];
+  log?: AiLogCtx;            // 누가·어떤 기능에서 썼는지
+  effort?: "low" | "medium" | "high"; // Claude 사고 깊이
 }
 
 export class GeminiError extends Error {
@@ -28,20 +31,27 @@ export class GeminiError extends Error {
 }
 
 export async function gemini(o: GeminiOpts): Promise<{ text: string; model: string }> {
+  const r = await generate(o);
+  await logAI(o.log, r.model, r.usage);
+  return { text: r.text, model: r.model };
+}
+
+async function generate(o: GeminiOpts): Promise<{ text: string; model: string; usage: AiUsage }> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new GeminiError("GEMINI_API_KEY 없음", false);
   const errors: string[] = [];
   let allQuota = true;
-  const tryClaude = async () => {
-    if (!claudeAvailable()) return null;
+  if (claudeAvailable()) {
     try {
-      const text = await claudeGenerate({ prompt: o.json ? `${o.prompt}\n\nJSON 만 반환하세요.` : o.prompt, system: o.system, search: o.search, maxTokens: o.maxTokens ? Math.max(o.maxTokens, 1024) : 8000 });
-      return { text, model: "claude-opus-5-5" };
-    } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; return null; }
-  };
-  const chain = [...(o.models ?? QUALITY), ...(o.search ? ["@claude", GEMMA] : [GEMMA, "@claude"])];
+      const r = await claudeGenerate({
+        prompt: o.json ? `${o.prompt}\n\nJSON 만 반환하세요.` : o.prompt, system: o.system, search: o.search,
+        maxTokens: o.maxTokens ? Math.max(o.maxTokens, 1024) : 8000, timeoutMs: o.timeoutMs, effort: o.effort,
+      });
+      return { text: r.text, model: CLAUDE_MODEL, usage: r.usage };
+    } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; }
+  }
+  if (!key) throw new GeminiError(`AI 호출 실패 (${errors.join(" | ") || "API 키 없음"})`, false);
+  const chain = [...(o.models ?? QUALITY), GEMMA];
   for (const model of chain) {
-    if (model === "@claude") { const r = await tryClaude(); if (r) return r; continue; }
     if ((cooldown.get(model) ?? 0) > Date.now()) { errors.push(`${model}: 한도 대기`); continue; }
     const gemma = model.startsWith("gemma");
     const thinking = model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: model.includes("lite") ? 0 : 1024 } } : {};
@@ -74,10 +84,12 @@ export async function gemini(o: GeminiOpts): Promise<{ text: string; model: stri
         errors.push(`${model}: HTTP ${res.status}`);
         continue;
       }
-      const j = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+      const j = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[]; usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } };
       const text = (j.candidates?.[0]?.content?.parts ?? []).map(p => p.text ?? "").join("").trim();
       if (!text) { allQuota = false; errors.push(`${model}: 빈 응답`); continue; }
-      return { text, model };
+      const u = j.usageMetadata ?? {};
+      // 무료 등급이라 비용 0으로 기록
+      return { text, model, usage: { input: u.promptTokenCount ?? 0, output: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0), searches: o.search ? 1 : 0, costUsd: 0 } };
     } catch (e) {
       allQuota = false;
       errors.push(`${model}: ${String(e).slice(0, 80)}`);

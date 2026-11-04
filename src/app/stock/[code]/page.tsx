@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
 import { LoginBlur } from "@/components/RequireLogin";
+import { logActivity } from "@/lib/activity";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -472,7 +473,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
 
   useEffect(() => {
     fetch(`/api/stock-overview?code=${code}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => setD(j.error ? null : j)).finally(() => setLoading(false));
+      .then(r => r.json()).then(j => { setD(j.error ? null : j); if (!j.error) logActivity("view", { code, name: j.name }); }).finally(() => setLoading(false));
   }, [code]);
   // 장중 현재가 15초마다 갱신(실패하면 기존 값 유지)
   useMarketPoll(() => {
@@ -493,7 +494,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
     const { error } = fav
       ? await sb.from("watchlist").delete().eq("user_id", user.id).eq("code", code)
       : await sb.from("watchlist").insert({ user_id: user.id, code, name: d.name, market: d.marketCode });
-    if (!error) setFav(!fav);
+    if (!error) { setFav(!fav); logActivity("watch", { code, name: d.name, on: !fav }); }
   };
 
   const q = d?.quote;

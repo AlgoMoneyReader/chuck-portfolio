@@ -16,6 +16,7 @@ export function LoginButtons({ next = "/me" }: { next?: string }) {
         className="w-full h-12 rounded-xl bg-[#FEE500] text-[#191919] text-sm font-semibold flex items-center justify-center gap-2">
         <RiKakaoTalkFill size={20} /> 카카오로 시작하기
       </button>
+      <p className="text-[10px] text-gray-500 text-center leading-relaxed">카카오 닉네임만 받습니다. 서비스 개선을 위해 로그인 후 검색·종목 조회·AI 이용 기록이 저장됩니다.</p>
     </div>
   );
 }

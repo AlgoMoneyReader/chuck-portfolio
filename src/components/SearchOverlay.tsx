@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { FiSearch, FiX } from "react-icons/fi";
 import master from "@/data/stock_master.json";
+import { logActivity } from "@/lib/activity";
 
 type S = { code: string; name: string; market: string; type?: string };
 const STOCKS = (master as { stocks: S[] }).stocks.filter(s => s.type !== "spac");
@@ -49,6 +50,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
   }, [q]);
 
   const go = (s: S) => {
+    logActivity("search", { q: q.trim() || null, code: s.code, name: s.name, from: "상단 검색" });
     try { localStorage.setItem(RECENT_KEY, JSON.stringify([s, ...readRecent().filter(r => r.code !== s.code)].slice(0, 8))); } catch { /* 무시 */ }
     onClose();
     router.push(`/stock/${s.code}`);

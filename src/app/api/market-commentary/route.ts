@@ -160,7 +160,7 @@ JSON만 반환:
     if (!news.length) throw new Error("no news");
     let j: { summary?: string; reasons?: unknown } | null = null;
     try {
-      j = parseJson((await gemini({ prompt, models: CHEAP, json: true, temperature: 0.3, timeoutMs: 25_000 })).text);
+      j = parseJson((await gemini({ prompt, models: CHEAP, json: true, temperature: 0.3, timeoutMs: 30_000, log: { feature: "AI 시황", detail: market } })).text);
     } catch (e) { aiErrors.push(String(e).slice(0, 200)); }
     if (!j) throw new Error("ai");
     const reasons: Reason[] = (Array.isArray(j.reasons) ? j.reasons : []).slice(0, 3)

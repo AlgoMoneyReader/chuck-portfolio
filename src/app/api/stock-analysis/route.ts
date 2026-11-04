@@ -68,7 +68,8 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!(await requestUser(request))) {
+  const me = await requestUser(request);
+  if (!me) {
     return NextResponse.json({ error: "로그인 후 이용할 수 있습니다", needLogin: true }, { status: 401 });
   }
 
@@ -191,7 +192,7 @@ ${grade ? `알읽남 진보적 사고 Grade(단기 수급·모멘텀 정량 점�
 }`.trim();
 
   try {
-    const { text } = await gemini({ prompt: userPrompt, system: SYSTEM_PROMPT, search: true, timeoutMs: 50_000 });
+    const { text } = await gemini({ prompt: userPrompt, system: SYSTEM_PROMPT, search: true, timeoutMs: 55_000, log: { feature: "진보적 사고", userId: me.user.id, sb: me.sb, detail: `${name} ${code}` } });
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {

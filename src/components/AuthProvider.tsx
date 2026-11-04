@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activity";
 
 export interface Profile { id: string; nickname: string; created_at: string }
 
@@ -43,7 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await loadProfile(data.user);
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((e, session) => {
+      if (e === "SIGNED_IN" && session?.user) {
+        // 같은 브라우저 세션에서 중복 기록하지 않도록
+        try { if (!sessionStorage.getItem("login-logged")) { sessionStorage.setItem("login-logged", "1"); logActivity("login", {}); } } catch { /* 무시 */ }
+      }
       setUser(session?.user ?? null);
       loadProfile(session?.user ?? null);
     });
