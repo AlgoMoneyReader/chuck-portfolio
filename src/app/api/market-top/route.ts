@@ -9,7 +9,7 @@ interface CacheEntry {
   ts: number;
 }
 const serverCache: Record<string, CacheEntry> = {};
-const CACHE_TTL_MS = 10_000; // 10초
+const CACHE_TTL_MS = 4_000; // 4초 (화면은 5초마다 갱신)
 
 // ── 종목명 매핑 ───────────────────────────────────────────────────────────────
 const KR_NAMES: Record<string, string> = {

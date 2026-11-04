@@ -128,15 +128,15 @@ export default function DualBuyWidget() {
   const COLS = "2.5rem 1fr 4rem 7rem 5.5rem 6.5rem 6.5rem 8rem";
 
   return (
-    <div className="bg-navy-card border border-navy-border rounded-2xl overflow-hidden">
+    <div className="bg-navy-card border border-navy-border rounded-xl overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-navy-border/50">
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-navy-border/50">
         <div className="flex items-center gap-2.5">
-          <span className="text-lg">🎯</span>
-          <h2 className="text-sm font-bold text-white tracking-tight">쌍끌이 포착</h2>
+          <span className="text-sm">🎯</span>
+          <h2 className="text-xs font-bold text-white tracking-tight">쌍끌이 포착</h2>
           {data?.session?.startsWith("장중") && (
-            <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-signal-green/15 text-signal-green border border-signal-green/30 rounded font-bold">
+            <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 bg-signal-green/15 text-signal-green border border-signal-green/30 rounded font-bold">
               <span className="w-1.5 h-1.5 rounded-full bg-signal-green animate-pulse" />
               LIVE
             </span>
@@ -148,21 +148,21 @@ export default function DualBuyWidget() {
         <div className="flex items-center gap-4">
           {/* Legend */}
           <div className="hidden sm:flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
               <span className="w-3 h-1.5 rounded-sm bg-cyan-brand/80 inline-block" />외국인
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
               <span className="w-3 h-1.5 rounded-sm bg-signal-green/80 inline-block" />기관
             </span>
           </div>
           {ts && (
-            <span className="text-xs text-gray-600">{ts} 기준</span>
+            <span className="text-[11px] text-gray-600">{ts} 기준</span>
           )}
         </div>
       </div>
 
       {data?.criteria && (
-        <div className="px-5 py-2 border-b border-navy-border/40 text-[11px] text-gray-500 leading-relaxed">
+        <div className="px-4 py-2 border-b border-navy-border/40 text-[11px] text-gray-500 leading-relaxed">
           {data.criteria}{data.session ? ` · ${data.session}` : ""}
         </div>
       )}
@@ -170,33 +170,33 @@ export default function DualBuyWidget() {
       {/* ── Table Header (desktop only) ── */}
       {!loading && !apiError && data && data.stocks.length > 0 && (
         <div
-          className="hidden sm:grid items-center gap-3 px-5 py-2 bg-navy-sub/40 border-b border-navy-border/30"
+          className="hidden sm:grid items-center gap-3 px-4 py-2 bg-navy-sub/40 border-b border-navy-border/30"
           style={{ gridTemplateColumns: COLS }}
         >
-          <span className="text-xs text-gray-600 text-center">#</span>
-          <span className="text-xs text-gray-600">종목명</span>
-          <span className="text-xs text-gray-600 text-center">시장</span>
-          <span className="text-xs text-gray-600 text-right">현재가</span>
-          <span className="text-xs text-gray-600 text-right">등락률</span>
-          <span className="text-xs text-gray-600 text-right">외국인 순매수</span>
-          <span className="text-xs text-gray-600 text-right">기관 순매수</span>
-          <span className="text-xs text-gray-600 text-center">매수 비율</span>
+          <span className="text-[11px] text-gray-600 text-center">#</span>
+          <span className="text-[11px] text-gray-600">종목명</span>
+          <span className="text-[11px] text-gray-600 text-center">시장</span>
+          <span className="text-[11px] text-gray-600 text-right">현재가</span>
+          <span className="text-[11px] text-gray-600 text-right">등락률</span>
+          <span className="text-[11px] text-gray-600 text-right">외국인 순매수</span>
+          <span className="text-[11px] text-gray-600 text-right">기관 순매수</span>
+          <span className="text-[11px] text-gray-600 text-center">매수 비율</span>
         </div>
       )}
 
       {/* ── Body ── */}
-      <div className="px-5 py-2">
+      <div className="px-4 py-2">
         {loading ? (
           <SkeletonTable />
         ) : apiError ? (
           <div className="py-10 text-center space-y-2">
-            <p className="text-sm text-orange-400/80 font-medium">⚠️ 수급 데이터를 불러오지 못했습니다</p>
+            <p className="text-xs text-orange-400/80 font-medium">⚠️ 수급 데이터를 불러오지 못했습니다</p>
             {data?.errors?.length ? <p className="text-[10px] text-gray-600 break-all">{data.errors.join(" | ")}</p> : null}
           </div>
         ) : !data || data.stocks.length === 0 ? (
           <div className="py-10 text-center">
-            <p className="text-sm text-gray-500">기준을 넘는 외국인·기관 동반 순매수 종목이 없습니다.</p>
-            <p className="text-xs text-gray-600 mt-1">작은 금액의 동반 매수는 신호로 보지 않습니다.</p>
+            <p className="text-xs text-gray-500">기준을 넘는 외국인·기관 동반 순매수 종목이 없습니다.</p>
+            <p className="text-[11px] text-gray-600 mt-1">작은 금액의 동반 매수는 신호로 보지 않습니다.</p>
           </div>
         ) : (
           <>
@@ -208,13 +208,13 @@ export default function DualBuyWidget() {
                 const fPct     = totalFlow > 0 ? Math.round((stock.foreign / totalFlow) * 100) : 50;
                 return (
                   <button key={stock.code} onClick={() => goAnalyze(stock)}
-                    className="w-full py-3 text-left hover:bg-navy-sub/70 active:bg-navy-sub/90 transition-colors rounded-lg group">
+                    className="w-full py-2 text-left hover:bg-navy-sub/70 active:bg-navy-sub/90 transition-colors rounded-lg group">
                     {/* 상단: 순위+종목명 / 시장뱃지  |  가격+등락률 */}
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex items-start gap-2 min-w-0">
-                        <span className="text-xs font-bold text-gray-500 pt-0.5 shrink-0 w-4 text-center">{idx + 1}</span>
+                        <span className="text-[11px] font-bold text-gray-500 pt-0.5 shrink-0 w-4 text-center">{idx + 1}</span>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate group-hover:text-cyan-brand transition-colors">
+                          <p className="text-xs font-bold text-white truncate group-hover:text-cyan-brand transition-colors">
                             {stock.name}
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -223,15 +223,15 @@ export default function DualBuyWidget() {
                             }`}>
                               {stock.market === "KS" ? "KOSPI" : "KOSDAQ"}
                             </span>
-                            <span className="text-xs text-gray-600 font-mono">{stock.code}</span>
+                            <span className="text-[11px] text-gray-600 font-mono">{stock.code}</span>
                           </div>
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-white num whitespace-nowrap">
+                        <p className="text-xs font-semibold text-white num whitespace-nowrap">
                           {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
                         </p>
-                        <p className={`text-sm font-bold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                        <p className={`text-xs font-bold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
                           {isPos ? "▲" : "▼"}{Math.abs(stock.changePct).toFixed(2)}%
                         </p>
                       </div>
@@ -245,7 +245,7 @@ export default function DualBuyWidget() {
                           <span className="text-signal-green/70">{100 - fPct}%</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0 text-xs tabular-nums">
+                      <div className="flex items-center gap-3 shrink-0 text-[11px] tabular-nums">
                         <span className="text-cyan-brand">외 <span className="font-semibold">+{fmtUk(stock.foreign)}</span></span>
                         <span className="text-signal-green">기 <span className="font-semibold">+{fmtUk(stock.institution)}</span></span>
                       </div>
@@ -270,33 +270,33 @@ export default function DualBuyWidget() {
                   <button
                     key={stock.code}
                     onClick={() => goAnalyze(stock)}
-                    className="w-full grid items-center gap-3 py-3 px-0
+                    className="w-full grid items-center gap-3 py-2 px-0
                       hover:bg-navy-sub/70 rounded-lg transition-all duration-150
                       cursor-pointer group text-left"
                     style={{ gridTemplateColumns: COLS }}
                     title={`${stock.name} AI 분석 →`}
                   >
-                    <span className="text-xs font-bold text-gray-500 text-center">{idx + 1}</span>
+                    <span className="text-[11px] font-bold text-gray-500 text-center">{idx + 1}</span>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white truncate group-hover:text-cyan-brand transition-colors duration-150">{stock.name}</p>
-                      <p className="text-xs text-gray-600 font-mono mt-0.5">{stock.code}</p>
+                      <p className="text-xs font-bold text-white truncate group-hover:text-cyan-brand transition-colors duration-150">{stock.name}</p>
+                      <p className="text-[11px] text-gray-600 font-mono mt-0.5">{stock.code}</p>
                     </div>
-                    <span className={`text-xs font-medium text-center px-1.5 py-0.5 rounded ${
+                    <span className={`text-[11px] font-medium text-center px-1.5 py-0.5 rounded ${
                       stock.market === "KS" ? "text-blue-400 bg-blue-400/10" : "text-purple-400 bg-purple-400/10"
                     }`}>
                       {stock.market === "KS" ? "KOSPI" : "KOSDAQ"}
                     </span>
-                    <span className="text-sm font-semibold text-white text-right num tabular-nums">
+                    <span className="text-xs font-semibold text-white text-right num tabular-nums">
                       {stock.price > 0 ? stock.price.toLocaleString("ko-KR") + "원" : "—"}
                     </span>
-                    <span className={`text-sm font-bold text-right num tabular-nums ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                    <span className={`text-xs font-bold text-right num tabular-nums ${isPos ? "text-signal-green" : "text-signal-red"}`}>
                       {isPos ? "▲" : "▼"}{Math.abs(stock.changePct).toFixed(2)}%
                     </span>
                     <div className="text-right">
-                      <span className="text-sm font-semibold text-cyan-brand num tabular-nums">+{fmtUk(stock.foreign)}</span>
+                      <span className="text-xs font-semibold text-cyan-brand num tabular-nums">+{fmtUk(stock.foreign)}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-sm font-semibold text-signal-green num tabular-nums">+{fmtUk(stock.institution)}</span>
+                      <span className="text-xs font-semibold text-signal-green num tabular-nums">+{fmtUk(stock.institution)}</span>
                     </div>
                     <div className="flex flex-col gap-1 min-w-0">
                       <RatioBar foreign={stock.foreign} institution={stock.institution} />
@@ -315,11 +315,11 @@ export default function DualBuyWidget() {
 
       {/* ── Footer ── */}
       {!loading && !apiError && data && data.stocks.length > 0 && (
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-navy-border/40 bg-navy-sub/20">
-          <p className="text-xs text-gray-600">
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-navy-border/40 bg-navy-sub/20">
+          <p className="text-[11px] text-gray-600">
             클릭 시 종목 상세로 이동
           </p>
-          <p className="text-xs text-gray-600">
+          <p className="text-[11px] text-gray-600">
             외국인·기관 동반 순매수 <span className="text-white font-medium">{data.stocks.length}</span>개 포착
           </p>
         </div>

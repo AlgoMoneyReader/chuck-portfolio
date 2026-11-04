@@ -53,6 +53,23 @@ function isMarketOpen(): boolean {
 }
 
 const fmtPrice = (n: number) => n.toLocaleString("ko-KR") + "원";
+
+// 종목별 AI 한줄 요약: 세션 동안 종목당 한 번만 받는다 (시세 갱신마다 AI를 부르지 않도록)
+const SUMMARY = new Map<string, string>();
+const PENDING = new Set<string>();
+function summaryBadges(list: { code: string; name: string; changePct: number }[], mkt: string, set: (fn: (p: Record<string, string>) => Record<string, string>) => void) {
+  const init: Record<string, string> = {};
+  list.forEach(r => { init[r.code] = SUMMARY.get(r.code) ?? heuristicBadge(r.changePct); });
+  set(() => init);
+  list.filter(r => !SUMMARY.has(r.code) && !PENDING.has(r.code)).forEach(r => {
+    PENDING.add(r.code);
+    fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(`${r.code}.${mkt}`)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(ns => { if (ns?.summary) { SUMMARY.set(r.code, ns.summary); set(prev => ({ ...prev, [r.code]: ns.summary })); } })
+      .catch(() => null)
+      .finally(() => PENDING.delete(r.code));
+  });
+}
 const fmtVol = (n: number) => n.toLocaleString("ko-KR");
 
 // ─── 공통 UI ──────────────────────────────────────────────────────────────────
@@ -146,17 +163,7 @@ function TopMoversHalf({
       const list: StockRow[] = (isGainer ? json.topGainers : json.topLosers) ?? [];
       setRows(list);
 
-      const init: Record<string, string> = {};
-      list.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
-      setBadges(init);
-
-      list.forEach(r => {
-        const ticker = `${r.code}.${mkt}`;
-        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(ns => { if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary })); })
-          .catch(() => null);
-      });
+      summaryBadges(list, mkt, setBadges);
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market, mkt, isGainer]);
 
@@ -164,7 +171,7 @@ function TopMoversHalf({
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      tid = setTimeout(() => { load(); schedule(); }, isMarketOpen() ? 30_000 : 120_000);
+      tid = setTimeout(() => { if (document.visibilityState === "visible") load(); schedule(); }, isMarketOpen() ? 5_000 : 120_000);
     }
     schedule();
     return () => clearTimeout(tid);
@@ -214,7 +221,7 @@ function TopMoversHalf({
               </div>
 
               {/* 현재가 */}
-              <span className="text-right text-xs text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+              <span key={`${r.code}-${r.price}`} className="text-right text-xs text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
 
               {/* 등락률 */}
               <span className={`text-right text-xs font-bold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
@@ -289,17 +296,7 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
       setRows(list);
       setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
 
-      const init: Record<string, string> = {};
-      list.forEach(r => { init[r.code] = heuristicBadge(r.changePct); });
-      setBadges(init);
-
-      list.forEach(r => {
-        const ticker = `${r.code}.${mkt}`;
-        fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(ticker)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(ns => { if (ns?.summary) setBadges(prev => ({ ...prev, [r.code]: ns.summary })); })
-          .catch(() => null);
-      });
+      summaryBadges(list, mkt, setBadges);
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market, mkt]);
 
@@ -307,8 +304,8 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      const delay = isMarketOpen() ? 60_000 : 300_000;
-      tid = setTimeout(() => { load(); schedule(); }, delay);
+      const delay = isMarketOpen() ? 5_000 : 300_000;
+      tid = setTimeout(() => { if (document.visibilityState === "visible") load(); schedule(); }, delay);
     }
     schedule();
     return () => clearTimeout(tid);
@@ -341,7 +338,7 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className="text-right text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+              <span key={`${r.code}-${r.price}`} className="text-right text-sm text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
               <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>

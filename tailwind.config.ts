@@ -51,9 +51,14 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        tick: {
+          "0%": { backgroundColor: "rgba(255,255,255,0.18)" },
+          "100%": { backgroundColor: "transparent" },
+        },
       },
       animation: {
         "fade-in": "fadeIn 0.5s ease-in-out",
+        tick: "tick 0.8s ease-out",
       },
     },
   },
