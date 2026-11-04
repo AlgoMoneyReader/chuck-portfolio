@@ -15,7 +15,7 @@ type TP = { start: number; end: number };
 export async function extendedOne<T extends ExtFields>(q: T): Promise<T> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(q.code)}?interval=5m&range=2d&includePrePost=true`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(q.code)}?interval=1m&range=2d&includePrePost=true`,
       { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(6000) },
     );
     if (!res.ok) return q;

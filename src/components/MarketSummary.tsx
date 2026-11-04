@@ -19,6 +19,7 @@ interface StockRow {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
   tradeAmount?: number; // 거래대금 (원)
+  capEok?: number;      // 시가총액 (억원)
   nxtPrice?: number | null; nxtPct?: number | null; // 넥스트레이드 프리·애프터마켓
 }
 
@@ -179,7 +180,7 @@ function TopMoversHalf({
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch(`/api/market-top?market=${market}&nx=${mode}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       const list: StockRow[] = (isGainer ? json.topGainers : json.topLosers) ?? [];
@@ -187,13 +188,14 @@ function TopMoversHalf({
 
       summaryBadges(list, mkt, setBadges);
     } catch { /* silent */ } finally { setLoading(false); }
-  }, [market, mkt, isGainer]);
+  }, [market, mkt, isGainer, mode]);
 
   useEffect(() => {
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      tid = setTimeout(() => { if (document.visibilityState === "visible") load(); schedule(); }, isMarketOpen() ? 5_000 : 120_000);
+      // 정규장·NXT 프리·애프터(08~20시)엔 5초마다 — 실시간 티커처럼
+      tid = setTimeout(() => { if (document.visibilityState === "visible") load(); schedule(); }, liveHours() ? 5_000 : 120_000);
     }
     schedule();
     return () => clearTimeout(tid);
@@ -308,7 +310,11 @@ const AMOUNT_GRID =
   "sm:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px] " +
   "md:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px_90px]";
 
-function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
+// 08:00~20:00 (정규장 + NXT 프리 + KRX·NXT 애프터)
+const liveHours = () => krSession().key !== "closed";
+const fmtCap = (eok?: number) => (!eok ? "—" : eok >= 10000 ? `${(eok / 10000).toFixed(eok >= 1e5 ? 0 : 1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`);
+
+function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string; onSelect: (d: DrawerState) => void; kind?: "amount" | "cap" }) {
   const [rows, setRows]       = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs]           = useState("");
@@ -318,22 +324,22 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" });
+      const res = await fetch(`/api/market-top?market=${market}&nx=${kind}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
-      const list: StockRow[] = json.topByAmount ?? [];
+      const list: StockRow[] = (kind === "cap" ? json.topByCap : json.topByAmount) ?? [];
       setRows(list);
       setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
 
       summaryBadges(list, mkt, setBadges);
     } catch { /* silent */ } finally { setLoading(false); }
-  }, [market, mkt]);
+  }, [market, mkt, kind]);
 
   useEffect(() => {
     setLoading(true); load();
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
-      const delay = isMarketOpen() ? 5_000 : 300_000;
+      const delay = liveHours() ? 5_000 : 300_000;
       tid = setTimeout(() => { if (document.visibilityState === "visible") load(); schedule(); }, delay);
     }
     schedule();
@@ -352,7 +358,7 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
         <span>종목</span>
         <span className="text-right">현재가</span>
         <span className="text-right">등락률</span>
-        <span className="text-right hidden sm:block">거래대금</span>
+        <span className="text-right hidden sm:block">{kind === "cap" ? "시가총액" : "거래대금"}</span>
         <span className="text-right hidden md:block">오늘의 이유</span>
       </div>
       {loading ? <SkeletonRows count={10} /> : (
@@ -365,14 +371,14 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
               <RankBadge rank={r.rank} />
               <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600 truncate">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span>{r.nxtPrice != null && <NxtLine r={r} className="ml-1.5" />}</p>
+                <p className="text-xs text-gray-600 truncate">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span>{r.nxtPrice != null && <NxtLine r={r} className="ml-1.5" />}</p>
               </div>
               <span key={`${r.code}-${r.price}`} className="text-right text-sm text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
               <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
               <span className="text-right text-xs text-gray-300 num hidden sm:block whitespace-nowrap">
-                {r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
+                {kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
               </span>
               <div className="hidden md:flex justify-end">
                 {badges[r.code] ? (
@@ -945,6 +951,7 @@ interface USStockRow {
   postMarketChangePct: number | null;
   dayMarketPrice?: number | null;
   dayMarketChangePct?: number | null;
+  capUsd?: number | null;
 }
 interface USSectorRow { sector: string; symbol: string; changePct: number; price: number; }
 interface USSectorStockRow {
@@ -965,7 +972,7 @@ function fmtVolUS(n: number): string {
 function USStockList({
   type, index, onSelect,
 }: {
-  type: "gainers" | "losers" | "actives" | "etf";
+  type: "cap" | "gainers" | "losers" | "actives" | "etf";
   index: string;
   onSelect: (d: DrawerState) => void;
 }) {
@@ -991,7 +998,10 @@ function USStockList({
   }, [load]);
 
   const isValue = type === "actives" || type === "etf";
-  const subLabel = type === "etf"
+  const isCap = type === "cap";
+  const subLabel = isCap
+    ? `${index === "SP500" ? "S&P 500" : index === "NASDAQ" ? "나스닥 100" : "다우존스 30"} 구성 종목 · 시가총액 순`
+    : type === "etf"
     ? "국내 투자자 인기 ETF·레버리지 · 거래대금 순 (지수 선택 무관)"
     : isValue
     ? (index === "DOW" ? "다우존스 30 · 거래대금(가격×거래량) 순" : `${index === "NASDAQ" ? "나스닥 상장" : "미국"} 주요 대형주 + 당일 거래 급증 종목 · 거래대금 순`)
@@ -1007,7 +1017,7 @@ function USStockList({
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(프리/애프터)</span></span>
-        <span className={`w-14 text-right ${isValue ? "" : "hidden sm:block"}`}>{isValue ? "거래대금" : "거래량"}</span>
+        <span className={`w-14 text-right ${isValue || isCap ? "" : "hidden sm:block"}`}>{isCap ? "시가총액" : isValue ? "거래대금" : "거래량"}</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">데이터를 불러올 수 없습니다</p>
@@ -1049,8 +1059,8 @@ function USStockList({
                     </span>
                   )}
                 </div>
-                <span className={`w-14 text-right text-xs num whitespace-nowrap ${isValue ? "text-gray-300" : "text-gray-500 hidden sm:block"}`}>
-                  {isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
+                <span className={`w-14 text-right text-xs num whitespace-nowrap ${isValue || isCap ? "text-gray-300" : "text-gray-500 hidden sm:block"}`}>
+                  {isCap ? (r.capUsd ? (r.capUsd >= 1e12 ? `$${(r.capUsd / 1e12).toFixed(2)}T` : `$${(r.capUsd / 1e9).toFixed(0)}B`) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
               </div>
             );
@@ -1253,10 +1263,10 @@ function USSectorHeatmap() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RegionTabType = "KR" | "US";
-type MainTabType = "top10" | "gainers" | "losers" | "amount" | "volume" | "sector" | "high52" | "flow";
+type MainTabType = "top10" | "cap" | "gainers" | "losers" | "amount" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 type USIndexType = "SP500" | "NASDAQ" | "DOW";
-type USContentTab = "gainers" | "losers" | "actives" | "etf" | "sector";
+type USContentTab = "cap" | "gainers" | "losers" | "actives" | "etf" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
   { id: "top10",  label: "상승/하락"  },
@@ -1274,6 +1284,7 @@ const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
 ];
 
 const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
+  { id: "cap",     label: "시총 TOP30" },
   { id: "gainers", label: "상승 TOP30" },
   { id: "losers",  label: "하락 TOP30" },
   { id: "actives", label: "거래대금 TOP30" },
@@ -1283,6 +1294,7 @@ const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
 
 // 매매동향 탭에서 쓰는 단일 시장 보기 (상승·하락 분리)
 const KR_MARKET_TABS: { id: MainTabType; label: string }[] = [
+  { id: "cap",     label: "시총 TOP30" },
   { id: "gainers", label: "상승 TOP30" },
   { id: "losers",  label: "하락 TOP30" },
   { id: "amount",  label: "거래대금 TOP30" },
@@ -1318,11 +1330,11 @@ interface MarketSummaryProps {
 export default function MarketSummary({ region: fixedRegion, krMarket, krSectorOnly }: MarketSummaryProps = {}) {
   const [regionState, setRegion] = useState<RegionTabType>(fixedRegion ?? "KR");
   const region = fixedRegion ?? regionState;
-  const [mainTab, setMainTab] = useState<MainTabType>(krMarket ? "gainers" : krSectorOnly ? "sector" : "top10");
+  const [mainTab, setMainTab] = useState<MainTabType>(krMarket ? "cap" : krSectorOnly ? "sector" : "top10");
   const [marketState, setMarket] = useState<MarketType>(krMarket ?? "KOSPI");
   const market = krMarket ?? marketState;
   const [usIndex, setUsIndex]     = useState<USIndexType>("SP500");
-  const [usContent, setUsContent] = useState<USContentTab>("gainers");
+  const [usContent, setUsContent] = useState<USContentTab>("cap");
   const [drawer, setDrawer]   = useState<DrawerState | null>(null);
   const navRouter = useRouter();
   // 국내 종목은 종목 상세 페이지로, 미국 종목은 지금처럼 팝업
@@ -1365,6 +1377,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
         {mainTab === "gainers" && <MoversPanel market={market} mode="gainers" onSelect={openStock} />}
         {mainTab === "losers"  && <MoversPanel market={market} mode="losers" onSelect={openStock} />}
         {mainTab === "amount" && <TopByAmountList  market={market} onSelect={openStock} />}
+        {mainTab === "cap"    && <TopByAmountList  key="cap" kind="cap" market={market} onSelect={openStock} />}
         {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={openStock} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}
         {mainTab === "high52" && <Week52HighList   market={market} onSelect={openStock} />}
