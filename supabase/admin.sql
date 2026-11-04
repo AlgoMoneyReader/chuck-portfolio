@@ -2,9 +2,10 @@
 -- Supabase SQL Editor 에 붙여넣고 Run. 여러 번 실행해도 안전하다. (my.sql 을 먼저 실행해 둔 상태여야 한다)
 
 create or replace function public.is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists(select 1 from admins where user_id = auth.uid());
-$$;
+language plpgsql stable security definer set search_path = public as $$
+begin
+  return exists(select 1 from admins where user_id = auth.uid());
+end $$;
 grant execute on function public.is_admin() to anon, authenticated;
 
 -- ── AI 호출 기록 (모델·토큰·추정 비용) ─────────────────────────────────────
