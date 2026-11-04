@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOfftopic } from "@/lib/newsFilter";
 import master from "@/data/stock_master.json";
 
 export const dynamic = "force-dynamic";
@@ -124,7 +125,7 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
     const title = f.google ? rawTitle.replace(/\s+-\s+[^-]+$/, "") : rawTitle;
     const url = decode(/<link[^>]*>([\s\S]*?)<\/link>/.exec(block)?.[1] ?? /<link[^>]+href="([^"]+)"/.exec(block)?.[1] ?? "");
     const date = decode(/<pubDate>([\s\S]*?)<\/pubDate>/.exec(block)?.[1] ?? /<dc:date>([\s\S]*?)<\/dc:date>/.exec(block)?.[1] ?? "");
-    if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w))) continue;
+    if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w)) || isOfftopic(title)) continue;
     const stocks = matchStocks(title);
     if (!f.marketOnly && !stocks.length && !MARKET_RE.test(title)) continue;
     const rawDesc = decode(/<description[^>]*>([\s\S]*?)<\/description>/.exec(block)?.[1] ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();

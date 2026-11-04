@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 
-interface Props { label: string; onClose: () => void; }
+interface Props { label: string; onClose: () => void; initialTab?: "chart" | "flow" | "day" | "night" }
 interface ChartPoint { date: string; close: number | null; }
 interface ChartData {
   label: string; symbol: string;
@@ -49,13 +49,13 @@ function fmtFlow(n: number): string {
 
 const kstHM = (iso?: string) => new Date((iso ? Date.parse(iso) : Date.now()) + 9 * 3_600_000).toISOString().slice(11, 16);
 
-export default function ChartModal({ label, onClose }: Props) {
+export default function ChartModal({ label, onClose, initialTab }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
   const range = "1d";  // 머리글 등락률은 항상 전일 대비
   const [tf, setTf]                             = useState<Timeframe>("1m");
   const [futTf, setFutTf]                       = useState<Timeframe>("1m");
-  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">("chart");
+  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">(initialTab ?? "chart");
   const [chartData, setChartData]               = useState<ChartData | null>(null);
   const [, setLoading]                     = useState(true);
   const [, setError]                         = useState(false);

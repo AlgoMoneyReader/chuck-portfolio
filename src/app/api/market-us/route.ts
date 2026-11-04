@@ -278,6 +278,16 @@ export async function GET(request: Request) {
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   };
 
+  // ⓪-1 주요 종목 TOP10(시가총액 상위 대형주, 증시 탭 요약용)
+  if (type === "mega") {
+    const MEGA: Record<string, string> = { NVDA: "엔비디아", MSFT: "마이크로소프트", AAPL: "애플", GOOGL: "알파벳", AMZN: "아마존", META: "메타", AVGO: "브로드컴", TSLA: "테슬라", TSM: "TSMC", "BRK-B": "버크셔해서웨이" };
+    const quotes = await fetchSparkQuotes(Object.keys(MEGA));
+    const order = Object.keys(MEGA);
+    const sorted = quotes.map(q => ({ ...q, name: MEGA[q.code] ?? q.name }))
+      .sort((a, b) => order.indexOf(a.code) - order.indexOf(b.code)).map((q, i) => ({ ...q, rank: i + 1 }));
+    return send({ stocks: await withExtended(sorted), timestamp: ts });
+  }
+
   // ⓪ 인기 ETF·레버리지: 거래대금 순
   if (type === "etf") {
     const quotes = await fetchSparkQuotes(Object.keys(POPULAR_ETFS));
