@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
+import StockSignalReport from "@/components/StockSignalReport";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
@@ -31,7 +32,7 @@ interface Overview {
   errors: string[];
 }
 
-const TABS = ["개요", "차트", "수급", "뉴스", "공시"] as const;
+const TABS = ["개요", "차트", "수급", "신호", "뉴스", "공시"] as const;
 type Tab = typeof TABS[number];
 
 const won = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("ko-KR"));
@@ -66,7 +67,7 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   );
 }
 
-interface QRow { period: string; sales: number | null; op: number | null; net: number | null; salesYoY: number | null; opYoY: number | null; netYoY: number | null }
+interface QRow { prelim?: boolean; period: string; sales: number | null; op: number | null; net: number | null; salesYoY: number | null; opYoY: number | null; netYoY: number | null }
 interface ARow { year: number; sales: number | null; op: number | null; net: number | null }
 
 interface EarnRow { key: string; label: string; short: string; sales: number | null; op: number | null; net: number | null; opm: number | null; npm: number | null; qoq: number | null; yoy: number | null }
@@ -97,7 +98,7 @@ function EarningsSection({ code, kis }: { code: string; kis: Overview["financial
   }, [code]);
 
   const quarterRows: EarnRow[] = (q?.quarters ?? []).map((r, i, arr) => ({
-    key: r.period, label: `${r.period.slice(2, 4)}년 ${r.period.slice(-2, -1)}분기`, short: `${r.period.slice(2, 4)}.${r.period.slice(-2)}`,
+    key: r.period, label: `${r.period.slice(2, 4)}년 ${r.period.slice(-2, -1)}분기${r.prelim ? "(잠정)" : ""}`, short: `${r.period.slice(2, 4)}.${r.period.slice(-2)}${r.prelim ? "*" : ""}`,
     sales: r.sales, op: r.op, net: r.net, opm: marginOf(r.op, r.sales), npm: marginOf(r.net, r.sales),
     qoq: i > 0 ? growth(r.op, arr[i - 1].op) : null, yoy: r.opYoY,
   }));
@@ -118,6 +119,7 @@ function EarningsSection({ code, kis }: { code: string; kis: Overview["financial
           {lastQ.label.replace(/^(\d+)년/, "20$1년")} 영업이익은 <b className="text-white">{eok(lastQ.op)}</b>
           {lastQ.qoq != null && <> · 직전 분기 대비 <b className={tone(lastQ.qoq)}>{pct(lastQ.qoq)}</b></>}
           {lastQ.yoy != null && <> · 전년 동기 대비 <b className={tone(lastQ.yoy)}>{pct(lastQ.yoy)}</b></>}
+          {q?.latest?.prelim && <span className="block text-[11px] text-gold mt-1">* 잠정실적(공정공시) 기준 · 분기보고서가 제출되면 확정치로 바뀝니다</span>}
         </p>
       ) : kis && (
         <div className="grid grid-cols-3 gap-3">
@@ -331,7 +333,8 @@ function ChartTab({ symbol }: { symbol: string }) {
 }
 
 interface Flow {
-  foreign: number; institution: number; individual: number; invDate: string;
+  foreign: number; institution: number; individual: number | null; invDate: string;
+  confirmed?: { foreign: number; institution: number; individual: number };
   foreign5D: number; foreign10D: number; foreign20D: number; institution5D: number; institution10D: number; institution20D: number;
 }
 
@@ -346,7 +349,8 @@ function FlowTab({ code, market }: { code: string; market: string }) {
   }, [code, market]);
   if (loading) return <div className="card h-48 animate-pulse" />;
   if (!f) return <div className="card text-sm text-gray-500 text-center py-10">수급 데이터를 불러올 수 없습니다</div>;
-  const today = [["외국인", f.foreign], ["기관", f.institution], ["개인", f.individual]] as const;
+  const c = f.confirmed ?? { foreign: f.foreign, institution: f.institution, individual: f.individual ?? 0 };
+  const today = [["외국인", c.foreign], ["기관", c.institution], ["개인", c.individual]] as const;
   const max = Math.max(1, ...today.map(([, v]) => Math.abs(v)));
   const todayYmd = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "");
   const confirmedToday = f.invDate === todayYmd;
@@ -494,6 +498,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
         ) : tab === "개요" ? <OverviewTab d={d} />
           : tab === "차트" ? <ChartTab symbol={`${code}.${d.marketCode}`} />
           : tab === "수급" ? <FlowTab code={code} market={d.marketCode} />
+          : tab === "신호" ? <StockSignalReport ticker={code} market={d.marketCode} />
           : tab === "뉴스" ? <ListTab key="news" kind="news" url={`/api/stock-news?name=${encodeURIComponent(d.name)}`} />
           : <ListTab key="dart" kind="dart" url={`/api/stock-disclosures?code=${code}`} />}
       </div>

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getKisToken as getKISToken } from "@/lib/fetchKisMaster";
+import { getLiveFlow } from "@/lib/liveFlow";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = "icn1";
 
 // ─── KIS 토큰 캐시 (서버리스 웜 인스턴스 재사용) ─────────────────────────────
 
@@ -152,10 +154,25 @@ export async function GET(request: Request) {
 
     // ② KIS API → 투자자별 순매수 (억원)
     const inv = await fetchKISInvestor(code);
-    const foreign     = inv?.foreign     ?? 0;
-    const institution = inv?.institution ?? 0;
-    const individual  = inv?.individual  ?? 0;
+    let foreign       = inv?.foreign     ?? 0;
+    let institution   = inv?.institution ?? 0;
+    let individual: number | null = inv?.individual ?? 0;
     const invDate     = inv?.date        ?? "";
+
+    // 오늘 확정치가 아직 없으면(장중·마감 직후) 장중 가집계로 당일 수급을 쓴다
+    const today8 = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "");
+    let flowBasis = { type: "confirmed" as "confirmed" | "live", label: invDate ? `${invDate.slice(4, 6)}/${invDate.slice(6, 8)} 확정` : "확정" };
+    if (invDate !== today8 && market !== "US") {
+      try {
+        const live = await getLiveFlow(code);
+        if (live.available) {
+          foreign = live.foreignEok ?? 0;
+          institution = live.institutionEok ?? 0;
+          individual = null; // 가집계에는 개인이 없다
+          flowBasis = { type: "live", label: `오늘 ${live.asOf} 가집계(추정)` };
+        }
+      } catch { /* 확정치 그대로 */ }
+    }
 
     // ③ 진보적 사고 점수 (0–100점)
     // 수급 강도 40점 (외국인 20 + 기관 20, 500억/300억 기준)
@@ -204,6 +221,8 @@ export async function GET(request: Request) {
         institution10D: inv?.institution10D ?? 0,
         institution20D: inv?.institution20D ?? 0,
         invDate,
+        flowBasis,
+        confirmed: { foreign: inv?.foreign ?? 0, institution: inv?.institution ?? 0, individual: inv?.individual ?? 0 },
         volumeRatio,
         week52Pct,
         grade,

@@ -1260,6 +1260,12 @@ export default function MarketSummary() {
   const [usIndex, setUsIndex]     = useState<USIndexType>("SP500");
   const [usContent, setUsContent] = useState<USContentTab>("gainers");
   const [drawer, setDrawer]   = useState<DrawerState | null>(null);
+  const navRouter = useRouter();
+  // 국내 종목은 종목 상세 페이지로, 미국 종목은 지금처럼 팝업
+  const openStock = useCallback((d: DrawerState) => {
+    if (d.market === "US") setDrawer(d);
+    else navRouter.push(`/stock/${d.code.replace(/\.(KS|KQ)$/, "")}`);
+  }, [navRouter]);
 
   return (
     <section className="card">
@@ -1291,12 +1297,12 @@ export default function MarketSummary() {
           </div>
         </div>
 
-        {mainTab === "top10"  && <GainersLosersPanel market={market} onSelect={setDrawer} />}
-        {mainTab === "amount" && <TopByAmountList  market={market} onSelect={setDrawer} />}
-        {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={setDrawer} />}
+        {mainTab === "top10"  && <GainersLosersPanel market={market} onSelect={openStock} />}
+        {mainTab === "amount" && <TopByAmountList  market={market} onSelect={openStock} />}
+        {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={openStock} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}
-        {mainTab === "high52" && <Week52HighList   market={market} onSelect={setDrawer} />}
-        {mainTab === "flow"   && <InvestorFlowList market={market} onSelect={setDrawer} />}
+        {mainTab === "high52" && <Week52HighList   market={market} onSelect={openStock} />}
+        {mainTab === "flow"   && <InvestorFlowList market={market} onSelect={openStock} />}
       </>)}
 
       {/* ── US 헤더 + 컨텐츠 ── */}
