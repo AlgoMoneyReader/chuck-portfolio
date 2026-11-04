@@ -59,9 +59,24 @@ export async function GET() {
       const head = new TextDecoder().decode(buf.slice(0, 2));
       return `HTTP ${res.status} · ${Math.round(buf.byteLength / 1024)}KB · ${((Date.now() - t0) / 1000).toFixed(1)}초 · ${head === "PK" ? "zip 정상" : `zip 아님: ${new TextDecoder().decode(buf.slice(0, 120))}`}`;
     }),
+    // 네이버: 간단한 UA / 실제 브라우저 헤더 / 모바일 API 를 나눠 어디서 막히는지 본다
     check(async () => {
-      const r = await fetch("https://finance.naver.com/item/news_notice.naver?code=005930&page=1", { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(8000) });
-      return `HTTP ${r.status}`;
+      const BROWSER = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+        Referer: "https://finance.naver.com/",
+      };
+      const t = async (url: string, headers: Record<string, string>) => {
+        try { return (await fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(8000) })).status; } catch (e) { return String(e).slice(0, 30); }
+      };
+      const [simple, browser, research, mobile] = await Promise.all([
+        t("https://finance.naver.com/item/news_notice.naver?code=005930&page=1", { "User-Agent": "Mozilla/5.0" }),
+        t("https://finance.naver.com/item/news_notice.naver?code=005930&page=1", BROWSER),
+        t("https://finance.naver.com/research/company_list.naver?searchType=itemCode&itemCode=005930", BROWSER),
+        t("https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=5", { "User-Agent": "Mozilla/5.0", Referer: "https://m.stock.naver.com/" }),
+      ]);
+      return `공시(기본UA) ${simple} · 공시(브라우저헤더) ${browser} · 리서치 ${research} · 모바일API ${mobile}`;
     }),
     check(async () => `${process.env.VERCEL_REGION ?? "알 수 없음"}`),
   ]);
