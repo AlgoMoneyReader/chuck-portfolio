@@ -16,7 +16,7 @@ interface ChartData {
   intraday?: boolean;
 }
 interface FlowItem { type: string; label: string; netBuy: number; }
-interface Commentary { title: string; subtitle: string; bullets: string[]; updatedAt: string; }
+interface Commentary { title: string; subtitle: string; summary?: string; reasons?: { title: string; body: string; sources: { title: string; url: string; source: string }[] }[]; bullets: string[]; updatedAt: string; }
 interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
 interface NightFuturesPoint { time: string; price: number; full?: string; }
 interface NightFuturesData {
@@ -377,14 +377,33 @@ export default function ChartModal({ label, onClose }: Props) {
                         {commentary.subtitle}
                       </span>
                     </div>
-                    <ul className="space-y-2.5">
-                      {commentary.bullets.map((b, i) => (
-                        <li key={i} className="flex gap-2 text-xs text-gray-300 leading-relaxed">
-                          <span className="text-cyan-brand shrink-0 mt-0.5">*</span>
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    {commentary.summary && <p className="text-sm text-white leading-relaxed mb-3">{commentary.summary}</p>}
+                    {commentary.reasons?.length ? (
+                      <ol className="space-y-3">
+                        {commentary.reasons.map((r, i) => (
+                          <li key={i} className="flex gap-2.5">
+                            <span className="w-5 h-5 shrink-0 rounded-full bg-cyan-brand/15 text-cyan-brand text-[11px] font-bold flex items-center justify-center num">{i + 1}</span>
+                            <div className="min-w-0">
+                              {r.title && <p className="text-xs font-semibold text-white">{r.title}</p>}
+                              <p className="text-xs text-gray-300 leading-relaxed mt-0.5">{r.body}</p>
+                              {r.sources.map(s => (
+                                <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer"
+                                  className="block text-[11px] text-gray-500 hover:text-cyan-brand truncate mt-1">↗ {s.source} · {s.title}</a>
+                              ))}
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <ul className="space-y-2.5">
+                        {commentary.bullets.map((b, i) => (
+                          <li key={i} className="flex gap-2 text-xs text-gray-300 leading-relaxed">
+                            <span className="text-cyan-brand shrink-0 mt-0.5">*</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <p className="text-xs text-gray-600 mt-3 text-right">{commentary.updatedAt}</p>
                   </div>
                 ) : (
