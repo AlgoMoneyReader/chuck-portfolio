@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { gemini, CHEAP } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
 export const maxDuration = 60;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
 // 시장별 캐시: 10분 또는 등락률이 0.3%p 넘게 바뀌면 새로 만든다
 const cache: Record<string, { data: object; at: number; pct: number; day: string }> = {};
@@ -160,14 +159,9 @@ JSON만 반환:
   try {
     if (!news.length) throw new Error("no news");
     let j: { summary?: string; reasons?: unknown } | null = null;
-    for (const name of ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]) {
-      try {
-        const model = genAI.getGenerativeModel({ model: name, generationConfig: { responseMimeType: "application/json", temperature: 0.3 } });
-        const result = await model.generateContent(prompt, { timeout: 25_000 });
-        j = parseJson(result.response.text().trim());
-        if (Array.isArray(j?.reasons) && j.reasons.length) break;
-      } catch (e) { aiErrors.push(`${name}: ${String(e).slice(0, 120)}`); }
-    }
+    try {
+      j = parseJson((await gemini({ prompt, models: CHEAP, json: true, temperature: 0.3, timeoutMs: 25_000 })).text);
+    } catch (e) { aiErrors.push(String(e).slice(0, 200)); }
     if (!j) throw new Error("ai");
     const reasons: Reason[] = (Array.isArray(j.reasons) ? j.reasons : []).slice(0, 3)
       .map((r: { title?: string; body?: string; refs?: unknown }) => ({ title: String(r.title ?? ""), body: String(r.body ?? ""), sources: ref(r.refs) }))

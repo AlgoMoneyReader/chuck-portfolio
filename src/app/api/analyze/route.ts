@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { gemini, GeminiError } from "@/lib/gemini";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
+export const maxDuration = 60;
 
 const SYSTEM_PROMPT = `Act as an elite equity research analyst at a top-tier investment fund.
 
@@ -110,27 +110,18 @@ ${currentPriceLine}
 위 정보를 바탕으로 엘리트 주식 리서치 보고서를 작성해주세요.
     `.trim();
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
-      // Google Search Grounding — 실시간 웹 검색으로 최신 데이터 반영
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ googleSearch: {} } as any],
-    });
-
-    const result = await model.generateContent(userMessage);
-    const text = result.response.text();
+    const { text, model } = await gemini({ prompt: userMessage, system: SYSTEM_PROMPT, search: true, timeoutMs: 50_000 });
 
     return NextResponse.json({
       analysis: text,
       ticker,
       companyName,
       timestamp: new Date().toISOString(),
-      model: "gemini-2.5-flash",
+      model,
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "알 수 없는 오류";
     console.error("🚨 [Gemini API ERROR] /api/analyze:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: error instanceof GeminiError && error.quota ? 429 : 500 });
   }
 }

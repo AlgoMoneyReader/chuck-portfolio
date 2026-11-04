@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { gemini, GeminiError } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
+export const maxDuration = 60;
+const ANALYSIS_CACHE = new Map<string, Record<string, unknown>>();
 
 const SYSTEM_PROMPT = `당신은 '진보를 위한 주식투자' 철학을 기반으로 한 냉철한 퀀트 투자 분석가입니다.
 알읽남(알고리즘이 읽어주는 돈) 채널의 분석 톤앤매너: 감정 배제, 데이터 중심, 직접적 판단, 짧고 강렬한 문장.
@@ -74,6 +75,11 @@ export async function GET(request: Request) {
   if (!code || !name) {
     return NextResponse.json({ error: "code, name required" }, { status: 400 });
   }
+
+  // 같은 종목은 하루 한 번만 AI 호출 (한도 절약)
+  const ck = `${code}-${new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)}`;
+  const hit = ANALYSIS_CACHE.get(ck);
+  if (hit) return NextResponse.json({ ...hit, cached: true });
 
   const isUS   = market === "US";
   const symbol = isUS ? code.toUpperCase() : `${code}.${market}`;
@@ -173,16 +179,7 @@ ${newsData || "없음"}
 }`.trim();
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
-      // Google Search Grounding — 실시간 웹 검색으로 최신 데이터 반영
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: [{ googleSearch: {} } as any],
-    });
-
-    const result = await model.generateContent(userPrompt);
-    const text   = result.response.text().trim();
+    const { text } = await gemini({ prompt: userPrompt, system: SYSTEM_PROMPT, search: true, timeoutMs: 50_000 });
 
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -191,10 +188,13 @@ ${newsData || "없음"}
     }
 
     const analysis = JSON.parse(jsonMatch[0]);
+    analysis.generatedAt = new Date().toISOString();
+    ANALYSIS_CACHE.set(ck, analysis);
+    if (ANALYSIS_CACHE.size > 300) ANALYSIS_CACHE.delete(ANALYSIS_CACHE.keys().next().value as string);
     return NextResponse.json(analysis, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "알 수 없는 오류";
     console.error("🚨 [Gemini API ERROR] /api/stock-analysis:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg }, { status: error instanceof GeminiError && error.quota ? 429 : 500 });
   }
 }

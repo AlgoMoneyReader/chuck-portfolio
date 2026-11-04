@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { gemini, CHEAP } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
@@ -73,25 +74,7 @@ async function fetchNaverRSS(code: string): Promise<string[]> {
 
 // ── Gemini AI 요약 ────────────────────────────────────────────────────────────
 async function callGemini(prompt: string): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error("no GEMINI_API_KEY");
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 50, thinkingConfig: { thinkingBudget: 0 } },
-      }),
-      signal: AbortSignal.timeout(5000),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini ${res.status} ${(await res.text()).slice(0, 120)}`);
-  const j = await res.json() as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  };
-  return j.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+  return (await gemini({ prompt, models: CHEAP, maxTokens: 50, temperature: 0.3, timeoutMs: 6000 })).text;
 }
 
 // ── 가격 방향 휴리스틱 ────────────────────────────────────────────────────────
