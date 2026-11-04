@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -13,168 +14,84 @@ export interface RankItem {
   netBuyQty: number;    // 천주
 }
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-
 /**
- * Naver Finance 투자자별 순매수 TOP 스크래핑
- * URL: https://finance.naver.com/sise/sise_deal_rank_iframe.naver
- *      ?sosok=01&investor_gubun=9000&type=buy
- *
- * investor_gubun 확인된 매핑:
- *   9000 = 외국인 (foreign)
- *   1000 = 기관합계 (institutional)
- *   8000 = 개인 (individual)
- *
- * type: buy=순매수, sell=순매도
- * 인코딩: EUC-KR → ArrayBuffer + TextDecoder
- * 단위: 수량=천주, 금액=백만원
+ * 투자자별 순매수·순매도 상위 종목.
+ * KIS 국내기관_외국인 매매종목가집계(FHPTJ04400000): 외국인·기관계 순위를 장중 가집계로 준다.
+ * 개인은 KIS가 순위를 주지 않아, 외국인·기관 상위 종목에서 개인 ≈ -(외국인+기관)으로 추정한다.
+ * (기존 네이버 스크래핑은 410으로 막혀 교체)
  */
-type Gubun = "9000" | "1000" | "8000";
+type Row = Record<string, string>;
 
-async function fetchRankPage(
-  gubun: Gubun,
-  type: "buy" | "sell"
-): Promise<RankItem[]> {
-  const url =
-    `https://finance.naver.com/sise/sise_deal_rank_iframe.naver` +
-    `?sosok=01&investor_gubun=${gubun}&type=${type}`;
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": UA,
-      "Accept": "text/html,application/xhtml+xml",
-      "Accept-Language": "ko-KR,ko;q=0.9",
-      "Referer": "https://finance.naver.com/sise/sise_deal_rank.naver",
-    },
-    signal: AbortSignal.timeout(8000),
-    cache: "no-store",
+async function rank(isc: string, investor: "1" | "2", sort: "0" | "1"): Promise<Row[]> {
+  const j = await kisGet("/uapi/domestic-stock/v1/quotations/foreign-institution-total", "FHPTJ04400000", {
+    FID_COND_MRKT_DIV_CODE: "V",
+    FID_COND_SCR_DIV_CODE: "16449",
+    FID_INPUT_ISCD: isc,          // 0001 코스피, 1001 코스닥
+    FID_DIV_CLS_CODE: "1",        // 금액 기준
+    FID_RANK_SORT_CLS_CODE: sort, // 0 순매수 상위, 1 순매도 상위
+    FID_ETC_CLS_CODE: investor,   // 1 외국인, 2 기관계
   });
-  if (!res.ok) throw new Error(`Naver sise_deal_rank HTTP ${res.status}`);
-
-  // EUC-KR 디코딩
-  const buf = await res.arrayBuffer();
-  const html = new TextDecoder("euc-kr").decode(buf);
-
-  const items: RankItem[] = [];
-
-  // <tr> 행 파싱 — code= 링크가 있는 행만 처리
-  // 이 페이지는 2일치 데이터를 나란히 표시하므로 첫 번째 날(최신일) 20개만 수집
-  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
-  let m: RegExpExecArray | null;
-
-  while ((m = rowRe.exec(html)) !== null) {
-    const row = m[1];
-
-    // 종목코드 확인
-    const codeM = /code=(\d{6})/.exec(row);
-    if (!codeM) continue;
-    const code = codeM[1];
-
-    // td 텍스트 추출 (HTML 태그·엔티티 제거)
-    const tds: string[] = [];
-    const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
-    let tdM: RegExpExecArray | null;
-    while ((tdM = tdRe.exec(row)) !== null) {
-      const clean = tdM[1]
-        .replace(/<[^>]+>/g, "")
-        .replace(/&nbsp;/g, " ")
-        .replace(/&amp;/g, "&")
-        .trim();
-      tds.push(clean);
-    }
-
-    // 최소 3개 td: [0]종목명 [1]수량(천주) [2]금액(백만원) ...
-    if (tds.length < 3) continue;
-
-    const name = tds[0].trim();
-    if (!name || name.length < 2) continue;
-
-    const parseNum = (s: string): number => {
-      const n = parseInt(s.replace(/[,\s]/g, ""), 10);
-      return isNaN(n) ? 0 : n;
-    };
-
-    const qty    = parseNum(tds[1]);  // 수량 (천주)
-    const amount = parseNum(tds[2]);  // 금액 (백만원)
-
-    if (amount === 0 && qty === 0) continue;
-
-    const sign = type === "sell" ? -1 : 1;
-
-    items.push({
-      rank:          items.length + 1,
-      code,
-      name,
-      price:         0,
-      changePct:     0,
-      netBuyAmount:  sign * Math.round(amount / 100), // 백만원 → 억원
-      netBuyQty:     sign * qty,
-    });
-
-    // 1페이지 = 최신일 TOP 20
-    if (items.length >= 20) break;
-  }
-
-  return items.map((item, i) => ({ ...item, rank: i + 1 }));
+  return Array.isArray(j.output) ? j.output : [];
 }
 
-// ── 모듈 캐시 (2분) ──────────────────────────────────────────────────────────
-interface CacheEntry {
-  data: {
-    buy:  { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
-    sell: { foreign: RankItem[]; institution: RankItem[]; individual: RankItem[] };
-    dataDateLabel: string;
+interface Parsed { code: string; name: string; price: number; changePct: number; f: number; o: number; fq: number; oq: number }
+const parse = (r: Row): Parsed | null => {
+  const code = (r.mksc_shrn_iscd ?? "").trim();
+  if (!/^\d{6}$/.test(code)) return null;
+  return {
+    code, name: (r.hts_kor_isnm ?? "").trim(),
+    price: num(r.stck_prpr) ?? 0, changePct: num(r.prdy_ctrt) ?? 0,
+    f: Math.round((num(r.frgn_ntby_tr_pbmn) ?? 0) / 100), o: Math.round((num(r.orgn_ntby_tr_pbmn) ?? 0) / 100), // 백만원 → 억원
+    fq: Math.round((num(r.frgn_ntby_qty) ?? 0) / 1000), oq: Math.round((num(r.orgn_ntby_qty) ?? 0) / 1000),       // 주 → 천주
   };
-  ts: number;
-}
-let cache: CacheEntry | null = null;
-const CACHE_TTL = 2 * 60 * 1000;
+};
+const toItems = (list: { p: Parsed; amt: number; qty: number }[]): RankItem[] =>
+  list.slice(0, 20).map((x, i) => ({ rank: i + 1, code: x.p.code, name: x.p.name, price: x.p.price, changePct: x.p.changePct, netBuyAmount: x.amt, netBuyQty: x.qty }));
 
-export async function GET() {
-  // 캐시 히트
-  if (cache && Date.now() - cache.ts < CACHE_TTL) {
-    return NextResponse.json({ ...cache.data, cached: true }, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  }
+const cache: Record<string, { at: number; body: object }> = {};
+const TTL = 60_000;
 
+export async function GET(request: Request) {
+  const market = new URL(request.url).searchParams.get("market") === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
+  const hit = cache[market];
+  if (hit && Date.now() - hit.at < TTL) return NextResponse.json({ ...hit.body, cached: true });
+
+  const isc = market === "KOSDAQ" ? "1001" : "0001";
   try {
-    // 외국인(9000)·기관(1000)·개인(8000) 순매수/순매도 병렬 수집
-    const [frgnBuy, frgnSell, instBuy, instSell, indivBuy, indivSell] =
-      await Promise.all([
-        fetchRankPage("9000", "buy"),
-        fetchRankPage("9000", "sell"),
-        fetchRankPage("1000", "buy"),
-        fetchRankPage("1000", "sell"),
-        fetchRankPage("8000", "buy"),
-        fetchRankPage("8000", "sell"),
-      ]);
+    const [fb, fs, ob, os] = await Promise.all([rank(isc, "1", "0"), rank(isc, "1", "1"), rank(isc, "2", "0"), rank(isc, "2", "1")]);
+    const P = (rows: Row[]) => rows.map(parse).filter((x): x is Parsed => !!x);
+    const [FB, FS, OB, OS] = [P(fb), P(fs), P(ob), P(os)];
+    if (!FB.length && !OB.length) throw new Error("KIS 순위 데이터 없음");
 
-    const kst = new Date(Date.now() + 9 * 3_600_000);
-    const hh  = String(kst.getUTCHours()).padStart(2, "0");
-    const mm  = String(kst.getUTCMinutes()).padStart(2, "0");
-    const dataDateLabel = `오늘 ${hh}:${mm} 기준`;
+    // 개인 추정: 네 목록 종목을 합쳐 -(외국인+기관)
+    const all = new Map<string, Parsed>();
+    for (const p of [...FB, ...FS, ...OB, ...OS]) if (!all.has(p.code)) all.set(p.code, p);
+    const indiv = Array.from(all.values()).map(p => ({ p, amt: -(p.f + p.o), qty: -(p.fq + p.oq) }));
 
-    const total = frgnBuy.length + instBuy.length + indivBuy.length;
-    if (total === 0) {
-      return NextResponse.json(
-        { error: "데이터 파싱 실패 (0건)" },
-        { status: 500 }
-      );
-    }
+    const k = new Date(Date.now() + 9 * 3_600_000);
+    const hm = k.getUTCHours() * 100 + k.getUTCMinutes();
+    const weekend = [0, 6].includes(k.getUTCDay());
+    const dataDateLabel = weekend || hm < 900 ? "직전 거래일" : hm < 1540 ? `오늘 ${k.toISOString().slice(11, 16)} 가집계` : "오늘 장 마감";
 
-    const payload = {
-      buy:  { foreign: frgnBuy,  institution: instBuy,  individual: indivBuy  },
-      sell: { foreign: frgnSell, institution: instSell, individual: indivSell },
+    const body = {
+      market,
+      buy: {
+        foreign: toItems(FB.map(p => ({ p, amt: p.f, qty: p.fq })).filter(x => x.amt > 0)),
+        institution: toItems(OB.map(p => ({ p, amt: p.o, qty: p.oq })).filter(x => x.amt > 0)),
+        individual: toItems(indiv.filter(x => x.amt > 0).sort((a, b) => b.amt - a.amt)),
+      },
+      sell: {
+        foreign: toItems(FS.map(p => ({ p, amt: p.f, qty: p.fq })).filter(x => x.amt < 0)),
+        institution: toItems(OS.map(p => ({ p, amt: p.o, qty: p.oq })).filter(x => x.amt < 0)),
+        individual: toItems(indiv.filter(x => x.amt < 0).sort((a, b) => a.amt - b.amt)),
+      },
       dataDateLabel,
+      note: "개인은 외국인·기관 상위 종목 기준 추정치",
+      source: "KIS",
     };
-    cache = { data: payload, ts: Date.now() };
-
-    return NextResponse.json(payload, {
-      headers: { "Cache-Control": "no-store" },
-    });
+    cache[market] = { at: Date.now(), body };
+    return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    console.error("🚨 [investor-ranking]:", String(err));
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: String(err).slice(0, 200) }, { status: 500 });
   }
 }

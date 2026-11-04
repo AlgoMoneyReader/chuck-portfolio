@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { FiBriefcase, FiX } from "react-icons/fi";
 import { useAuth } from "./AuthProvider";
@@ -15,6 +16,16 @@ export default function AddToPortfolio({ code, name, market, price }: { code: st
   const [avg, setAvg] = useState("");
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 열려 있는 동안 뒤 화면 스크롤 잠금, ESC 로 닫기
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
+  }, [open]);
 
   const start = () => {
     if (!user || !profile) { router.push(`/me?next=/stock/${code}`); return; }
@@ -52,9 +63,9 @@ export default function AddToPortfolio({ code, name, market, price }: { code: st
         className="w-10 h-10 rounded-full flex items-center justify-center bg-navy-card text-gray-400 hover:text-gold">
         <FiBriefcase size={17} />
       </button>
-      {open && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center" onClick={() => setOpen(false)}>
-          <div className="w-full sm:max-w-sm bg-navy-card border border-navy-border rounded-t-2xl sm:rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center justify-center" onClick={() => setOpen(false)}>
+          <div className="w-full sm:max-w-sm bg-navy-card border border-navy-border rounded-t-2xl sm:rounded-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <p className="text-base font-bold text-white">{name} 포트폴리오에 담기</p>
               <button onClick={() => setOpen(false)} className="text-gray-500"><FiX size={20} /></button>
@@ -72,7 +83,8 @@ export default function AddToPortfolio({ code, name, market, price }: { code: st
               {saving ? "저장 중…" : "담기"}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

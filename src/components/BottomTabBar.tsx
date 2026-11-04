@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FiTrendingUp, FiFileText, FiCalendar, FiMessageCircle, FiUser } from "react-icons/fi";
+import { FiTrendingUp, FiFileText, FiCalendar, FiMessageCircle, FiUser, FiBarChart2 } from "react-icons/fi";
 
 const TABS = [
   { href: "/",          label: "증시",     Icon: FiTrendingUp,    match: (p: string) => p === "/" || p.startsWith("/stock") || p.startsWith("/analyze") },
+  { href: "/flow",      label: "매매동향", Icon: FiBarChart2,     match: (p: string) => p.startsWith("/flow") },
   { href: "/news",      label: "뉴스",     Icon: FiFileText,      match: (p: string) => p.startsWith("/news") },
   { href: "/calendar",  label: "캘린더",   Icon: FiCalendar,      match: (p: string) => p.startsWith("/calendar") },
   { href: "/community", label: "커뮤니티", Icon: FiMessageCircle, match: (p: string) => p.startsWith("/community") },
@@ -19,7 +20,7 @@ export default function BottomTabBar() {
       className="fixed bottom-0 inset-x-0 z-30 bg-navy-sub/95 backdrop-blur-md border-t border-navy-border"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className="max-w-3xl mx-auto grid grid-cols-5">
+      <div className="max-w-3xl mx-auto grid grid-cols-6">
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match(pathname);
           return (

@@ -1,7 +1,5 @@
 import LiveMarketPulse from "@/components/LiveMarketPulse";
 import AfterHoursWidget from "@/components/AfterHoursWidget";
-import MarketSummary from "@/components/MarketSummary";
-import StockSearchPanel from "@/components/StockSearchPanel";
 import DualBuyWidget from "@/components/DualBuyWidget";
 import MarketMap from "@/components/MarketMap";
 
@@ -12,8 +10,6 @@ export default function Home() {
       <AfterHoursWidget />
       <MarketMap />
       <DualBuyWidget />
-      <StockSearchPanel />
-      <MarketSummary />
     </main>
   );
 }

@@ -89,6 +89,7 @@ export default function CalendarPage() {
   const [day, setDay] = useState(kstToday());
   const [ym, setYm] = useState(kstToday().slice(0, 7));
   const [view, setView] = useState<"day" | "month">("month");
+  const [gridOpen, setGridOpen] = useState(true); // 월별 달력 펼침/접힘
   const [minStars, setMinStars] = useState(0);
   const [country, setCountry] = useState("ALL");
   const [mode, setMode] = useState<"econ" | "events">("econ");
@@ -126,6 +127,7 @@ export default function CalendarPage() {
   useEffect(() => { setExpanded(false); }, [day, mode, mkt]);
 
   const pickDay = (d: string) => { setDay(d); setYm(d.slice(0, 7)); };
+  const byDay = view === "day" || !gridOpen;
 
   const econFiltered = useMemo(() => events.filter(e =>
     (minStars === 0 || e.stars === minStars) && (country === "ALL" || e.country === country)), [events, minStars, country]);
@@ -194,22 +196,29 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 날짜/월 이동 */}
+      {/* 날짜/월 이동 (달력을 접으면 하루씩 이동) */}
       <div className="flex items-center gap-2">
-        <button onClick={() => (view === "day" ? pickDay(shiftDay(day, -1)) : setYm(shiftMonth(ym, -1)))}
-          aria-label={view === "day" ? "이전 날" : "이전 달"}
+        <button onClick={() => (byDay ? pickDay(shiftDay(day, -1)) : setYm(shiftMonth(ym, -1)))}
+          aria-label={byDay ? "이전 날" : "이전 달"}
           className="w-9 h-9 shrink-0 rounded-lg border border-navy-border text-gray-300">‹</button>
         <p className="flex-1 min-w-0 text-center text-sm sm:text-base font-bold text-white truncate">
-          {view === "day" ? dayLabel(day) : `${ym.slice(0, 4)}년 ${+ym.slice(5, 7)}월`}
+          {byDay ? dayLabel(day) : `${ym.slice(0, 4)}년 ${+ym.slice(5, 7)}월`}
         </p>
-        <button onClick={() => (view === "day" ? pickDay(shiftDay(day, 1)) : setYm(shiftMonth(ym, 1)))}
-          aria-label={view === "day" ? "다음 날" : "다음 달"}
+        <button onClick={() => (byDay ? pickDay(shiftDay(day, 1)) : setYm(shiftMonth(ym, 1)))}
+          aria-label={byDay ? "다음 날" : "다음 달"}
           className="w-9 h-9 shrink-0 rounded-lg border border-navy-border text-gray-300">›</button>
         <button onClick={() => pickDay(today)}
           className="px-3 h-9 shrink-0 rounded-lg border border-navy-border text-xs text-gray-300">오늘</button>
       </div>
 
-      {view === "month" && (
+      {view === "month" && !gridOpen && (
+        <button onClick={() => setGridOpen(true)}
+          className="w-full card !py-2.5 flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-300 hover:text-white">
+          📅 {+ym.slice(5, 7)}월 달력 펼치기 <span className="text-gray-500">▾</span>
+        </button>
+      )}
+
+      {view === "month" && gridOpen && (
         <div className="card !p-2 sm:!p-3">
           <div className="grid grid-cols-7 text-center text-[11px] font-semibold mb-1">
             {WEEKDAY.map((w, i) => (
@@ -221,7 +230,7 @@ export default function CalendarPage() {
               if (!d) return <div key={`b${i}`} />;
               const wd = i % 7, sel = d === day, isToday = d === today;
               return (
-                <button key={d} onClick={() => setDay(d)} aria-pressed={sel} aria-label={dayLabel(d)}
+                <button key={d} onClick={() => { setDay(d); setGridOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-pressed={sel} aria-label={dayLabel(d)}
                   className={`min-h-[3.4rem] sm:min-h-[5.5rem] rounded-lg p-1 sm:p-1.5 text-left flex flex-col gap-0.5 overflow-hidden border ${
                     sel ? "bg-navy-sub border-cyan-brand/60" : "border-transparent hover:bg-navy-sub/60"}`}>
                   <span className={`text-[11px] sm:text-xs font-semibold num leading-none ${
@@ -241,10 +250,11 @@ export default function CalendarPage() {
               </>
             ) : KIND_ORDER.map(k => <Legend key={k} dot={KIND_DOT[k]} label={k === "실적" ? "미국 실적" : k} />)}
           </div>
+          <button onClick={() => setGridOpen(false)} className="w-full mt-2 pt-2 border-t border-navy-border text-[11px] text-gray-500 hover:text-white">달력 접기 ▴</button>
         </div>
       )}
 
-      {view === "month" && <p className="text-sm font-bold text-white pt-1">{dayLabel(day)}</p>}
+      {view === "month" && gridOpen && <p className="text-sm font-bold text-white pt-1">{dayLabel(day)}</p>}
 
       {mode === "events" ? (
         <>
