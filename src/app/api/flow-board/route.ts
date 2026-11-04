@@ -4,7 +4,7 @@ import { kisGet, num, kstYmd } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 /**
  * 매매동향 보드 — 한 번에:
@@ -31,6 +31,26 @@ const SECTORS: [string, string][] = [
   ["0016", "유통"], ["0018", "건설"], ["0019", "운송·창고"], ["0020", "통신"], ["0017", "전기·가스"],
   ["0005", "음식료·담배"], ["0010", "비금속"], ["0014", "의료·정밀기기"], ["0006", "섬유·의류"], ["0007", "종이·목재"],
 ];
+
+// 코스닥 업종 목록: KIS 국내업종 구분별 전체시세(FHPUP02140000)로 코드·이름을 받아온다(12시간 보관)
+let kqSectorCache: { at: number; list: [string, string][] } | null = null;
+const SKIP_KQ = /코스닥$|^코스닥|대형|중형|소형|우량|벤처|기술|글로벌|지수|150|^KRX/;
+async function kosdaqSectors(): Promise<[string, string][]> {
+  if (kqSectorCache && Date.now() - kqSectorCache.at < 12 * 3_600_000) return kqSectorCache.list;
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-index-category-price", "FHPUP02140000", {
+      FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "1001", FID_COND_SCR_DIV_CODE: "20214",
+      FID_MRKT_CLS_CODE: "Q", FID_BLNG_CLS_CODE: "0",
+    });
+    const rows = (Array.isArray(j.output2) ? j.output2 : Array.isArray(j.output) ? j.output : []) as Row[];
+    const list = rows
+      .map(r => [String(r.bstp_cls_code ?? "").trim(), String(r.hts_kor_isnm ?? "").trim()] as [string, string])
+      .filter(([c, n]) => /^1\d{3}$/.test(c) && c !== "1001" && n && !SKIP_KQ.test(n))
+      .slice(0, 24);
+    if (list.length) kqSectorCache = { at: Date.now(), list };
+    return list;
+  } catch { return []; }
+}
 
 async function marketRows(iscd: string, isc1: "KSP" | "KSQ"): Promise<Row[]> {
   const d8 = kstYmd();
@@ -121,6 +141,17 @@ export async function GET() {
   const sectors = sectorRows.filter((x): x is NonNullable<typeof x> => !!x);
   if (!sectors.length) errors.push("업종별: 데이터 없음");
 
+  // 코스닥 업종별
+  const kqList = await kosdaqSectors();
+  const kqRows = await pool(kqList, 5, async ([code, name]) => {
+    try {
+      const r = (await marketRows(code, "KSQ")).filter(nonZero)[0];
+      return r ? { code, name, date: r.stck_bsop_date, ...core(r) } : null;
+    } catch { return null; }
+  });
+  const sectorsKQ = kqRows.filter((x): x is NonNullable<typeof x> => !!x);
+  if (!sectorsKQ.length) errors.push(`코스닥 업종: ${kqList.length ? "수급 없음" : "업종 목록 없음"}`);
+
   // 장중 시간별 기록
   let intraday: Record<string, { hm: string; foreign: number; institution: number; individual: number }[]> = {};
   const client = sb();
@@ -144,7 +175,7 @@ export async function GET() {
     } else if (error && !/does not exist|Could not find|relation/.test(error.message)) errors.push(`시간별: ${error.message.slice(0, 60)}`);
   }
 
-  const body = { investors, daily, sectors, intraday, futures, asOf: kstNow().toISOString().slice(11, 16), errors };
+  const body = { investors, daily, sectors, sectorsKQ, intraday, futures, asOf: kstNow().toISOString().slice(11, 16), errors };
   if (investors.KOSPI || sectors.length) { cache.at = Date.now(); cache.body = body; }
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }

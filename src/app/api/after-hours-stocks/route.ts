@@ -40,12 +40,31 @@ function marketState(): string {
   return hm >= 900 && hm < 1530 ? "REGULAR" : "CLOSED";
 }
 
+// 코스피 시가총액 상위 10 (1시간마다 다시 확인, 실패하면 기본 목록)
+let topCache: { list: { code: string; name: string }[]; at: number } | null = null;
+async function topByCap(): Promise<{ code: string; name: string }[]> {
+  if (topCache && Date.now() - topCache.at < 3_600_000) return topCache.list;
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/ranking/market-cap", "FHPST01740000", {
+      fid_cond_mrkt_div_code: "J", fid_cond_scr_div_code: "20174", fid_div_cls_code: "1", fid_input_iscd: "0001",
+      fid_trgt_cls_code: "0", fid_trgt_exls_cls_code: "0", fid_input_price_1: "", fid_input_price_2: "", fid_vol_cnt: "",
+    });
+    const list = ((j.output ?? []) as Record<string, string>[])
+      .map(r => ({ code: (r.mksc_shrn_iscd ?? "").trim(), name: (r.hts_kor_isnm ?? "").trim() }))
+      .filter(x => /^\d{6}$/.test(x.code) && !/우$|우B$|\(전환\)/.test(x.name))   // 우선주 제외
+      .slice(0, 10);
+    if (list.length >= 5) { topCache = { list, at: Date.now() }; return list; }
+  } catch { /* 기본 목록 */ }
+  return STOCKS;
+}
+
 export async function GET() {
   if (cache && Date.now() - cache.at < TTL) return NextResponse.json({ stocks: cache.data, cached: true });
 
-  const quotes = await Promise.all(STOCKS.map(s => kisPrice(s.code)));
+  const STOCKS_NOW = await topByCap();
+  const quotes = await Promise.all(STOCKS_NOW.map(s => kisPrice(s.code)));
   const state = marketState();
-  const data: StockResult[] = STOCKS.map((s, i) => ({
+  const data: StockResult[] = STOCKS_NOW.map((s, i) => ({
     code: `${s.code}.KS`, name: s.name,
     regularPrice: quotes[i]?.price ?? 0,
     extPrice: null, extChangePct: null,

@@ -166,19 +166,43 @@ function SmallRow({
 
 interface CryptoData { price: number; changePct: number; }
 
-export default function LiveMarketPulse() {
+interface FutData { currentPrice: number; previousClose: number; change: number; changePct: number; points?: { price: number }[]; label?: string }
+
+// 코스피200 선물(주간·야간) 카드: 누르면 지수 차트 창의 주간/야간선물 탭으로
+function useKospiFutures(enabled: boolean) {
+  const [day, setDay] = useState<FutData | null>(null);
+  const [night, setNight] = useState<FutData | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const load = () => {
+      fetch("/api/night-futures?session=day", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setDay(j); }).catch(() => {});
+      fetch("/api/night-futures?session=night", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNight(j); }).catch(() => {});
+    };
+    load();
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 30_000);
+    return () => clearInterval(iv);
+  }, [enabled]);
+  const toIdx = (f: FutData | null): IndexData | null => f ? { price: f.currentPrice, change: f.change, changePct: f.changePct, marketState: "REGULAR" } : null;
+  const toLine = (f: FutData | null) => f?.points?.length ? [f.previousClose, ...f.points.map(p => p.price)] : undefined;
+  return { day: toIdx(day), night: toIdx(night), dayLine: toLine(day), nightLine: toLine(night) };
+}
+
+export default function LiveMarketPulse({ region }: { region?: "KR" | "US" } = {}) {
+  const showKR = region !== "US", showUS = region !== "KR";
   const [data, setData]           = useState<MarketData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
-  const [chart, setChart]         = useState<string | null>(null);
+  const [chart, setChartState]    = useState<{ label: string; tab?: "day" | "night" } | null>(null);
+  const setChart = useCallback((label: string) => setChartState({ label }), []);
+  const fut = useKospiFutures(showKR);
   const [btc, setBtc]             = useState<CryptoData | null>(null);
   const [lines, setLines]         = useState<Record<string, number[]>>({});
 
   // 상단 티커에서 지표를 누르면 차트 모달 (다른 탭에서 오면 ?chart= 로)
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("chart");
-    if (q) { setChart(q); window.history.replaceState(null, "", window.location.pathname); }
-    const h = (e: Event) => setChart((e as CustomEvent<string>).detail);
+    if (q) { setChartState({ label: q }); window.history.replaceState(null, "", window.location.pathname + window.location.search.replace(/[?&]chart=[^&]*/, "").replace(/^&/, "?")); }
+    const h = (e: Event) => setChartState({ label: (e as CustomEvent<string>).detail });
     window.addEventListener(OPEN_CHART_EVENT, h);
     return () => window.removeEventListener(OPEN_CHART_EVENT, h);
   }, []);
@@ -227,59 +251,62 @@ export default function LiveMarketPulse() {
       <section className="space-y-3">
         {/* 헤더 */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">실시간 시장 현황</h2>
+          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{region === "KR" ? "국내 주요 지수" : region === "US" ? "미국 주요 지수" : "실시간 시장 현황"}</h2>
           <span className="text-xs text-gray-600">
             {loading ? "갱신 중..." : lastUpdated ? `${lastUpdated} 기준` : ""}
           </span>
         </div>
 
-        {/* ① 국내 지수 */}
-        <div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">국내</p>
-          <div className="grid grid-cols-2 gap-2">
-            <IndexCard label="KOSPI" line={lines["KOSPI"]}  data={data?.kospi  ?? null} onSelect={setChart} />
-            <IndexCard label="KOSDAQ" line={lines["KOSDAQ"]} data={data?.kosdaq ?? null} onSelect={setChart} />
-          </div>
-        </div>
+        {showKR && (
+          <>
+            {/* 국내: 코스피·코스닥 + 코스피200 선물(주간·야간) + 환율 */}
+            <div className="grid grid-cols-2 gap-2">
+              <IndexCard label="KOSPI" line={lines["KOSPI"]}  data={data?.kospi  ?? null} onSelect={setChart} />
+              <IndexCard label="KOSDAQ" line={lines["KOSDAQ"]} data={data?.kosdaq ?? null} onSelect={setChart} />
+              <IndexCard label="주간선물" line={fut.dayLine} data={fut.day} onSelect={() => setChartState({ label: "KOSPI", tab: "day" })} sub="코스피200 · 08:45~15:45" />
+              <IndexCard label="야간선물" line={fut.nightLine} data={fut.night} onSelect={() => setChartState({ label: "KOSPI", tab: "night" })} sub="코스피200 · 18:00~05:00" />
+            </div>
+            <SmallRow label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱" format="number" unit="원" onSelect={setChart} />
+          </>
+        )}
 
-        {/* ② 미국 현물 지수 */}
-        <div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">미국 지수</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            <IndexCard label="S&P 500" line={lines["S&P 500"]}    data={data?.sp500   ?? null} onSelect={setChart} />
-            <IndexCard label="NASDAQ" line={lines["NASDAQ"]}     data={data?.nasdaq  ?? null} onSelect={setChart} />
-            <IndexCard label="다우존스" line={lines["다우존스"]}   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
-            <IndexCard label="러셀 2000" line={lines["러셀 2000"]}  data={data?.russell ?? null} onSelect={setChart} sub="Russell 2000" />
-            <IndexCard label="필라델피아 반도체" line={lines["필라델피아 반도체"]} data={data?.sox ?? null} onSelect={setChart} sub="SOX" />
-            <IndexCard label="VIX" line={lines["VIX"]} data={data?.vix ?? null} onSelect={setChart} sub="변동성 지수" />
-          </div>
-        </div>
-
-        {/* ③ 선물 */}
-        <div>
-          <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">선물</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <IndexCard label="S&P500 선물" line={lines["S&P500 선물"]} data={data?.esFut ?? null} onSelect={setChart} sub="ES Futures" />
-            <IndexCard label="나스닥 선물" line={lines["나스닥 선물"]} data={data?.nqFut ?? null} onSelect={setChart} sub="NQ Futures" />
-            <IndexCard label="다우 선물" line={lines["다우 선물"]}   data={data?.yjFut ?? null} onSelect={setChart} sub="YM Futures" />
-          </div>
-        </div>
-
-        {/* ④ 원자재·환율·암호화폐 (소형 행) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <SmallRow label="금"       data={data?.gold   ?? null} emoji="🥇" unit="/oz"  onSelect={setChart} />
-          <SmallRow label="WTI 원유" data={data?.oil    ?? null} emoji="🛢"  unit="/bbl" onSelect={setChart} />
-          <SmallRow label="USD/KRW"  data={data?.usdKrw ?? null} emoji="💱"
-            format="number" unit="원" onSelect={setChart} />
-          <SmallRow label="비트코인"
-            data={btc ? { price: btc.price, change: 0, changePct: btc.changePct, marketState: "REGULAR" } : null}
-            emoji="₿" onSelect={setChart} />
-        </div>
+        {showUS && (
+          <>
+            {/* 미국: 지수 6 + 3대 선물 + 금·원유·비트코인 */}
+            <div>
+              {!region && <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">미국 지수</p>}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                <IndexCard label="S&P 500" line={lines["S&P 500"]}    data={data?.sp500   ?? null} onSelect={setChart} />
+                <IndexCard label="NASDAQ" line={lines["NASDAQ"]}     data={data?.nasdaq  ?? null} onSelect={setChart} />
+                <IndexCard label="다우존스" line={lines["다우존스"]}   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
+                <IndexCard label="러셀 2000" line={lines["러셀 2000"]}  data={data?.russell ?? null} onSelect={setChart} sub="Russell 2000" />
+                <IndexCard label="필라델피아 반도체" line={lines["필라델피아 반도체"]} data={data?.sox ?? null} onSelect={setChart} sub="SOX" />
+                <IndexCard label="VIX" line={lines["VIX"]} data={data?.vix ?? null} onSelect={setChart} sub="변동성 지수" />
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">3대 지수 선물</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <IndexCard label="S&P500 선물" line={lines["S&P500 선물"]} data={data?.esFut ?? null} onSelect={setChart} sub="ES Futures" />
+                <IndexCard label="나스닥 선물" line={lines["나스닥 선물"]} data={data?.nqFut ?? null} onSelect={setChart} sub="NQ Futures" />
+                <IndexCard label="다우 선물" line={lines["다우 선물"]}   data={data?.yjFut ?? null} onSelect={setChart} sub="YM Futures" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <SmallRow label="금"       data={data?.gold   ?? null} emoji="🥇" unit="/oz"  onSelect={setChart} />
+              <SmallRow label="WTI 원유" data={data?.oil    ?? null} emoji="🛢"  unit="/bbl" onSelect={setChart} />
+              <SmallRow label="비트코인"
+                data={btc ? { price: btc.price, change: 0, changePct: btc.changePct, marketState: "REGULAR" } : null}
+                emoji="₿" onSelect={setChart} />
+              {!region && <SmallRow label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱" format="number" unit="원" onSelect={setChart} />}
+            </div>
+          </>
+        )}
       </section>
 
       {chart && (
         <Suspense fallback={null}>
-          <ChartModal label={chart} onClose={() => setChart(null)} />
+          <ChartModal label={chart.label} initialTab={chart.tab} onClose={() => setChartState(null)} />
         </Suspense>
       )}
     </>

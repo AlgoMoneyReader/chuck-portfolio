@@ -110,9 +110,12 @@ function Tile({ r, bg, title, sub, onClick, active }: { r: Rect; bg: string; tit
   );
 }
 
-export default function MarketMap() {
-  const [region, setRegion] = useState<Region>("KR");
-  const [index, setIndex] = useState("KOSPI");
+export default function MarketMap({ fixedRegion }: { fixedRegion?: Region } = {}) {
+  const [regionState, setRegion] = useState<Region>(fixedRegion ?? "KR");
+  const region = fixedRegion ?? regionState;
+  const [index, setIndex] = useState(INDEXES[fixedRegion ?? "KR"][0].key);
+  // 상위에서 국내/미국을 바꾸면 지수도 그 시장 첫 번째로
+  useEffect(() => { if (fixedRegion) { setIndex(INDEXES[fixedRegion][0].key); setSector(null); } }, [fixedRegion]);
   const [sector, setSector] = useState<string | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
@@ -192,12 +195,12 @@ export default function MarketMap() {
     <section className="card space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-bold text-white">마켓맵</h2>
-        <div className="flex rounded-lg bg-navy-sub p-0.5 text-xs">
+        {!fixedRegion && <div className="flex rounded-lg bg-navy-sub p-0.5 text-xs">
           {(["KR", "US"] as Region[]).map(r => (
             <button key={r} onClick={() => { setRegion(r); setIndex(INDEXES[r][0].key); }}
               className={`px-3 py-1 rounded-md font-semibold ${region === r ? "bg-navy-card text-white" : "text-gray-500"}`}>{r === "KR" ? "국내" : "미국"}</button>
           ))}
-        </div>
+        </div>}
       </div>
       <div className="flex gap-2 overflow-x-auto scrollbar-none">
         {INDEXES[region].map(i => (

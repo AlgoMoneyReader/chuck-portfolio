@@ -1223,7 +1223,7 @@ function USSectorHeatmap() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RegionTabType = "KR" | "US";
-type MainTabType = "top10" | "amount" | "volume" | "sector" | "high52" | "flow";
+type MainTabType = "top10" | "gainers" | "losers" | "amount" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 type USIndexType = "SP500" | "NASDAQ" | "DOW";
 type USContentTab = "gainers" | "losers" | "actives" | "etf" | "sector";
@@ -1251,10 +1251,45 @@ const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
   { id: "sector",  label: "섹터 흐름"   },
 ];
 
-export default function MarketSummary() {
-  const [region, setRegion]   = useState<RegionTabType>("KR");
-  const [mainTab, setMainTab] = useState<MainTabType>("top10");
-  const [market, setMarket]   = useState<MarketType>("KOSPI");
+// 매매동향 탭에서 쓰는 단일 시장 보기 (상승·하락 분리)
+const KR_MARKET_TABS: { id: MainTabType; label: string }[] = [
+  { id: "gainers", label: "상승 TOP30" },
+  { id: "losers",  label: "하락 TOP30" },
+  { id: "amount",  label: "거래대금 TOP30" },
+  { id: "volume",  label: "거래량 급등" },
+  { id: "flow",    label: "투자자 동향" },
+  { id: "high52",  label: "52주 신고가" },
+];
+
+// 상승·하락 한쪽만 (장 상태 표시 포함)
+function MoversPanel({ market, mode, onSelect }: { market: string; mode: "gainers" | "losers"; onSelect: (d: DrawerState) => void }) {
+  const [ts, setTs] = useState("");
+  useEffect(() => {
+    fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); })
+      .catch(() => null);
+  }, [market]);
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3 text-xs"><StatusBadge /></div>
+      <TopMoversHalf market={market} mode={mode} ts={ts} onSelect={onSelect} />
+    </div>
+  );
+}
+
+interface MarketSummaryProps {
+  region?: RegionTabType;               // 주면 국내/미국 토글을 숨기고 고정
+  krMarket?: MarketType;                // 국내 단일 시장(코스피/코스닥) 보기
+  krSectorOnly?: boolean;               // 국내 섹터 흐름만
+}
+
+export default function MarketSummary({ region: fixedRegion, krMarket, krSectorOnly }: MarketSummaryProps = {}) {
+  const [regionState, setRegion] = useState<RegionTabType>(fixedRegion ?? "KR");
+  const region = fixedRegion ?? regionState;
+  const [mainTab, setMainTab] = useState<MainTabType>(krMarket ? "gainers" : krSectorOnly ? "sector" : "top10");
+  const [marketState, setMarket] = useState<MarketType>(krMarket ?? "KOSPI");
+  const market = krMarket ?? marketState;
   const [usIndex, setUsIndex]     = useState<USIndexType>("SP500");
   const [usContent, setUsContent] = useState<USContentTab>("gainers");
   const [drawer, setDrawer]   = useState<DrawerState | null>(null);
@@ -1269,33 +1304,35 @@ export default function MarketSummary() {
     <section className="card">
       {/* ── 국내 / 미국 Region 토글 ── */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">시장 동향</h2>
-        <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5">
+        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{krSectorOnly ? "섹터 흐름" : krMarket ? `${krMarket === "KOSPI" ? "코스피" : "코스닥"} 시장 동향` : "시장 동향"}</h2>
+        {!fixedRegion && <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5">
           {([["KR","🇰🇷 국내"],["US","🇺🇸 미국"]] as [RegionTabType, string][]).map(([r, label]) => (
             <button key={r} onClick={() => setRegion(r)}
               className={`px-3 py-1 text-xs font-semibold rounded-full transition-all whitespace-nowrap ${
                 region === r ? "bg-navy-card text-white shadow" : "text-gray-500 hover:text-gray-300"
               }`}>{label}</button>
           ))}
-        </div>
+        </div>}
       </div>
 
       {/* ── KR 헤더 + 컨텐츠 ── */}
       {region === "KR" && (<>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="flex gap-1">
+          {(!krMarket) && <div className="flex gap-1">
             {(["KOSPI","KOSDAQ"] as MarketType[]).map(m => (
               <MarketTab key={m} label={m} active={market === m} onClick={() => setMarket(m)} />
             ))}
-          </div>
-          <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5 flex-wrap">
-            {KR_TABS.map(t => (
+          </div>}
+          {!krSectorOnly && <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5 flex-wrap">
+            {(krMarket ? KR_MARKET_TABS : KR_TABS).map(t => (
               <MainTabBtn key={t.id} label={t.label} active={mainTab === t.id} onClick={() => setMainTab(t.id)} />
             ))}
-          </div>
+          </div>}
         </div>
 
         {mainTab === "top10"  && <GainersLosersPanel market={market} onSelect={openStock} />}
+        {mainTab === "gainers" && <MoversPanel market={market} mode="gainers" onSelect={openStock} />}
+        {mainTab === "losers"  && <MoversPanel market={market} mode="losers" onSelect={openStock} />}
         {mainTab === "amount" && <TopByAmountList  market={market} onSelect={openStock} />}
         {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={openStock} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}

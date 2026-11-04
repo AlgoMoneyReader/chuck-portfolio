@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOfftopic } from "@/lib/newsFilter";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
         source,
         publishedAt: isNaN(date) ? null : new Date(date).toISOString(),
       };
-    }).filter(i => i.title && i.url);
+    }).filter(i => i.title && i.url && !isOfftopic(i.title));
     return NextResponse.json({ items });
   } catch (e) {
     return NextResponse.json({ items: [], error: String(e) });

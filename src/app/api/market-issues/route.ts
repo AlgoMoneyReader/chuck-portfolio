@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOfftopic } from "@/lib/newsFilter";
 import { gemini, CHEAP } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ const EXCLUDE = [
 const MARKET_RE = /주가|증시|코스피|코스닥|지수|상장|공모|IPO|주식|ETF|채권|국채|금리|연준|FOMC|환율|달러|원화|엔화|유가|원유|실적|영업이익|매출|순이익|목표가|외국인|기관|순매수|순매도|공매도|시가총액|배당|자사주|증자|수주|반도체|2차전지|배터리|엔비디아|나스닥|S&P|다우|밸류업|물가|CPI|고용지표|GDP|수출|관세|인수|합병|비트코인|가상자산/;
 
 function isFinance(title: string): boolean {
-  if (EXCLUDE.some(w => title.includes(w))) return false;
+  if (EXCLUDE.some(w => title.includes(w)) || isOfftopic(title)) return false;
   return MARKET_RE.test(title);
 }
 

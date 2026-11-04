@@ -13,6 +13,7 @@ interface Board {
   investors: Record<Mk, (Core & { date: string; live: boolean; detail: { label: string; value: number }[] }) | null>;
   daily: Record<Mk, (Core & { date: string })[]>;
   sectors: (Core & { code: string; name: string; date: string })[];
+  sectorsKQ?: (Core & { code: string; name: string; date: string })[];
   intraday: Partial<Record<Mk, (Core & { hm: string })[]>>;
   futures?: (Core & { foreignQty: number; institutionQty: number; individualQty: number }) | null;
   asOf: string;
@@ -69,14 +70,14 @@ const won = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조
 const pctTxt = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
 
 // 업종을 누르면: 히트맵과 같은 업종 분류의 시총 상위 종목 최근 분기 실적(DART, 잠정 포함)
-function SectorEarnings({ sector }: { sector: string }) {
+function SectorEarnings({ sector, market }: { sector: string; market: Mk }) {
   const [d, setD] = useState<SE | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/sector-earnings?market=KOSPI&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
+    fetch(`/api/sector-earnings?market=${market}&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
       .then(r => r.json()).then(setD).catch(() => setD(null)).finally(() => setLoading(false));
-  }, [sector]);
+  }, [sector, market]);
   if (loading) return <div className="py-2 text-xs text-gray-500 flex items-center gap-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 실적 불러오는 중… (처음엔 10~20초)</div>;
   if (!d || !d.stocks?.length) return <div className="py-2 text-xs text-gray-500">{d?.note ?? "실적을 불러오지 못했습니다"}</div>;
   return (
@@ -115,11 +116,11 @@ interface SF {
 }
 
 // 업종 동향: 종목별 현재가·등락률·외국인/기관 오늘 순매수
-function SectorFlow({ sector }: { sector: string }) {
+function SectorFlow({ sector, market }: { sector: string; market: Mk }) {
   const [d, setD] = useState<SF | null>(null);
   const [loading, setLoading] = useState(true);
-  const load = useCallback(() => fetch(`/api/sector-flow?market=KOSPI&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
-    .then(r => r.json()).then(j => setD(j)).catch(() => {}).finally(() => setLoading(false)), [sector]);
+  const load = useCallback(() => fetch(`/api/sector-flow?market=${market}&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
+    .then(r => r.json()).then(j => setD(j)).catch(() => {}).finally(() => setLoading(false)), [sector, market]);
   useEffect(() => { setLoading(true); load(); }, [load]);
   useMarketPoll(load, 60_000);
   if (loading) return <p className="text-xs text-gray-500 flex items-center gap-2 py-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 종목 동향 불러오는 중…</p>;
@@ -158,7 +159,7 @@ function SectorFlow({ sector }: { sector: string }) {
 }
 
 // 업종 행을 펼치면: 우상단 토글로 동향(기본) / 실적
-function SectorDetail({ sector }: { sector: string }) {
+function SectorDetail({ sector, market }: { sector: string; market: Mk }) {
   const [view, setView] = useState<"flow" | "earn">("flow");
   return (
     <div className="rounded-xl bg-navy-sub/50 border border-navy-border/60 p-3 space-y-2">
@@ -171,13 +172,14 @@ function SectorDetail({ sector }: { sector: string }) {
           ))}
         </div>
       </div>
-      {view === "flow" ? <SectorFlow sector={sector} /> : <SectorEarnings sector={sector} />}
+      {view === "flow" ? <SectorFlow sector={sector} market={market} /> : <SectorEarnings sector={sector} market={market} />}
     </div>
   );
 }
 
-export default function FlowBoard() {
-  const [mk, setMk] = useState<Mk>("KOSPI");
+// 증시 > 국내 > 수급: market 은 코스피 / 코스닥 / 코스피200(선물)
+export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }) {
+  const mk: Mk = market === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
   const [b, setB] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
   const [sectorSort, setSectorSort] = useState<"smart" | "foreign" | "institution" | "individual">("smart");
@@ -195,19 +197,35 @@ export default function FlowBoard() {
   const max = inv ? Math.max(1, ...KEYS.map(k => Math.abs(inv[k]))) : 1;
   const intra = b.intraday[mk] ?? [];
   const daily = b.daily[mk] ?? [];
-  const sectors = [...b.sectors].sort((x, y) =>
+  const sectors = [...(mk === "KOSDAQ" ? b.sectorsKQ ?? [] : b.sectors)].sort((x, y) =>
     sectorSort === "smart" ? (y.foreign + y.institution) - (x.foreign + x.institution) : y[sectorSort] - x[sectorSort]);
   const sMax = Math.max(1, ...sectors.flatMap(s => KEYS.map(k => Math.abs(s[k]))));
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        {(["KOSPI", "KOSDAQ"] as const).map(m => (
-          <button key={m} onClick={() => setMk(m)}
-            className={`px-4 py-1.5 rounded-full text-sm font-semibold ${mk === m ? "bg-white text-navy" : "bg-navy-card text-gray-400 border border-navy-border"}`}>{m === "KOSPI" ? "코스피" : "코스닥"}</button>
-        ))}
-        <span className="ml-auto text-[11px] text-gray-500 num">{b.asOf} 갱신 · 장중 1분마다</span>
-      </div>
+      <p className="text-right text-[11px] text-gray-500 num">{b.asOf} 갱신 · 장중 1분마다</p>
+
+      {market === "K200" ? (
+        b.futures ? (
+          <Card title="코스피200 선물 투자자별 순매수" note="오늘 · 억원 (계약)">
+            <div className="grid grid-cols-3 gap-3">
+              {KEYS.map(k => {
+                const v = b.futures![k], q = b.futures![`${k}Qty` as "foreignQty"];
+                return (
+                  <div key={k} className="rounded-xl bg-navy-sub/60 p-3">
+                    <p className="text-[11px] text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
+                    <p className={`text-base font-bold num mt-1 ${tone(v)}`}>{fmt(v)}</p>
+                    <p className={`text-[11px] num ${tone(q)}`}>{q > 0 ? "+" : ""}{q.toLocaleString("ko-KR")}계약</p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-gray-600">선물은 외국인 포지션이 현물 방향을 미리 보여주는 경우가 많아 함께 보면 좋습니다 · 출처 한국투자증권</p>
+          </Card>
+        ) : (
+          <div className="card text-sm text-gray-500 text-center py-10">코스피200 선물 수급을 불러오지 못했습니다{b.errors.length ? <span className="block text-[10px] text-gray-600 mt-1">{b.errors.filter(e => e.startsWith("선물")).join(" ")}</span> : null}</div>
+        )
+      ) : (<>
 
       {/* ① 거래주체별 */}
       <Card title="거래주체별 순매수" note={inv ? `${inv.live ? "오늘 장중 잠정" : `${md(inv.date)} 확정`} · 억원` : undefined}>
@@ -241,24 +259,6 @@ export default function FlowBoard() {
         )}
       </Card>
 
-      {/* 코스피200 선물 */}
-      {b.futures && (
-        <Card title="코스피200 선물 투자자별" note="오늘 장중 · 억원 (계약)">
-          <div className="grid grid-cols-3 gap-3">
-            {KEYS.map(k => {
-              const v = b.futures![k], q = b.futures![`${k}Qty` as "foreignQty"];
-              return (
-                <div key={k} className="rounded-xl bg-navy-sub/60 p-3">
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
-                  <p className={`text-base font-bold num mt-1 ${tone(v)}`}>{fmt(v)}</p>
-                  <p className={`text-[11px] num ${tone(q)}`}>{q > 0 ? "+" : ""}{q.toLocaleString("ko-KR")}계약</p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
       {/* ② 시간별 */}
       <Card title="시간별 누적 순매수 (오늘)" note={intra.length ? `${intra[0].hm} ~ ${intra[intra.length - 1].hm}` : undefined}>
         {intra.length >= 2 ? (
@@ -286,7 +286,7 @@ export default function FlowBoard() {
       </Card>
 
       {/* ③ 섹터별 */}
-      <Card title="업종별 순매수 (코스피) · 누르면 종목별 동향" note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
+      <Card title={`업종별 순매수 (${mk === "KOSDAQ" ? "코스닥" : "코스피"}) · 누르면 종목별 동향`} note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
         {!sectors.length ? <p className="text-xs text-gray-500">업종별 데이터를 불러오지 못했습니다</p> : (
           <>
             <div className="flex gap-1 overflow-x-auto scrollbar-none">
@@ -322,7 +322,7 @@ export default function FlowBoard() {
                       ))}
                     </tr>
                     {openSector === s.name && (
-                      <tr><td colSpan={4} className="pb-3"><SectorDetail sector={s.name} /></td></tr>
+                      <tr><td colSpan={4} className="pb-3"><SectorDetail sector={s.name} market={mk} /></td></tr>
                     )}
                     </Fragment>
                   ))}
@@ -354,9 +354,10 @@ export default function FlowBoard() {
           </>
         ) : <p className="text-xs text-gray-500">일별 데이터가 부족합니다</p>}
       </Card>
+      </>)}
 
       <p className="text-[10px] text-gray-600 text-center">
-        출처: 한국투자증권 Open API(시장·업종별 투자자 매매동향) · 장중 값은 잠정치 · 종목별 순위는 아래 시장 동향 &gt; 투자자 동향
+        출처: 한국투자증권 Open API(시장·업종별 투자자 매매동향) · 장중 값은 잠정치 · 종목별 순위는 매매동향 탭 &gt; 투자자 동향
         {b.errors.length > 0 && <span className="block mt-1 break-all">{b.errors.join(" | ")}</span>}
       </p>
     </div>
