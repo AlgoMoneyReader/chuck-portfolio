@@ -272,7 +272,7 @@ export async function GET(request: Request) {
   const ts = new Date().toISOString();
   const ck = `${type}:${index}`;
   const hit = resCache.get(ck);
-  if (hit && Date.now() - hit.at < 30_000) return NextResponse.json(hit.body);
+  if (hit && Date.now() - hit.at < 10_000) return NextResponse.json(hit.body);
   const send = (body: { stocks: Quote[] } & Record<string, unknown>) => {
     if (body.stocks.length) resCache.set(ck, { at: Date.now(), body });
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
@@ -321,7 +321,9 @@ export async function GET(request: Request) {
   // ③ DOW 30 — v7/finance/quote로 교체 (pre/post 포함)
   if (index === "DOW") {
     const tickers = Object.keys(DOW30);
-    const quotes  = await fetchQuoteBatch(tickers, DOW30);
+    // v7/quote 는 인증(crumb)이 필요해 비어 오므로 spark 로 시세를 받고 이름은 DOW30 표에서
+    let quotes = (await fetchSparkQuotes(tickers)).map(q => ({ ...q, name: DOW30[q.code] ?? q.name }));
+    if (!quotes.length) quotes = await fetchQuoteBatch(tickers, DOW30);
     const sorted  = quotes
       .sort((a, b) => {
         if (type === "gainers") return b.changePct - a.changePct;

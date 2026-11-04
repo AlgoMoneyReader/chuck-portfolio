@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { kisGet, num, kstYmd } from "@/lib/kis";
+import { unzipFirst } from "@/lib/zip";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -34,9 +34,31 @@ const SECTORS: [string, string][] = [
 
 // 코스닥 업종 목록: KIS 국내업종 구분별 전체시세(FHPUP02140000)로 코드·이름을 받아온다(12시간 보관)
 let kqSectorCache: { at: number; list: [string, string][] } | null = null;
-const SKIP_KQ = /코스닥$|^코스닥|대형|중형|소형|우량|벤처|기술|글로벌|지수|150|^KRX/;
+const SKIP_KQ = /^코스닥$|코스닥\s*(대형|중형|소형|우량|벤처|기술|글로벌|150)|^KRX|지수$|^\s*$/;
+// KIS 업종코드 마스터(idxcode.mst): 줄마다 [구분 1자리][업종코드 4자리][업종명]. 코스닥 업종은 1xxx
+async function kosdaqFromMaster(): Promise<[string, string][]> {
+  const res = await fetch("https://new.real.download.dws.co.kr/common/master/idxcode.mst.zip", { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`idx master ${res.status}`);
+  const text = new TextDecoder("euc-kr").decode(unzipFirst(Buffer.from(await res.arrayBuffer())));
+  const out: [string, string][] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^(\d)(\d{4})\s*(.+?)\s*$/.exec(line);
+    if (!m) continue;
+    // 코드가 1xxx 이거나, 구분이 1(코스닥)이면서 코드가 0xxx 로 적힌 경우 모두 1xxx 로 맞춘다
+    const code = m[2].startsWith("1") ? m[2] : m[1] === "1" ? `1${m[2].slice(1)}` : "";
+    const name = m[3].replace(/\s{2,}.*/, "").trim();
+    if (/^1\d{3}$/.test(code) && code !== "1001" && name && !SKIP_KQ.test(name)) out.push([code, name.replace(/^코스닥\s*/, "")]);
+  }
+  const seen = new Set<string>();
+  return out.filter(([c]) => (seen.has(c) ? false : (seen.add(c), true))).slice(0, 30);
+}
+
 async function kosdaqSectors(): Promise<[string, string][]> {
   if (kqSectorCache && Date.now() - kqSectorCache.at < 12 * 3_600_000) return kqSectorCache.list;
+  try {
+    const list = await kosdaqFromMaster();
+    if (list.length) { kqSectorCache = { at: Date.now(), list }; return list; }
+  } catch { /* 업종 시세 API 로 */ }
   try {
     const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-index-category-price", "FHPUP02140000", {
       FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "1001", FID_COND_SCR_DIV_CODE: "20214",
@@ -75,15 +97,7 @@ async function pool<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Promise
 }
 
 // ── 장중 시간별: 1분 단위 스냅샷을 Supabase 에 남기고 읽는다 (supabase/flow.sql) ──
-function sb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL, key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  return url && key ? createClient(url, key, { auth: { persistSession: false } }) : null;
-}
 const kstNow = () => new Date(Date.now() + 9 * 3_600_000);
-function inSession() {
-  const k = kstNow(), m = k.getUTCHours() * 60 + k.getUTCMinutes();
-  return ![0, 6].includes(k.getUTCDay()) && m >= 9 * 60 && m <= 15 * 60 + 35;
-}
 
 // ── 코스피200 선물 투자자별 (KIS 시장별 투자자매매동향(시세) FHPTJ04030000) ──
 // 공식 문서에서 선물용 코드값을 확인하지 못해 후보를 차례로 시도하고 처음 맞는 조합을 기억한다
@@ -152,28 +166,7 @@ export async function GET() {
   const sectorsKQ = kqRows.filter((x): x is NonNullable<typeof x> => !!x);
   if (!sectorsKQ.length) errors.push(`코스닥 업종: ${kqList.length ? "수급 없음" : "업종 목록 없음"}`);
 
-  // 장중 시간별 기록
-  let intraday: Record<string, { hm: string; foreign: number; institution: number; individual: number }[]> = {};
-  const client = sb();
-  if (client) {
-    const day = kstNow().toISOString().slice(0, 10);
-    if (inSession()) {
-      for (const mk of ["KOSPI", "KOSDAQ"] as const) {
-        const v = investors[mk] as { live?: boolean; foreign: number; institution: number; individual: number } | null;
-        if (v?.live) {
-          const { error } = await client.rpc("record_flow_tick", { p_market: mk, p_foreign: v.foreign, p_institution: v.institution, p_individual: v.individual });
-          if (error && !/does not exist|Could not find/.test(error.message)) errors.push(`기록: ${error.message.slice(0, 60)}`);
-        }
-      }
-    }
-    const { data, error } = await client.from("flow_ticks").select("market,hm,foreign_eok,institution_eok,individual_eok").eq("day", day).order("hm");
-    if (!error && data) {
-      intraday = { KOSPI: [], KOSDAQ: [] };
-      for (const t of data as { market: string; hm: string; foreign_eok: number; institution_eok: number; individual_eok: number }[]) {
-        (intraday[t.market] ??= []).push({ hm: t.hm, foreign: t.foreign_eok, institution: t.institution_eok, individual: t.individual_eok });
-      }
-    } else if (error && !/does not exist|Could not find|relation/.test(error.message)) errors.push(`시간별: ${error.message.slice(0, 60)}`);
-  }
+  const intraday = {};
 
   const body = { investors, daily, sectors, sectorsKQ, intraday, futures, asOf: kstNow().toISOString().slice(11, 16), errors };
   if (investors.KOSPI || sectors.length) { cache.at = Date.now(); cache.body = body; }

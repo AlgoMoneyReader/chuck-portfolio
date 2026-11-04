@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { curatedKR, fetchInvestingKR, type KrEcon } from "@/lib/krEcon";
+import { curatedKR, fetchInvestingKR, fetchInvestingActuals, titleOverlap, type KrEcon, type GlobalActual } from "@/lib/krEcon";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +118,20 @@ const loadKR = unstable_cache(async (today: string) => {
   return { items: [...live, ...curated.filter(c => c.day < lo || c.day > hi)], note: "", live: true };
 }, ["kr-econ-v1"], { revalidate: 3 * 3600 });
 
+// 발표가 끝난 해외 지표의 결과값: Investing.com 에서 같은 통화·같은 시각 지표를 찾아 채운다 (10분 보관)
+// 인자는 10분 단위 캐시 키로만 쓴다
+const loadActuals = unstable_cache(async (bucket: string): Promise<GlobalActual[]> => {
+  try { return bucket ? await fetchInvestingActuals() : []; } catch { return []; }
+}, ["global-actuals-v1"], { revalidate: 600 });
+
+function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string }>(e: T, acts: GlobalActual[]): T {
+  if (e.actual || Date.parse(e.at) > Date.now()) return e;
+  const cands = acts.filter(a => a.day === e.day && a.time === e.time && a.currency === e.country);
+  if (!cands.length) return e;
+  const best = cands.map(a => ({ a, s: titleOverlap(a.title, e.original) })).sort((x, y) => y.s - x.s)[0];
+  return best && (cands.length === 1 || best.s >= 0.5) ? { ...e, actual: best.a.actual } : e;
+}
+
 export async function GET() {
   const today = new Date(Date.now() + KST).toISOString().slice(0, 10);
   const kr = await loadKR(today).catch(e => ({ items: curatedKR(addDays(today, -40), addDays(today, 60)), note: `한국: ${String(e).slice(0, 60)}`, live: false }));
@@ -149,7 +163,9 @@ export async function GET() {
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-    const all = [...items.filter(e => e.country !== "KRW"), ...kr.items].sort((a, b) => a.at.localeCompare(b.at));
+    const acts = await loadActuals(String(Math.floor(Date.now() / 600_000)));
+    const filled = acts.length ? items.map(e => fillActual(e, acts)) : items;
+    const all = [...filled.filter(e => e.country !== "KRW"), ...kr.items].sort((a, b) => a.at.localeCompare(b.at));
     const days = items.map(e => e.day).sort();
     return NextResponse.json({
       items: all, errors: kr.note ? [...errors, kr.note] : errors,

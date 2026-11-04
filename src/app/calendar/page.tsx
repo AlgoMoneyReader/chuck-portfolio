@@ -7,7 +7,7 @@ interface Ev {
   day: string; time: string; title: string; original: string;
   country: string; countryName: string; stars: number;
   forecast: string | null; previous: string | null; actual: string | null;
-  url?: string; tentative?: boolean; source?: string;
+  url?: string; tentative?: boolean; source?: string; at?: string;
 }
 
 const COUNTRY_FILTERS = [
@@ -372,12 +372,19 @@ function EconItem({ e }: { e: Ev }) {
           {e.tentative && <span className="text-[10px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">{e.day < kstToday() ? "추정" : "예정"}</span>}
         </div>
         <p className="text-sm font-semibold text-white mt-1">{e.title}</p>
-        {(e.forecast || e.previous || e.actual) && (
-          <p className="text-xs text-gray-400 mt-1 num">
-            {e.actual && <span className="text-cyan-brand font-semibold mr-1">{e.actual}</span>}
-            ({e.forecast ? `예상: ${e.forecast}` : ""}{e.forecast && e.previous ? " " : ""}{e.previous ? `이전: ${e.previous}` : ""})
-          </p>
-        )}
+        {(e.forecast || e.previous || e.actual) && (() => {
+          // 결과 vs 예상: 숫자로 비교해 상회(초록)·하회(빨강)
+          const n = (v: string | null) => (v == null ? NaN : parseFloat(v.replace(/[^0-9.\-]/g, "")));
+          const a = n(e.actual), f = n(e.forecast);
+          const cls = !e.actual ? "" : isNaN(a) || isNaN(f) || a === f ? "text-cyan-brand" : a > f ? "text-signal-green" : "text-signal-red";
+          return (
+            <p className="text-xs text-gray-400 mt-1 num flex flex-wrap gap-x-3">
+              <span>결과 <b className={e.actual ? cls : "text-gray-600 font-normal"}>{e.actual ?? (e.at && Date.parse(e.at) <= Date.now() ? "집계 중" : "발표 전")}</b></span>
+              {e.forecast && <span>예상 {e.forecast}</span>}
+              {e.previous && <span>이전 {e.previous}</span>}
+            </p>
+          );
+        })()}
         {e.tentative && <p className="text-[11px] text-gray-500 mt-0.5">발표 관행 기준 추정일 · 실제 일정은 기관 공지 확인</p>}
       </div>
       {e.url && <span className="text-gray-600 self-center text-sm" aria-hidden>›</span>}

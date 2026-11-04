@@ -51,11 +51,13 @@ const kstHM = (iso?: string) => new Date((iso ? Date.parse(iso) : Date.now()) + 
 
 export default function ChartModal({ label, onClose, initialTab }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
+  // 코스피200 선물 전용 창: 주간선물·야간선물 탭만
+  const isFut = label === "코스피200 선물";
 
   const range = "1d";  // 머리글 등락률은 항상 전일 대비
   const [tf, setTf]                             = useState<Timeframe>("1m");
   const [futTf, setFutTf]                       = useState<Timeframe>("1m");
-  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">(initialTab ?? "chart");
+  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">(initialTab ?? (label === "코스피200 선물" ? "day" : "chart"));
   const [chartData, setChartData]               = useState<ChartData | null>(null);
   const [, setLoading]                     = useState(true);
   const [, setError]                         = useState(false);
@@ -73,6 +75,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
 
   // ── 차트 데이터 ───────────────────────────────────────────────────────────
   useEffect(() => {
+    if (label === "코스피200 선물") { setLoading(false); return; } // 선물 창은 선물 데이터만
     setLoading(true); setError(false);
     fetch(`/api/chart-data?label=${encodeURIComponent(label)}&range=${range}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -123,17 +126,18 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
 
   // ── 야간선물 데이터 ────────────────────────────────────────────────────────
   useEffect(() => {
-    if ((activeTab !== "night" && activeTab !== "day") || !isIndex) return;
+    if ((activeTab !== "night" && activeTab !== "day") || !isFut) return;
     setNightLoading(true); setNightError(false); setNightFutures(null);
     fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(j => { if (j.error) throw new Error(); setNightFutures(j); })
       .catch(() => setNightError(true))
       .finally(() => setNightLoading(false));
-  }, [activeTab, isIndex]);
+  }, [activeTab, isFut]);
 
   // ── 창이 열려 있는 동안 자동 갱신 (로딩 표시 없이 값만 교체) ───────────────
   useMarketPoll(() => {
+    if (isFut) return;
     fetch(`/api/chart-data?label=${encodeURIComponent(label)}&range=${range}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (j && !j.error) setChartData(j); })
@@ -150,7 +154,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
   useMarketPoll(() => {
     fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNightFutures(j); }).catch(() => {});
-  }, 20_000, { krxOnly: false, enabled: (activeTab === "night" || activeTab === "day") && isIndex });
+  }, 20_000, { krxOnly: false, enabled: (activeTab === "night" || activeTab === "day") && isFut });
 
   // AI 시황은 10분마다 새로 (서버도 10분 캐시)
   useMarketPoll(() => {
@@ -214,7 +218,16 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
                   <span className="text-signal-green text-xs">● 장중</span>
                 )}
               </div>
-              {chartData && (
+              {isFut && nightFutures && (
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-bold num" style={{ color: nightFutures.changePct >= 0 ? "#1D9E75" : "#E24B4A" }}>{nightFutures.currentPrice.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</span>
+                  <span className="text-sm font-semibold num" style={{ color: nightFutures.changePct >= 0 ? "#1D9E75" : "#E24B4A" }}>
+                    {nightFutures.changePct >= 0 ? "▲" : "▼"} {Math.abs(nightFutures.changePct).toFixed(2)}%
+                  </span>
+                  <span className="text-xs text-gray-500">{activeTab === "night" ? "야간" : "주간"}</span>
+                </div>
+              )}
+              {!isFut && chartData && (
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-2xl font-bold num" style={{ color }}>{fmt(chartData.currentPrice)}</span>
                   {showRange ? (
@@ -240,13 +253,14 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
           </div>
 
           {/* 탭 (지수만) */}
-          {isIndex && (
+          {(isIndex || isFut) && (
             <div className="flex gap-1 px-5 pt-3 pb-0 shrink-0">
-              {([
-                { key: "chart" as const, label: "차트" },
-                { key: "flow"  as const, label: "수급·시황" },
+              {(isFut ? [
                 { key: "day"   as const, label: "주간선물" },
                 { key: "night" as const, label: "야간선물" },
+              ] : [
+                { key: "chart" as const, label: "차트" },
+                { key: "flow"  as const, label: "수급·시황" },
               ]).map(t => (
                 <button key={t.key} onClick={() => setActiveTab(t.key)}
                   className={`px-4 py-1.5 text-xs rounded-full transition-all font-semibold ${
@@ -421,7 +435,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
           )}
 
           {/* 야간선물 탭 */}
-          {(activeTab === "night" || activeTab === "day") && isIndex && (
+          {(activeTab === "night" || activeTab === "day") && isFut && (
             <div className="flex-1 flex flex-col min-h-0 px-5 py-4">
               {nightLoading ? (
                 <div className="w-full h-full flex items-center justify-center">

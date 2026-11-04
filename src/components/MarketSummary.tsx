@@ -336,7 +336,7 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
               <RankBadge rank={r.rank} />
               <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600">{r.code}</p>
+                <p className="text-xs text-gray-600">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span></p>
               </div>
               <span key={`${r.code}-${r.price}`} className="text-right text-sm text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
               <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
@@ -956,7 +956,8 @@ function USStockList({
 
   useEffect(() => {
     setLoading(true); setRows([]); load();
-    const iv = setInterval(load, 60_000);
+    // 실시간 티커처럼: 화면이 보이는 동안 10초마다 (서버는 10초 캐시)
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
     return () => clearInterval(iv);
   }, [load]);
 
@@ -1006,7 +1007,7 @@ function USStockList({
                 </div>
                 <div className="flex flex-col items-end shrink-0">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm text-white num whitespace-nowrap">{fmtUSD(r.price)}</span>
+                    <span key={`${r.code}-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{fmtUSD(r.price)}</span>
                     <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
                       {isPos ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
                     </span>
@@ -1014,7 +1015,7 @@ function USStockList({
                   {extPrice != null && extPct != null && (
                     <span className="text-[11px] num whitespace-nowrap mt-0.5">
                       <span className={`font-bold mr-1 ${hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
-                      <span className="text-gray-300">{fmtUSD(extPrice)}</span>
+                      <span key={`${r.code}-x-${extPrice}`} className="text-gray-300 rounded px-0.5 animate-tick">{fmtUSD(extPrice)}</span>
                       <span className={`ml-1 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>
                     </span>
                   )}
@@ -1318,7 +1319,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
       {/* ── KR 헤더 + 컨텐츠 ── */}
       {region === "KR" && (<>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          {(!krMarket) && <div className="flex gap-1">
+          {(!krMarket && !krSectorOnly) && <div className="flex gap-1">
             {(["KOSPI","KOSDAQ"] as MarketType[]).map(m => (
               <MarketTab key={m} label={m} active={market === m} onClick={() => setMarket(m)} />
             ))}
