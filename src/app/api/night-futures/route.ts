@@ -8,7 +8,7 @@ export const preferredRegion = "icn1";
 
 interface ChartPoint { time: string; price: number; full?: string; }
 
-let cache: { data: object; at: number } | null = null;
+const cache: Partial<Record<"day" | "night", { data: object; at: number }>> = {};
 const TTL = 60_000;
 
 
@@ -78,7 +78,7 @@ function minusOneMinute(raw: string): string {
 }
 
 // 분봉은 한 번에 100개 안팎이라, 가장 이른 봉 1분 전부터 다시 받아 18:00 세션 시작까지 이어붙인다
-async function nightBars(mkt: string, code: string, d8: string, hms: string): Promise<ChartPoint[]> {
+async function nightBars(mkt: string, code: string, d8: string, hms: string, sessionStart = "180000"): Promise<ChartPoint[]> {
   const bars = new Map<string, { bsop: string; raw: string; price: number }>();
   let session = "";
   let date = d8, hour = hms;
@@ -96,7 +96,7 @@ async function nightBars(mkt: string, code: string, d8: string, hms: string): Pr
     for (const r of mine) bars.set(r.raw, r);
     if (!mine.length || bars.size === before) break;
     const earliest = mine.reduce((m, r) => (r.raw < m.raw ? r : m));
-    if (earliest.raw <= "180000" || mine.length < rows.length) break;
+    if (earliest.raw <= sessionStart || mine.length < rows.length) break;
     date = session; hour = minusOneMinute(earliest.raw);
   }
   return Array.from(bars.values())
@@ -104,7 +104,7 @@ async function nightBars(mkt: string, code: string, d8: string, hms: string): Pr
     .map(r => ({ ...toClock(r.bsop, r.raw), price: r.price }));
 }
 
-async function tryKIS(debug: string[]): Promise<object | null> {
+async function tryKIS(debug: string[], session: "day" | "night"): Promise<object | null> {
   let cands: { code: string; name: string }[] = [];
   try {
     cands = pickFutures(await loadMaster());
@@ -119,7 +119,7 @@ async function tryKIS(debug: string[]): Promise<object | null> {
   const hms = kst.toISOString().slice(11, 19).replace(/:/g, "");
 
   // CM: 야간선물(구 유렉스 연계 시절 시장코드), F: 지수선물
-  for (const mkt of ["CM", "F"]) {
+  for (const mkt of session === "day" ? ["F"] : ["CM", "F"]) {
     for (const c of cands) {
       try {
         const j = await kisGet("/uapi/domestic-futureoption/v1/quotations/inquire-price", "FHMIF10000000",
@@ -132,13 +132,13 @@ async function tryKIS(debug: string[]): Promise<object | null> {
 
         let points: ChartPoint[] = [];
         try {
-          points = await nightBars(mkt, c.code, d8, hms);
+          points = await nightBars(mkt, c.code, d8, hms, session === "day" ? "084500" : "180000");
         } catch (e) { debug.push(`chart ${mkt}/${c.code}: ${String(e)}`); }
 
         return {
           code: c.code,
           market: mkt,
-          label: mkt === "CM" ? `${c.name} 야간` : `${c.name} (주간 시세)`,
+          label: mkt === "CM" ? `${c.name} 야간` : session === "day" ? `${c.name} 주간` : `${c.name} (주간 시세)`,
           currentPrice: price,
           previousClose: prev,
           change: parseFloat((price - prev).toFixed(2)),
@@ -201,19 +201,21 @@ async function tryYahoo(): Promise<object | null> {
   return null;
 }
 
-export async function GET() {
-  if (cache && Date.now() - cache.at < TTL) {
-    return NextResponse.json({ ...cache.data, cached: true });
+export async function GET(request: Request) {
+  const session = new URL(request.url).searchParams.get("session") === "day" ? "day" : "night";
+  const hit = cache[session];
+  if (hit && Date.now() - hit.at < TTL) {
+    return NextResponse.json({ ...hit.data, cached: true });
   }
 
   const debug: string[] = [];
-  const kis = await tryKIS(debug);
+  const kis = await tryKIS(debug, session);
   const data = kis ?? (await tryYahoo());
   if (!data) {
     return NextResponse.json({ error: "야간선물 데이터를 불러올 수 없습니다", debug }, { status: 500 });
   }
   if (!kis) Object.assign(data, { debug });
 
-  cache = { data, at: Date.now() };
+  cache[session] = { data, at: Date.now() };
   return NextResponse.json(data);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -60,24 +61,6 @@ function ChangeLine({ val, base }: { val: number; base: number | null }) {
   );
 }
 
-function CustomTooltip({ active, payload, label: dateStr, currency, unit, base }: {
-  active?: boolean; payload?: { value: number }[]; label?: string;
-  currency: string; unit: string; base: number | null;
-}) {
-  if (!active || !payload?.length || !dateStr) return null;
-  const val = payload[0].value;
-  const formatted = currency === "KRW"
-    ? val.toLocaleString("ko-KR", { maximumFractionDigits: 2 })
-    : val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return (
-    <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
-      <p className="text-gray-400 mb-0.5">{dateStr}</p>
-      <p className="text-white font-bold">{formatted}{unit}</p>
-      <ChangeLine val={val} base={base} />
-    </div>
-  );
-}
-
 function NightTooltip({ active, payload, label: timeStr, base }: {
   active?: boolean; payload?: { value: number; payload?: { full?: string } }[]; label?: string; base: number | null;
 }) {
@@ -95,11 +78,12 @@ function NightTooltip({ active, payload, label: timeStr, base }: {
 export default function ChartModal({ label, onClose }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
-  const [range, setRange]                       = useState("1d");
-  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "night">("chart");
+  const range = "1d";  // 머리글 등락률은 항상 전일 대비
+  const [tf, setTf]                             = useState<Timeframe>("1m");
+  const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">("chart");
   const [chartData, setChartData]               = useState<ChartData | null>(null);
-  const [loading, setLoading]                   = useState(true);
-  const [error, setError]                       = useState(false);
+  const [, setLoading]                     = useState(true);
+  const [, setError]                         = useState(false);
   const [flow, setFlow]                         = useState<FlowItem[] | null>(null);
   const [flowLoading, setFlowLoading]           = useState(false);
   const [flowErr, setFlowErr]                   = useState("");
@@ -163,9 +147,9 @@ export default function ChartModal({ label, onClose }: Props) {
 
   // ── 야간선물 데이터 ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeTab !== "night" || !isIndex) return;
-    setNightLoading(true); setNightError(false);
-    fetch("/api/night-futures", { cache: "no-store" })
+    if ((activeTab !== "night" && activeTab !== "day") || !isIndex) return;
+    setNightLoading(true); setNightError(false); setNightFutures(null);
+    fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(j => { if (j.error) throw new Error(); setNightFutures(j); })
       .catch(() => setNightError(true))
@@ -193,7 +177,6 @@ export default function ChartModal({ label, onClose }: Props) {
   const showRange   = activeTab === "chart" && range !== "1d" && rangePct != null;
   const color       = (showRange ? rangeIsPos : isPos) ? "#22c55e" : "#ef4444";
   const dayColor    = isPos ? "#22c55e" : "#ef4444";
-  const gradId   = `grad_${label.replace(/[^a-zA-Z0-9]/g, "")}`;
   const changePct = chartData?.currentPrice && chartData?.previousClose
     ? ((chartData.currentPrice - chartData.previousClose) / chartData.previousClose * 100)
     : null;
@@ -204,10 +187,6 @@ export default function ChartModal({ label, onClose }: Props) {
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const data       = chartData?.data ?? [];
-  const tickCount  = 6;
-  const step       = data.length > tickCount ? Math.floor(data.length / tickCount) : 1;
-  const ticks      = data.filter((_, i) => i % step === 0).map(d => d.date);
   const maxFlowAbs = flow ? Math.max(...flow.map(f => Math.abs(f.netBuy)), 1) : 1;
 
   const nightIsPos  = (nightFutures?.changePct ?? 0) >= 0;
@@ -268,6 +247,7 @@ export default function ChartModal({ label, onClose }: Props) {
               {([
                 { key: "chart" as const, label: "차트" },
                 { key: "flow"  as const, label: "수급·시황" },
+                { key: "day"   as const, label: "주간선물" },
                 { key: "night" as const, label: "야간선물" },
               ]).map(t => (
                 <button key={t.key} onClick={() => setActiveTab(t.key)}
@@ -283,55 +263,16 @@ export default function ChartModal({ label, onClose }: Props) {
           {/* 차트 탭 */}
           {activeTab === "chart" && (
             <>
-              <div className="flex gap-1 px-5 pt-3 pb-2 shrink-0 overflow-x-auto">
-                {RANGES.map(r => (
-                  <button key={r.key} onClick={() => setRange(r.key)}
-                    className={`px-3 py-1 text-xs rounded-full transition-all whitespace-nowrap flex-shrink-0 ${
-                      range === r.key
-                        ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 font-semibold"
-                        : "text-gray-500 hover:text-gray-300"
-                    }`}>{r.label}</button>
+              <div className="flex gap-1 px-5 pt-3 pb-1 shrink-0 overflow-x-auto scrollbar-none">
+                {TIMEFRAMES.map(([k, l]) => (
+                  <button key={k} onClick={() => setTf(k)}
+                    className={`px-3 py-1 text-xs rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
+                      tf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 font-semibold" : "text-gray-500 hover:text-gray-300"
+                    }`}>{l}</button>
                 ))}
               </div>
-              <div className="flex-1 min-h-0 px-2 pb-4">
-                {loading ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-8 h-8 border-2 border-cyan-brand/30 border-t-cyan-brand rounded-full animate-spin" />
-                  </div>
-                ) : error || !data.length ? (
-                  <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">
-                    차트 데이터를 불러올 수 없습니다
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor={color} stopOpacity={0.25} />
-                          <stop offset="95%" stopColor={color} stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1A2D42" vertical={false} />
-                      <XAxis dataKey="date" ticks={ticks}
-                        tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis domain={["auto", "auto"]}
-                        tick={{ fill: "#6B7280", fontSize: 10 }}
-                        tickFormatter={v =>
-                          chartData?.currency === "KRW"
-                            ? v >= 100000 ? Math.round(v / 1000).toLocaleString("ko-KR") + "K" : v.toLocaleString("ko-KR", { maximumFractionDigits: 0 })
-                            : v.toLocaleString("en-US", { maximumFractionDigits: 0 })
-                        }
-                        axisLine={false} tickLine={false} width={52} />
-                      <Tooltip content={<CustomTooltip currency={chartData?.currency ?? ""} unit={chartData?.currency === "KRW" && !isIndex ? "원" : ""} base={rangeBase} />} />
-                      <Area type="monotone" dataKey="close"
-                        stroke={color} strokeWidth={2} fill={`url(#${gradId})`}
-                        dot={false}
-                        activeDot={{ r: 4, fill: color, stroke: "#07111E", strokeWidth: 2 }}
-                        isAnimationActive={false}
-                        connectNulls />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
+              <div className="flex-1 min-h-0 px-3 pb-3 overflow-hidden">
+                <CandleChart label={label} tf={tf} height={400} digits={2} />
               </div>
             </>
           )}
@@ -461,7 +402,7 @@ export default function ChartModal({ label, onClose }: Props) {
           )}
 
           {/* 야간선물 탭 */}
-          {activeTab === "night" && isIndex && (
+          {(activeTab === "night" || activeTab === "day") && isIndex && (
             <div className="flex-1 flex flex-col min-h-0 px-5 py-4">
               {nightLoading ? (
                 <div className="w-full h-full flex items-center justify-center">
@@ -470,7 +411,7 @@ export default function ChartModal({ label, onClose }: Props) {
               ) : nightError || !nightFutures ? (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                   <p className="text-sm text-gray-500">야간선물 데이터를 불러올 수 없습니다</p>
-                  <p className="text-xs text-gray-600">야간 세션(18:00~06:00) 외 시간이거나 데이터 서버 오류입니다</p>
+                  <p className="text-xs text-gray-600">{activeTab === "day" ? "주간 세션(08:45~15:45)" : "야간 세션(18:00~06:00)"} 데이터를 받지 못했습니다</p>
                 </div>
               ) : (
                 <>

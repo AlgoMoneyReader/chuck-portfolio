@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
-import { AreaChart, Area, BarChart, Bar, Legend, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, Legend, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
@@ -257,45 +258,17 @@ function OverviewTab({ d }: { d: Overview }) {
   );
 }
 
-const RANGES = [["1d", "1일"], ["5d", "5일"], ["1mo", "1개월"], ["3mo", "3개월"], ["1y", "1년"]] as const;
-
 function ChartTab({ symbol }: { symbol: string }) {
-  const [range, setRange] = useState<string>("1d");
-  const [data, setData] = useState<{ date: string; close: number }[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/chart-data?label=${encodeURIComponent(symbol)}&range=${range}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => setData(j.data ?? [])).catch(() => setData([])).finally(() => setLoading(false));
-  }, [symbol, range]);
-  const up = data.length > 1 && data[data.length - 1].close >= data[0].close;
-  const color = up ? "#1D9E75" : "#E24B4A";
+  const [tf, setTf] = useState<Timeframe>("5m");
   return (
-    <section className="card space-y-3">
-      <div className="flex gap-1">
-        {RANGES.map(([k, l]) => (
-          <button key={k} onClick={() => setRange(k)}
-            className={`px-3 py-1 text-xs rounded-full ${range === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
+    <section className="card space-y-2">
+      <div className="flex gap-1 overflow-x-auto scrollbar-none">
+        {TIMEFRAMES.map(([k, l]) => (
+          <button key={k} onClick={() => setTf(k)}
+            className={`shrink-0 px-3 py-1 text-xs rounded-lg ${tf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
         ))}
       </div>
-      <div className="h-72">
-        {loading ? <div className="h-full bg-navy-border/30 rounded-xl animate-pulse" /> : !data.length ? (
-          <p className="h-full flex items-center justify-center text-sm text-gray-500">차트 데이터를 불러올 수 없습니다</p>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-              <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={color} stopOpacity={0.25} /><stop offset="95%" stopColor={color} stopOpacity={0.02} /></linearGradient></defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
-              <XAxis dataKey="date" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={40} />
-              <YAxis domain={["auto", "auto"]} tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={56}
-                tickFormatter={v => v.toLocaleString("ko-KR")} />
-              <Tooltip contentStyle={{ background: "#0D1530", border: "1px solid #1A2545", borderRadius: 8, fontSize: 12 }}
-                formatter={v => [`${Number(v).toLocaleString("ko-KR")}원`, "종가"]} />
-              <Area type="monotone" dataKey="close" stroke={color} strokeWidth={2} fill="url(#sg)" dot={false} isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+      <CandleChart label={symbol} tf={tf} height={340} digits={0} />
     </section>
   );
 }
