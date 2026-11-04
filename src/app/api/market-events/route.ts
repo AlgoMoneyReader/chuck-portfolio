@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { dartGet } from "@/lib/dart";
 import { unzipFirst } from "@/lib/zip";
+import { fetchPrelim } from "@/lib/prelim";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -18,6 +19,13 @@ export interface MarketEvent {
   code?: string;
   name?: string;          // 종목명(국내) — 제목 앞부분을 종목 페이지로 연결
   market?: "KOSPI" | "KOSDAQ" | "US";
+  rcept?: string;         // 국내 잠정실적 접수번호 (결과 파싱용)
+  // 발표된 실적 결과
+  result?: {
+    eps?: string | null; epsForecast?: string | null; surprisePct?: number | null;   // 미국
+    sales?: number | null; op?: number | null; net?: number | null;                  // 국내(억원)
+    salesYoY?: number | null; opYoY?: number | null;
+  };
 }
 
 const KST = 9 * 3_600_000;
@@ -50,6 +58,10 @@ const usEarnings = unstable_cache(async (from: string, days: number): Promise<Ma
         .map(({ r, cap }): MarketEvent => {
           // 미국 장 시작 전 발표 → 한국 그날 밤, 장 마감 후 → 한국 다음 날 새벽
           const after = r.time === "time-after-hours", pre = r.time === "time-pre-market";
+          // 발표가 끝난 날은 Nasdaq 이 실제 EPS·서프라이즈(%)를 함께 준다
+          const eps = String(r.eps ?? "").trim();
+          const sp = parseFloat(String(r.surprise ?? "").replace(/[^0-9.\-]/g, ""));
+          const reported = !!eps && eps !== "N/A" && eps !== "-";
           return {
             day: after ? addDays(date, 1) : date,
             time: pre ? "장전" : after ? "장후" : "",
@@ -59,12 +71,13 @@ const usEarnings = unstable_cache(async (from: string, days: number): Promise<Ma
             code: r.symbol,
             market: "US",
             url: `https://www.nasdaq.com/market-activity/stocks/${String(r.symbol).toLowerCase()}/earnings`,
+            ...(reported ? { result: { eps, epsForecast: r.epsForecast || null, surprisePct: isNaN(sp) ? null : sp } } : {}),
           };
         });
     } catch { return []; }
   });
   return perDay.flat();
-}, ["us-earnings-v2"], { revalidate: 3 * 3600 });
+}, ["us-earnings-v3"], { revalidate: 3600 });
 
 // 공시 원문에서 '일시/예정일' 뒤 첫 날짜와 시각
 function eventDate(xml: string): { day: string; time: string } | null {
@@ -133,7 +146,7 @@ const krEvents = unstable_cache(async (today: string): Promise<{ items: MarketEv
     if (seen.has(k)) continue;
     seen.add(k);
     const b = base(r);
-    out.push({ ...b, day: day8(r.rcept_dt), time: "", kind: "잠정실적", title: `${b.name} 잠정실적 발표` });
+    out.push({ ...b, day: day8(r.rcept_dt), time: "", kind: "잠정실적", title: `${b.name} 잠정실적 발표`, rcept: r.rcept_no });
   }
 
   // IR·실적 예고는 원문에서 개최일/예정일을 읽는다. 유가증권 우선, 최근 공시 우선으로 최대 40건
@@ -162,16 +175,32 @@ const krEvents = unstable_cache(async (today: string): Promise<{ items: MarketEv
   return { items: out, partial };
 }, ["kr-market-events-v2"], { revalidate: 4 * 3600 });
 
+// 잠정실적 원문 결과(공시는 바뀌지 않으므로 오래 보관)
+const prelimOf = unstable_cache(async (rcept: string) => {
+  try { return await fetchPrelim(rcept, 8000); } catch { return null; }
+}, ["prelim-result-v1"], { revalidate: 30 * 86400 });
+
 // 한국 시간 기준: 미국 장 마감 후 발표는 새벽(~06시), 장 시작 전 발표는 밤(~22시), 시각 모름은 맨 뒤
 const sortTime = (t: string) => (t === "장후" ? "06:00" : t === "장전" ? "22:00" : t || "99:99");
 
 export async function GET() {
+  const reqStart = Date.now();
   const today = kstDate();
   const errors: string[] = [];
   const [us, krRes] = await Promise.all([
     usEarnings(addDays(today, -10), 35).catch(e => { errors.push(`미국: ${String(e).slice(0, 80)}`); return [] as MarketEvent[]; }),
     krEvents(today).catch(e => { errors.push(`국내: ${String(e).slice(0, 80)}`); return { items: [] as MarketEvent[], partial: false }; }),
   ]);
+  // 최근 21일 잠정실적에 매출·영업이익 결과 붙이기 (유가증권 우선, 최대 60건, 20초 안에서)
+  const targets = krRes.items
+    .filter(e => e.kind === "잠정실적" && e.rcept && e.day >= addDays(today, -21))
+    .sort((a, b) => (a.market === b.market ? b.day.localeCompare(a.day) : a.market === "KOSPI" ? -1 : 1))
+    .slice(0, 60);
+  await pool(targets, 8, async e => {
+    if (Date.now() - reqStart > 48_000) return;   // 60초 제한 안에서만
+    const p = await prelimOf(e.rcept!);
+    if (p && (p.sales != null || p.op != null)) e.result = { sales: p.sales, op: p.op, net: p.net, salesYoY: p.salesYoY, opYoY: p.opYoY };
+  });
   const kr = krRes.items;
   if (krRes.partial) errors.push("국내: 시간 제한으로 일부 공시만 반영");
   const seen = new Set<string>();

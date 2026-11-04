@@ -24,6 +24,31 @@ const STAR_FILTERS = [0, 3, 2, 1];
 interface MarketEvent {
   day: string; time: string; country: "US" | "KR"; kind: "실적" | "IR" | "잠정실적" | "실적예고";
   title: string; sub?: string; url?: string; code?: string; name?: string; market?: "KOSPI" | "KOSDAQ" | "US";
+  result?: { eps?: string | null; epsForecast?: string | null; surprisePct?: number | null; sales?: number | null; op?: number | null; net?: number | null; salesYoY?: number | null; opYoY?: number | null };
+}
+
+// 억원 → '3.2조' / '1,234억'
+const eokTxt = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v.toLocaleString("ko-KR")}억`);
+const yoyTxt = (v: number | null | undefined) => (v == null ? "" : ` (YoY ${v > 0 ? "+" : ""}${v}%)`);
+const toneOf = (v: number | null | undefined) => (v == null ? "text-gray-300" : v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-300");
+
+// 실적 결과 한 줄: 미국은 EPS 실제/예상/서프라이즈, 국내는 잠정 매출·영업이익
+function EarningsResult({ r }: { r: NonNullable<MarketEvent["result"]> }) {
+  if (r.eps) {
+    return (
+      <p className="text-xs mt-1 num flex flex-wrap gap-x-3">
+        <span className="text-gray-400">EPS <b className={toneOf(r.surprisePct)}>{r.eps}</b></span>
+        {r.epsForecast && <span className="text-gray-400">예상 {r.epsForecast}</span>}
+        {r.surprisePct != null && <span className={`font-semibold ${toneOf(r.surprisePct)}`}>{r.surprisePct > 0 ? "어닝 서프라이즈 +" : r.surprisePct < 0 ? "어닝 쇼크 " : "부합 "}{r.surprisePct !== 0 ? `${r.surprisePct}%` : ""}</span>}
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs mt-1 num flex flex-wrap gap-x-3">
+      {r.sales != null && <span className="text-gray-400">매출 <b className="text-white">{eokTxt(r.sales)}</b><span className={toneOf(r.salesYoY)}>{yoyTxt(r.salesYoY)}</span></span>}
+      {r.op != null && <span className="text-gray-400">영업이익 <b className={r.op < 0 ? "text-signal-red" : "text-white"}>{eokTxt(r.op)}</b><span className={toneOf(r.opYoY)}>{yoyTxt(r.opYoY)}</span></span>}
+    </p>
+  );
 }
 const KIND_STYLE: Record<MarketEvent["kind"], string> = {
   실적: "bg-cyan-brand/15 text-cyan-brand", IR: "bg-purple-500/15 text-purple-300",
@@ -414,6 +439,7 @@ function EventItem({ e }: { e: MarketEvent }) {
           ) : e.title}
         </p>
         {e.sub && <p className="text-xs text-gray-400 mt-0.5">{e.sub}</p>}
+        {e.result && <EarningsResult r={e.result} />}
         {e.url && <span className="inline-block text-[11px] text-cyan-brand mt-1">{e.country === "KR" ? "DART 공시 원문 ›" : "Nasdaq 실적 페이지 ›"}</span>}
       </div>
     </li>
