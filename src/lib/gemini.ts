@@ -1,8 +1,14 @@
 // Gemini 공용 호출. 무료 등급은 모델마다 일일 한도가 따로라서(2.5-flash 20회/일 등)
 // 한도 초과(429)·장애가 나면 다음 모델로 넘어가고, 한도 걸린 모델은 잠시 건너뛴다.
+// 순서: Gemini 무료 모델들 → (검색 필요 작업은) Claude → Gemma / (가벼운 작업은) Gemma → Claude
+// Claude 는 ANTHROPIC_API_KEY 가 있을 때만 쓴다.
+import { claudeAvailable, claudeGenerate } from "./claude";
 
-export const QUALITY = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
-export const CHEAP = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"];
+// 2.0-flash 는 지원 종료(404)라 뺐고, 최신 별칭 모델을 추가(한도 별도)
+export const QUALITY = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-flash-lite-latest"];
+export const CHEAP = ["gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest", "gemini-2.5-flash"];
+// Gemma: 무료 한도가 훨씬 크지만 구글 검색·시스템 지시·JSON 모드가 없다 → 지시를 본문에 합쳐 보낸다
+const GEMMA = "gemma-3-27b-it";
 
 const cooldown = new Map<string, number>(); // model → 다시 시도해도 되는 시각
 
@@ -26,17 +32,28 @@ export async function gemini(o: GeminiOpts): Promise<{ text: string; model: stri
   if (!key) throw new GeminiError("GEMINI_API_KEY 없음", false);
   const errors: string[] = [];
   let allQuota = true;
-  for (const model of o.models ?? QUALITY) {
+  const tryClaude = async () => {
+    if (!claudeAvailable()) return null;
+    try {
+      const text = await claudeGenerate({ prompt: o.json ? `${o.prompt}\n\nJSON 만 반환하세요.` : o.prompt, system: o.system, search: o.search, maxTokens: o.maxTokens ? Math.max(o.maxTokens, 1024) : 8000 });
+      return { text, model: "claude-opus-5-5" };
+    } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; return null; }
+  };
+  const chain = [...(o.models ?? QUALITY), ...(o.search ? ["@claude", GEMMA] : [GEMMA, "@claude"])];
+  for (const model of chain) {
+    if (model === "@claude") { const r = await tryClaude(); if (r) return r; continue; }
     if ((cooldown.get(model) ?? 0) > Date.now()) { errors.push(`${model}: 한도 대기`); continue; }
+    const gemma = model.startsWith("gemma");
     const thinking = model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: model.includes("lite") ? 0 : 1024 } } : {};
+    const text0 = gemma && o.system ? `${o.system}\n\n---\n\n${o.prompt}` : o.prompt;
     const body = {
-      contents: [{ role: "user", parts: [{ text: o.prompt }] }],
-      ...(o.system ? { systemInstruction: { parts: [{ text: o.system }] } } : {}),
-      ...(o.search ? { tools: [{ google_search: {} }] } : {}),
+      contents: [{ role: "user", parts: [{ text: gemma && o.json ? `${text0}\n\n반드시 JSON 만 반환하세요.` : text0 }] }],
+      ...(o.system && !gemma ? { systemInstruction: { parts: [{ text: o.system }] } } : {}),
+      ...(o.search && !gemma ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         temperature: o.temperature ?? 0.3,
         ...(o.maxTokens ? { maxOutputTokens: o.maxTokens } : {}),
-        ...(o.json && !o.search ? { responseMimeType: "application/json" } : {}),
+        ...(o.json && !o.search && !gemma ? { responseMimeType: "application/json" } : {}),
         ...thinking,
       },
     };
@@ -67,7 +84,7 @@ export async function gemini(o: GeminiOpts): Promise<{ text: string; model: stri
     }
   }
   throw new GeminiError(
-    allQuota ? "AI 일일 사용 한도를 모두 썼습니다. 잠시 후(한국시간 오후 4~5시 초기화) 다시 시도해 주세요." : `AI 호출 실패 (${errors.join(" | ")})`,
+    allQuota ? "AI 무료 사용 한도를 모두 썼습니다. 한국시간 오후 4~5시에 초기화됩니다." : `AI 호출 실패 (${errors.join(" | ")})`,
     allQuota,
   );
 }
