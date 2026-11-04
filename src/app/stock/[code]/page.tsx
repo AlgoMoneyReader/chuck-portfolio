@@ -347,7 +347,7 @@ interface Flow {
 
 function FlowTab({ code, market }: { code: string; market: string }) {
   const [f, setF] = useState<Flow | null>(null);
-  const [live, setLive] = useState<{ available: boolean; asOf?: string; nextSlot?: string | null; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string; note?: string; error?: string } | null>(null);
+  const [live, setLive] = useState<{ available: boolean; final?: boolean; asOf?: string; nextSlot?: string | null; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string; note?: string; error?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const loadFlow = () => fetch(`/api/stock-investor?code=${code}&market=${market}`, { cache: "no-store" })
     .then(r => r.json()).then(j => { if (!j.error) setF(j); });
@@ -375,10 +375,10 @@ function FlowTab({ code, market }: { code: string; market: string }) {
         <Section title="오늘 장중 수급" note="억원 · 추정">
           {(() => {
             // 토스 방식: 외국인은 외국계 창구 실시간, 기관은 거래소 가집계, 개인은 직전 확정치
-            const fx = live.globalEok != null
+            const fx = live.final ? { v: live.foreignEok ?? 0, at: "오늘 장마감 확정" } : live.globalEok != null
               ? { v: live.globalEok, at: `오늘 ${live.updatedAt} 기준` }
               : live.available ? { v: live.foreignEok ?? 0, at: `오늘 ${live.asOf} 기준` } : null;
-            const inst = live.available ? { v: live.institutionEok ?? 0, at: `오늘 ${live.asOf} 기준` } : null;
+            const inst = live.available ? { v: live.institutionEok ?? 0, at: live.final ? "오늘 장마감 확정" : `오늘 ${live.asOf} 기준${(live.updatedAt ?? "") >= "15:30" ? " · 확정 대기" : ""}` } : null;
             const prevDay = f.invDate ? `${+f.invDate.slice(4, 6)}/${+f.invDate.slice(6, 8)} 확정` : "직전 확정";
             const cols: [string, { v: number; at: string } | null][] = [
               ["외국인", fx], ["기관", inst], ["개인", { v: c.individual, at: prevDay }],

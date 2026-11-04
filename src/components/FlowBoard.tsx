@@ -152,7 +152,7 @@ function SectorFlow({ sector }: { sector: string }) {
           ))}
         </tbody>
       </table>
-      <p className="text-[10px] text-gray-600">{d.asOf} 기준 · 외국인 {basis === "창구" ? "외국계 창구 실시간" : basis ?? "—"} · 기관 {ibasis ?? "가집계 전"} · 시총 상위 {d.stocks.length}종목 · 1분마다 갱신</p>
+      <p className="text-[10px] text-gray-600">{d.asOf} 기준 · 외국인 {basis === "창구" ? "외국계 창구 실시간" : basis ?? "—"} · 기관 {ibasis ?? "가집계 전"}{ibasis?.includes("가집계") && d.asOf >= "15:30" ? " (장 마감 후 확정치 집계 대기)" : ""} · 시총 상위 {d.stocks.length}종목 · 1분마다 갱신</p>
     </div>
   );
 }

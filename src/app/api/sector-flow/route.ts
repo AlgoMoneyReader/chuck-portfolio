@@ -43,10 +43,10 @@ export async function GET(request: Request) {
     try { f = await getLiveFlow(i.s); } catch { /* 수급 없이 시세만 */ }
     return {
       code: i.s, name: i.n, price: i.price, pct: i.pct, capEok: Math.round(i.cap),
-      foreign: f ? (f.globalEok ?? (f.available ? f.foreignEok ?? null : null)) : null,
-      foreignBasis: f?.globalEok != null ? "창구" : f?.available ? `${f.asOf} 가집계` : null,
+      foreign: f ? (f.final ? f.foreignEok ?? null : f.globalEok ?? (f.available ? f.foreignEok ?? null : null)) : null,
+      foreignBasis: f?.final ? "장마감 확정" : f?.globalEok != null ? "창구" : f?.available ? `${f.asOf} 가집계` : null,
       institution: f?.available ? f.institutionEok ?? null : null,
-      instBasis: f?.available ? `${f.asOf} 가집계` : null,
+      instBasis: f?.final ? "장마감 확정" : f?.available ? `${f.asOf} 가집계` : null,
     };
   });
 
