@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { krSession } from "@/lib/krSession";
+import { nxtQuote } from "@/lib/nxtPrice";
 import { kisGet, num, kstYmd } from "@/lib/kis";
 import master from "@/data/stock_master.json";
 
@@ -123,5 +125,8 @@ export async function GET(request: Request) {
   }
 
   const info = MASTER.get(code);
-  return NextResponse.json({ code, name: info?.name ?? code, marketCode: info?.market ?? (o.rprs_mrkt_kor_name === "KOSDAQ" ? "KQ" : "KS"), quote, consensus, financials, shortSale, errors }, { headers: { "Cache-Control": "no-store" } });
+  // 정규장 밖: 넥스트레이드 프리·애프터마켓 시세
+  const sess = krSession();
+  const nxt = sess.key !== "regular" ? await nxtQuote(code) : null;
+  return NextResponse.json({ session: sess, nxt, code, name: info?.name ?? code, marketCode: info?.market ?? (o.rprs_mrkt_kor_name === "KOSDAQ" ? "KQ" : "KS"), quote, consensus, financials, shortSale, errors }, { headers: { "Cache-Control": "no-store" } });
 }

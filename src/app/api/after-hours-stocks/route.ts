@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { kisGet, num } from "@/lib/kis";
+import { krSession } from "@/lib/krSession";
+import { nxtQuotes } from "@/lib/nxtPrice";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -62,12 +64,16 @@ export async function GET() {
   if (cache && Date.now() - cache.at < TTL) return NextResponse.json({ stocks: cache.data, cached: true });
 
   const STOCKS_NOW = await topByCap();
-  const quotes = await Promise.all(STOCKS_NOW.map(s => kisPrice(s.code)));
+  const sess = krSession();
+  const [quotes, nx] = await Promise.all([
+    Promise.all(STOCKS_NOW.map(s => kisPrice(s.code))),
+    sess.key === "regular" ? Promise.resolve({} as Awaited<ReturnType<typeof nxtQuotes>>) : nxtQuotes(STOCKS_NOW.map(s => s.code)),
+  ]);
   const state = marketState();
   const data: StockResult[] = STOCKS_NOW.map((s, i) => ({
     code: `${s.code}.KS`, name: s.name,
     regularPrice: quotes[i]?.price ?? 0,
-    extPrice: null, extChangePct: null,
+    extPrice: nx[s.code]?.price ?? null, extChangePct: nx[s.code] ? parseFloat(nx[s.code].pct.toFixed(2)) : null,
     changePct: parseFloat((quotes[i]?.pct ?? 0).toFixed(2)),
     marketState: state,
   }));

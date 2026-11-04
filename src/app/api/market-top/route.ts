@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { kisGet, num } from "@/lib/kis";
+import { krSession } from "@/lib/krSession";
+import { nxtQuotes } from "@/lib/nxtPrice";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +66,7 @@ interface TopGainerRow {
   name: string; price: number; change: number;
   changePct: number; volume: number;
   tradeAmount: number;
+  nxtPrice?: number | null; nxtPct?: number | null;   // 넥스트레이드 프리·애프터마켓 시세
 }
 
 // ── Naver Finance 실시간 현재가 API ──────────────────────────────────────────
@@ -220,11 +223,36 @@ export async function GET(request: Request) {
       .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
+    // ── 정규장 밖(프리·애프터·장 종료): 넥스트레이드 시세를 붙인다 ──
+    const sess = krSession();
+    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmount ?? topByAmount;
+    let basis = sess.key === "regular" || sess.key === "auction-close" ? "KRX 정규장" : "KRX 직전 정규장 종가 기준";
+    const allZero = valid.length > 0 && valid.every(v => v.changePct === 0);
+    if (sess.key !== "regular") {
+      const codes = Array.from(new Set([...gainers, ...losers, ...amount, ...valid].map(r => r.code)));
+      const nx = await nxtQuotes(codes);
+      const withNx = <T extends Omit<TopGainerRow, "rank">>(r: T): T => {
+        const q = nx[r.code];
+        return q ? { ...r, nxtPrice: q.price, nxtPct: parseFloat(q.pct.toFixed(2)) } : r;
+      };
+      gainers = gainers.map(withNx); losers = losers.map(withNx); amount = amount.map(withNx);
+      // 개장 전엔 KRX 순위가 0% 로 초기화됨 → 주요 종목을 NXT 등락률로 순위
+      if (allZero && !kUp) {
+        const nxRows = valid.map(withNx).filter(r => r.nxtPct != null);
+        if (nxRows.length) {
+          gainers = [...nxRows].filter(r => (r.nxtPct ?? 0) > 0).sort((a, b) => (b.nxtPct ?? 0) - (a.nxtPct ?? 0)).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
+          losers = [...nxRows].filter(r => (r.nxtPct ?? 0) < 0).sort((a, b) => (a.nxtPct ?? 0) - (b.nxtPct ?? 0)).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
+          basis = "NXT 시세 기준 (주요 종목, KRX 개장 전)";
+        }
+      }
+    }
+
     const payload = {
       market,
-      topGainers: kUp ?? topGainers,
-      topLosers: kDown ?? topLosers,
-      topByAmount: kAmount ?? topByAmount,
+      session: sess, basis,
+      topGainers: gainers,
+      topLosers: losers,
+      topByAmount: amount,
       source: { amount: kAmount ? "KIS 시장 전체" : "주요 종목 목록", gainers: kUp ? "KIS 시장 전체" : "주요 종목 목록", losers: kDown ? "KIS 시장 전체" : "주요 종목 목록" },
       timestamp: new Date().toISOString(),
     };

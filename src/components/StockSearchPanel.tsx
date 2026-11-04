@@ -498,7 +498,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                 {!isUSStock && currentSession === "NXT_PRE" && quote.preMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-blue-400 bg-blue-400/15 border-blue-400/30">
-                      프리마켓 {fmtPrice(quote.preMarketPrice)}
+                      NXT 프리마켓 {fmtPrice(quote.preMarketPrice)}
                       {quote.preMarketChangePct != null && (
                         <> {quote.preMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.preMarketChangePct).toFixed(2)}%</>
                       )}
@@ -508,7 +508,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                 {!isUSStock && currentSession === "NXT_POST" && quote.postMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
-                      애프터마켓 {fmtPrice(quote.postMarketPrice)}
+                      NXT 애프터마켓 {fmtPrice(quote.postMarketPrice)}
                       {quote.postMarketChangePct != null && (
                         <> {quote.postMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.postMarketChangePct).toFixed(2)}%</>
                       )}

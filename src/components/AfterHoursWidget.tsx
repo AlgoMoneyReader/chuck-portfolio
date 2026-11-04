@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { krSession } from "@/lib/krSession";
 
 interface KrItem { code: string; name: string; regularPrice: number; extPrice: number | null; extChangePct: number | null; changePct: number }
 interface UsItem {
@@ -30,7 +31,8 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
 
   useEffect(() => {
     setLoading(true); load();
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, region === "KR" && isKrOpen() ? 15_000 : 60_000);
+    const ext = krSession().extended;
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, region === "KR" && (isKrOpen() || ext) ? 15_000 : 60_000);
     return () => clearInterval(iv);
   }, [load, region]);
 
@@ -52,6 +54,17 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                 <p className="text-xs font-semibold text-white truncate">{s.name}</p>
                 <p className={`text-base font-bold num mt-0.5 ${tone(s.changePct)}`}>{s.regularPrice.toLocaleString("ko-KR")}</p>
                 <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""} {Math.abs(s.changePct).toFixed(2)}%</p>
+                {s.extPrice != null && s.extChangePct != null && (() => {
+                  const k = krSession();
+                  const tag = k.key === "nxt-pre" || k.key === "auction-open" ? "NXT 프리" : k.key === "nxt-after" ? "NXT 애프터" : "NXT 종가";
+                  return (
+                    <p className="text-[10px] num mt-0.5 truncate">
+                      <span className="text-purple-300">{tag}</span>{" "}
+                      <span key={`${s.code}-${s.extPrice}`} className="text-gray-300 rounded animate-tick">{s.extPrice.toLocaleString("ko-KR")}</span>{" "}
+                      <span className={tone(s.extChangePct)}>{s.extChangePct > 0 ? "+" : ""}{s.extChangePct.toFixed(2)}%</span>
+                    </p>
+                  );
+                })()}
               </Link>
             ))
           : us.map(s => {

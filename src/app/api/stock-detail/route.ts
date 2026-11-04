@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { koreanName } from "@/lib/stockList";
+import { krSession } from "@/lib/krSession";
+import { nxtQuote } from "@/lib/nxtPrice";
 import { extendedOne, dayMarketOne, inDaySession, type ExtFields } from "@/lib/usExtended";
 
 export async function GET(request: Request) {
@@ -48,6 +50,17 @@ export async function GET(request: Request) {
     let postMarketPrice = (meta.postMarketPrice as number | null | undefined) ?? null;
     let dayMarketPrice: number | null = null, dayMarketChangePct: number | null = null;
     let marketState: string = meta.marketState ?? "CLOSED";
+    if (!isUS) {
+      // 국내: 넥스트레이드 프리(08:00~08:50)·애프터(15:30~20:00) 시세
+      const s = krSession();
+      if (s.key !== "regular") {
+        const n = await nxtQuote(code);
+        if (n) {
+          if (s.key === "nxt-pre" || s.key === "auction-open") { preMarketPrice = n.price; }
+          else { postMarketPrice = n.price; }
+        }
+      }
+    }
     if (isUS) {
       let e: ExtFields = await extendedOne<ExtFields>({ code: symbol, price });
       if (inDaySession() && process.env.KIS_APP_KEY) e = await dayMarketOne(e);
