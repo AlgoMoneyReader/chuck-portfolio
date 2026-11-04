@@ -43,7 +43,9 @@ const won = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleStr
 const eok = (n: number | null | undefined) => {
   if (n == null) return "—";
   const a = Math.abs(n);
-  return a >= 10000 ? `${(n / 10000).toFixed(a >= 100000 ? 0 : 1)}조` : `${Math.round(n).toLocaleString("ko-KR")}억`;
+  if (a >= 10000) return `${(n / 10000).toFixed(a >= 100000 ? 0 : 1)}조`;
+  if (a > 0 && a < 1) return `${Math.round(n * 10000).toLocaleString("ko-KR")}만`;
+  return `${(a >= 100 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString("ko-KR")}억`;
 };
 const pct = (n: number | null | undefined, digits = 1) => (n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`);
 const tone = (n: number | null | undefined) => (n == null ? "text-gray-400" : n >= 0 ? "text-signal-green" : "text-signal-red");

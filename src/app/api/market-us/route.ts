@@ -235,6 +235,45 @@ async function topByDollarVolume(index: string): Promise<Quote[]> {
 }
 
 // ── Route ──────────────────────────────────────────────────────────────────────
+// ── 프리·애프터마켓: v7/quote 가 인증(crumb)을 요구해 비는 경우가 많아 차트 API(includePrePost)로 채운다 ──
+type TP = { start: number; end: number };
+async function extendedOne(q: Quote): Promise<Quote> {
+  try {
+    const res = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(q.code)}?interval=5m&range=2d&includePrePost=true`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(6000) },
+    );
+    if (!res.ok) return q;
+    const r = (await res.json())?.chart?.result?.[0];
+    const m = r?.meta;
+    const ts: number[] = r?.timestamp ?? [];
+    const cl: (number | null)[] = r?.indicators?.quote?.[0]?.close ?? [];
+    const per = m?.currentTradingPeriod as { pre: TP; regular: TP; post: TP } | undefined;
+    if (!m || !per || !ts.length) return q;
+    const now = Date.now() / 1000;
+    const state = now >= per.pre.start && now < per.pre.end ? "PRE"
+      : now >= per.regular.start && now < per.regular.end ? "REGULAR"
+      : now >= per.post.start && now < per.post.end ? "POST" : "CLOSED";
+    // 마지막 체결가와 시각
+    let lastI = -1;
+    for (let i = ts.length - 1; i >= 0; i--) if (cl[i] != null) { lastI = i; break; }
+    if (lastI < 0) return { ...q, marketState: state };
+    const lastT = ts[lastI], last = cl[lastI] as number;
+    const reg = (m.regularMarketPrice as number) ?? q.price;
+    const pct = (v: number) => parseFloat((((v - reg) / reg) * 100).toFixed(2));
+    const out: Quote = { ...q, marketState: state };
+    if (lastT >= per.pre.start && lastT < per.regular.start) {          // 오늘 프리마켓 체결
+      out.preMarketPrice = parseFloat(last.toFixed(2)); out.preMarketChangePct = pct(last);
+    } else if (lastT >= per.regular.end || (lastT < per.pre.start && lastT >= per.regular.end - 86400)) { // 애프터마켓 체결
+      out.postMarketPrice = parseFloat(last.toFixed(2)); out.postMarketChangePct = pct(last);
+    }
+    return out;
+  } catch { return q; }
+}
+async function withExtended(list: Quote[]): Promise<Quote[]> {
+  return Promise.all(list.map(q => (q.preMarketPrice != null || q.postMarketPrice != null ? q : extendedOne(q))));
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type  = searchParams.get("type")  ?? "gainers";   // gainers|losers|actives|sector
@@ -255,7 +294,7 @@ export async function GET(request: Request) {
 
   // ② 거래대금(가격×거래량) 순위
   if (type === "actives") {
-    const stocks = await topByDollarVolume(index);
+    const stocks = await withExtended(await topByDollarVolume(index));
     return NextResponse.json({ stocks, timestamp: ts, basis: "dollarVolume" }, { headers: { "Cache-Control": "no-store" } });
   }
 
@@ -271,20 +310,20 @@ export async function GET(request: Request) {
       })
       .slice(0, 10)
       .map((q, i) => ({ ...q, rank: i + 1 }));
-    return NextResponse.json({ stocks: sorted, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ stocks: await withExtended(sorted), timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
   // ③ NASDAQ — custom screener, fallback to S&P500
   if (index === "NASDAQ") {
     const stocks = await fetchNasdaqScreener(type as "gainers" | "losers" | "actives", 10);
     if (stocks.length > 0)
-      return NextResponse.json({ stocks, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({ stocks: await withExtended(stocks), timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }
 
   // ④ S&P500 (or NASDAQ fallback)
   const scrId =
     type === "gainers" ? "day_gainers" :
     type === "losers"  ? "day_losers"  : "most_actives";
-  const stocks = await fetchScreener(scrId, 10);
+  const stocks = await withExtended(await fetchScreener(scrId, 10));
   return NextResponse.json({ stocks, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
 }

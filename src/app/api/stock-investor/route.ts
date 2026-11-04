@@ -21,7 +21,8 @@ interface InvestorRow {
 /** 백만원 문자열 → 억원 정수 변환 */
 function pbmnToUk(s: string): number {
   const n = parseInt((s ?? "").replace(/,/g, "") || "0", 10);
-  return isNaN(n) ? 0 : Math.round(n / 100);
+  // 소형주는 순매수가 1억 미만인 경우가 많아 정수로 반올림하면 0 이 된다 → 소수 2자리(=100만원 단위) 유지
+  return isNaN(n) ? 0 : Math.round(n) / 100;
 }
 
 async function fetchKISInvestor(code: string): Promise<{
@@ -51,11 +52,15 @@ async function fetchKISInvestor(code: string): Promise<{
   const rows: InvestorRow[] = data.output ?? [];
 
   // 오늘 장중엔 빈값 → 데이터가 있는 가장 최근 영업일 사용
+  // 장 마감 직후엔 오늘 행이 0 으로 채워진 채 집계 전일 때가 있어 수량까지 모두 0 이면 건너뛴다
+  const filled = (r: InvestorRow) => [r.frgn_ntby_qty, r.orgn_ntby_qty, r.prsn_ntby_qty, r.frgn_ntby_tr_pbmn, r.orgn_ntby_tr_pbmn]
+    .some(v => (parseInt((v ?? "").replace(/,/g, "") || "0", 10) || 0) !== 0);
   const valid = rows.find(
     (r) =>
       r.frgn_ntby_tr_pbmn !== "" &&
       r.orgn_ntby_tr_pbmn !== "" &&
-      r.prsn_ntby_tr_pbmn !== ""
+      r.prsn_ntby_tr_pbmn !== "" &&
+      filled(r)
   );
   if (!valid) return null;
 

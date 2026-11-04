@@ -49,7 +49,9 @@ const PLAIN: Record<string, string> = {
 const eok = (v: number | null | undefined) => {
   if (v == null || !isFinite(v)) return "—";
   const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "-" : "";
-  return a >= 10000 ? `${s}${(a / 10000).toFixed(2)}조` : `${s}${Math.round(a).toLocaleString("ko-KR")}억`;
+  if (a >= 10000) return `${s}${(a / 10000).toFixed(2)}조`;
+  if (a > 0 && a < 1) return `${s}${Math.round(a * 10000).toLocaleString("ko-KR")}만`;
+  return `${s}${(a >= 100 ? Math.round(a) : Math.round(a * 10) / 10).toLocaleString("ko-KR")}억`;
 };
 const tone = (v: number | null | undefined) => (v == null ? "text-gray-500" : v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400");
 const when = (iso: string) => new Date(Date.parse(iso) + 9 * 3_600_000).toISOString().slice(5, 16).replace("T", " ").replace("-", "/");
