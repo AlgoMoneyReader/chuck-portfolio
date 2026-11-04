@@ -1,6 +1,18 @@
 -- AI 레이더 분석 결과 저장: 같은 날 같은 종목은 한 번만 생성하고 모든 회원이 함께 본다 (AI 비용 절약)
 -- Supabase SQL Editor 에 붙여넣고 Run. 여러 번 실행해도 안전하다.
 
+-- 운영자 확인 함수 (admin.sql 과 동일. 어느 파일을 먼저 실행해도 되도록 여기도 둔다)
+create table if not exists public.admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create or replace function public.is_admin() returns boolean
+language plpgsql stable security definer set search_path = public as $$
+begin
+  return exists(select 1 from admins where user_id = auth.uid());
+end $$;
+grant execute on function public.is_admin() to anon, authenticated;
+
 create table if not exists public.radar_reports (
   code text not null,
   day date not null,                 -- 한국 날짜
