@@ -17,7 +17,7 @@ interface ChartData {
 }
 interface FlowItem { type: string; label: string; netBuy: number; }
 interface Commentary { title: string; subtitle: string; summary?: string; reasons?: { title: string; body: string; sources: { title: string; url: string; source: string }[] }[]; bullets: string[]; updatedAt: string; }
-interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
+interface BreadthData { advance: number; decline: number; unchanged: number; total: number; upLimit?: number; downLimit?: number; asOf?: string; }
 interface NightFuturesPoint { time: string; price: number; full?: string; }
 interface NightFuturesData {
   label?: string;
@@ -47,6 +47,8 @@ function fmtFlow(n: number): string {
   return `${sign}${abs.toLocaleString("ko-KR")}억`;
 }
 
+const kstHM = (iso?: string) => new Date((iso ? Date.parse(iso) : Date.now()) + 9 * 3_600_000).toISOString().slice(11, 16);
+
 export default function ChartModal({ label, onClose }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
@@ -58,6 +60,7 @@ export default function ChartModal({ label, onClose }: Props) {
   const [, setLoading]                     = useState(true);
   const [, setError]                         = useState(false);
   const [flow, setFlow]                         = useState<FlowItem[] | null>(null);
+  const [flowAt, setFlowAt]                     = useState<string>("");
   const [flowLoading, setFlowLoading]           = useState(false);
   const [flowErr, setFlowErr]                   = useState("");
   const [commentary, setCommentary]             = useState<Commentary | null>(null);
@@ -85,7 +88,7 @@ export default function ChartModal({ label, onClose }: Props) {
     fetch(`/api/investor-flow?market=${label}`, { cache: "no-store" })
       .then(r => r.json().catch(() => null))
       .then(j => {
-        if (j?.flow) setFlow(j.flow);
+        if (j?.flow) { setFlow(j.flow); setFlowAt(kstHM(j.timestamp)); }
         else setFlowErr(Array.isArray(j?.debug) ? j.debug.join(" | ") : String(j?.debug ?? j?.error ?? "응답 없음"));
       })
       .catch(e => setFlowErr(String(e)))
@@ -138,10 +141,12 @@ export default function ChartModal({ label, onClose }: Props) {
   }, 15_000, { krxOnly: false });
   useMarketPoll(() => {
     fetch(`/api/investor-flow?market=${label}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => { if (j?.flow) setFlow(j.flow); }).catch(() => {});
+      .then(r => r.json()).then(j => { if (j?.flow) { setFlow(j.flow); setFlowAt(kstHM(j.timestamp)); } }).catch(() => {});
+  }, 60_000, { enabled: activeTab === "flow" && isIndex });
+  useMarketPoll(() => {
     fetch(`/api/market-breadth?market=${label}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null).then(j => { if (j?.advance != null) setBreadth(j); }).catch(() => {});
-  }, 60_000, { enabled: activeTab === "flow" && isIndex });
+  }, 20_000, { enabled: activeTab === "flow" && isIndex });
   useMarketPoll(() => {
     fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNightFutures(j); }).catch(() => {});
@@ -276,7 +281,7 @@ export default function ChartModal({ label, onClose }: Props) {
 
               {/* 당일 등락 현황 */}
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">당일 등락 현황</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">당일 등락 현황{breadth?.asOf && <span className="ml-2 normal-case tracking-normal text-gray-600 num">{breadth.asOf} 기준 · 실시간</span>}</p>
                 {breadthLoading ? (
                   <div className="h-16 bg-navy-border/40 rounded-xl animate-pulse" />
                 ) : breadth ? (
@@ -308,10 +313,12 @@ export default function ChartModal({ label, onClose }: Props) {
                     </div>
                     <div className="flex justify-between mt-1">
                       <span className="text-xs text-signal-green/70">
+                        {breadth.upLimit ? `상한 ${breadth.upLimit} · ` : ""}
                         {breadth.total > 0 ? `${((breadth.advance / breadth.total) * 100).toFixed(1)}%` : "-"}
                       </span>
                       <span className="text-xs text-signal-red/70">
                         {breadth.total > 0 ? `${((breadth.decline / breadth.total) * 100).toFixed(1)}%` : "-"}
+                        {breadth.downLimit ? ` · 하한 ${breadth.downLimit}` : ""}
                       </span>
                     </div>
                   </div>
@@ -322,7 +329,7 @@ export default function ChartModal({ label, onClose }: Props) {
 
               {/* 투자자별 순매수 */}
               <div>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">투자자별 순매수 (당일)</p>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-3">투자자별 순매수 (당일){flowAt && <span className="ml-2 normal-case tracking-normal text-gray-600 num">{flowAt} 기준 · 1분마다 갱신</span>}</p>
                 {flowLoading ? (
                   <div className="space-y-2">
                     {[0, 1, 2].map(i => <div key={i} className="h-16 bg-navy-border/40 rounded-xl animate-pulse" />)}
@@ -374,7 +381,7 @@ export default function ChartModal({ label, onClose }: Props) {
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-sm font-bold text-white">{commentary.title}</p>
                       <span className={`text-xs font-semibold num ${isPos ? "text-signal-green" : "text-signal-red"}`}>
-                        {commentary.subtitle}
+                        {changePct != null ? `${label} ${Math.abs(changePct).toFixed(2)}% ${changePct >= 0 ? "▲" : "▼"}` : commentary.subtitle}
                       </span>
                     </div>
                     {commentary.summary && <p className="text-sm text-white leading-relaxed mb-3">{commentary.summary}</p>}
@@ -404,7 +411,7 @@ export default function ChartModal({ label, onClose }: Props) {
                         ))}
                       </ul>
                     )}
-                    <p className="text-xs text-gray-600 mt-3 text-right">{commentary.updatedAt}</p>
+                    <p className="text-xs text-gray-600 mt-3 text-right">{commentary.updatedAt} · 10분마다 재분석</p>
                   </div>
                 ) : (
                   <p className="text-xs text-gray-500">시황 분석을 불러올 수 없습니다</p>

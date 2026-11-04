@@ -1,12 +1,31 @@
 import { NextResponse } from "next/server";
+import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
 
-interface BreadthData { advance: number; decline: number; unchanged: number; total: number; }
+interface BreadthData { advance: number; decline: number; unchanged: number; total: number; upLimit?: number; downLimit?: number; asOf?: string; }
 
-let cache: { key: string; data: BreadthData; at: number } | null = null;
-const TTL = 60_000;
+// KIS 업종(지수) 현재가: 상승·하락·보합·상한·하한 종목 수를 실시간으로 준다
+async function tryKIS(code: string): Promise<BreadthData | null> {
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000", {
+      FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code === "KOSDAQ" ? "1001" : "0001",
+    });
+    const o = (Array.isArray(j.output) ? j.output[0] : j.output) as Record<string, string> | undefined;
+    if (!o) return null;
+    const advance = num(o.ascn_issu_cnt) ?? 0, decline = num(o.down_issu_cnt) ?? 0, unchanged = num(o.stnr_issu_cnt) ?? 0;
+    if (advance + decline === 0) return null;
+    return {
+      advance, decline, unchanged, total: advance + decline + unchanged,
+      upLimit: num(o.uplm_issu_cnt) ?? 0, downLimit: num(o.lslm_issu_cnt) ?? 0,
+      asOf: new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 16),
+    };
+  } catch { return null; }
+}
+
+const cache: Record<string, { key: string; data: BreadthData; at: number }> = {};
+const TTL = 20_000;
 
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15";
 
@@ -71,11 +90,13 @@ export async function GET(request: Request) {
   const code   = market === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
 
   const cacheKey = `${code}-${Math.floor(Date.now() / TTL)}`;
-  if (cache && cache.key === cacheKey) {
-    return NextResponse.json({ market, ...cache.data, cached: true });
+  const hit = cache[code];
+  if (hit && hit.key === cacheKey) {
+    return NextResponse.json({ market, ...hit.data, cached: true });
   }
 
   const result =
+    (await tryKIS(code)) ??
     (await tryNaverMobileAPI(code)) ??
     (await tryNaverHTML(code));
 
@@ -83,6 +104,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "등락 데이터를 불러올 수 없습니다" }, { status: 500 });
   }
 
-  cache = { key: cacheKey, data: result, at: Date.now() };
+  cache[code] = { key: cacheKey, data: result, at: Date.now() };
   return NextResponse.json({ market, ...result, timestamp: new Date().toISOString() });
 }
