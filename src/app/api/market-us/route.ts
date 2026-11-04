@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,17 @@ const DOW30: Record<string, string> = {
   NKE:  "Nike",            PG:   "P&G",               TRV:  "Travelers",
   UNH:  "UnitedHealth",    V:    "Visa",              VZ:   "Verizon",
   WMT:  "Walmart",         AMZN: "Amazon",            SHW:  "Sherwin-Williams",
+};
+
+// ── 인기 ETF·레버리지 (국내 투자자 거래 많은 종목) ─────────────────────────────
+const POPULAR_ETFS: Record<string, string> = {
+  SOXL: "반도체 3배", SOXS: "반도체 -3배", TQQQ: "나스닥100 3배", SQQQ: "나스닥100 -3배", TSLL: "테슬라 2배",
+  NVDL: "엔비디아 2배", NVDU: "엔비디아 2배(Direxion)", CONL: "코인베이스 2배", MSTU: "마이크로스트래티지 2배",
+  AMDL: "AMD 2배", PLTU: "팔란티어 2배", TSLQ: "테슬라 -1배", QLD: "나스닥100 2배", SSO: "S&P500 2배",
+  UPRO: "S&P500 3배", SPXL: "S&P500 3배(Direxion)", TECL: "기술주 3배", FNGU: "FANG+ 3배", TMF: "미국채20년 3배",
+  LABU: "바이오 3배", YINN: "중국 3배", BITX: "비트코인 2배", ETHU: "이더리움 2배",
+  QQQ: "나스닥100", SPY: "S&P500", VOO: "S&P500(뱅가드)", SCHD: "배당성장", JEPI: "커버드콜 S&P", JEPQ: "커버드콜 나스닥",
+  TLT: "미국채20년", IBIT: "비트코인 현물", SMH: "반도체", SOXX: "반도체(iShares)", GLD: "금",
 };
 
 // ── SPDR sector ETFs ──────────────────────────────────────────────────────────
@@ -50,6 +62,8 @@ type Quote = {
   price: number; change: number; changePct: number; volume: number;
   dollarVolume?: number;
   marketState: string;
+  dayMarketPrice?: number | null;
+  dayMarketChangePct?: number | null;
   preMarketPrice:    number | null;
   preMarketChangePct: number | null;
   postMarketPrice:   number | null;
@@ -230,7 +244,7 @@ async function topByDollarVolume(index: string): Promise<Quote[]> {
   return quotes
     .map(q => (index === "DOW" ? { ...q, name: DOW30[q.code] ?? q.name } : q))
     .sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0))
-    .slice(0, 10)
+    .slice(0, 30)
     .map((q, i) => ({ ...q, rank: i + 1 }));
 }
 
@@ -270,9 +284,41 @@ async function extendedOne(q: Quote): Promise<Quote> {
     return out;
   } catch { return q; }
 }
-async function withExtended(list: Quote[]): Promise<Quote[]> {
-  return Promise.all(list.map(q => (q.preMarketPrice != null || q.postMarketPrice != null ? q : extendedOne(q))));
+// ── 데이마켓(미국 주간거래, 한국 낮 시간): KIS 해외주식 현재가의 주간거래 거래소 코드(BAQ 나스닥·BAY 뉴욕·BAA 아멕스) ──
+const dayExcd = new Map<string, string>(); // 종목 → 맞았던 거래소 코드
+function inDaySession(): boolean {
+  const k = new Date(Date.now() + 9 * 3_600_000);
+  const wd = k.getUTCDay(), m = k.getUTCHours() * 60 + k.getUTCMinutes();
+  return wd >= 1 && wd <= 5 && m >= 9 * 60 && m <= 18 * 60;   // 서머타임에 따라 09~17시 / 10~18시
 }
+async function dayMarketOne(q: Quote): Promise<Quote> {
+  const tries = dayExcd.get(q.code) ? [dayExcd.get(q.code)!] : ["BAQ", "BAY", "BAA"];
+  for (const excd of tries) {
+    try {
+      const j = await kisGet("/uapi/overseas-price/v1/quotations/price", "HHDFS00000300", { AUTH: "", EXCD: excd, SYMB: q.code.replace("-", ".") });
+      const o = j.output as Record<string, string> | undefined;
+      const last = num(o?.last);
+      if (!last) continue;
+      dayExcd.set(q.code, excd);
+      return { ...q, dayMarketPrice: last, dayMarketChangePct: parseFloat((((last - q.price) / q.price) * 100).toFixed(2)) };
+    } catch { /* 다음 거래소 */ }
+  }
+  return q;
+}
+async function withDayMarket(list: Quote[]): Promise<Quote[]> {
+  if (!inDaySession() || !process.env.KIS_APP_KEY) return list;
+  const out: Quote[] = new Array(list.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: 5 }, async () => { while (i < list.length) { const k = i++; out[k] = await dayMarketOne(list[k]); } }));
+  return out;
+}
+
+async function withExtended(list: Quote[]): Promise<Quote[]> {
+  const ext = await Promise.all(list.map(q => (q.preMarketPrice != null || q.postMarketPrice != null ? q : extendedOne(q))));
+  return withDayMarket(ext);
+}
+
+const resCache = new Map<string, { at: number; body: object }>();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -280,6 +326,26 @@ export async function GET(request: Request) {
   const index = searchParams.get("index") ?? "SP500";      // SP500|NASDAQ|DOW
 
   const ts = new Date().toISOString();
+  const ck = `${type}:${index}`;
+  const hit = resCache.get(ck);
+  if (hit && Date.now() - hit.at < 30_000) return NextResponse.json(hit.body);
+  const send = (body: { stocks: Quote[] } & Record<string, unknown>) => {
+    if (body.stocks.length) resCache.set(ck, { at: Date.now(), body });
+    return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
+  };
+
+  // ⓪ 인기 ETF·레버리지: 거래대금 순
+  if (type === "etf") {
+    const quotes = await fetchSparkQuotes(Object.keys(POPULAR_ETFS));
+    const sorted = quotes
+      .map(q => ({ ...q, name: `${POPULAR_ETFS[q.code] ?? q.name}` }))
+      .sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0))
+      .slice(0, 30)
+      .map((q, i) => ({ ...q, rank: i + 1 }));
+    const body = { stocks: await withExtended(sorted), timestamp: ts, basis: "dollarVolume" };
+    resCache.set(ck, { at: Date.now(), body });
+    return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
+  }
 
   // ① 섹터 ETF (pre/post 불필요)
   if (type === "sector") {
@@ -295,7 +361,7 @@ export async function GET(request: Request) {
   // ② 거래대금(가격×거래량) 순위
   if (type === "actives") {
     const stocks = await withExtended(await topByDollarVolume(index));
-    return NextResponse.json({ stocks, timestamp: ts, basis: "dollarVolume" }, { headers: { "Cache-Control": "no-store" } });
+    return send({ stocks, timestamp: ts, basis: "dollarVolume" });
   }
 
   // ③ DOW 30 — v7/finance/quote로 교체 (pre/post 포함)
@@ -308,22 +374,22 @@ export async function GET(request: Request) {
         if (type === "losers")  return a.changePct - b.changePct;
         return b.volume - a.volume;
       })
-      .slice(0, 10)
+      .slice(0, 30)
       .map((q, i) => ({ ...q, rank: i + 1 }));
-    return NextResponse.json({ stocks: await withExtended(sorted), timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+    return send({ stocks: await withExtended(sorted), timestamp: ts });
   }
 
   // ③ NASDAQ — custom screener, fallback to S&P500
   if (index === "NASDAQ") {
-    const stocks = await fetchNasdaqScreener(type as "gainers" | "losers" | "actives", 10);
+    const stocks = await fetchNasdaqScreener(type as "gainers" | "losers" | "actives", 30);
     if (stocks.length > 0)
-      return NextResponse.json({ stocks: await withExtended(stocks), timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+      return send({ stocks: await withExtended(stocks), timestamp: ts });
   }
 
   // ④ S&P500 (or NASDAQ fallback)
   const scrId =
     type === "gainers" ? "day_gainers" :
     type === "losers"  ? "day_losers"  : "most_actives";
-  const stocks = await withExtended(await fetchScreener(scrId, 10));
-  return NextResponse.json({ stocks, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+  const stocks = await withExtended(await fetchScreener(scrId, 30));
+  return send({ stocks, timestamp: ts });
 }
