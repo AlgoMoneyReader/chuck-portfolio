@@ -27,6 +27,8 @@ interface QuoteData {
   preMarketChangePct: number | null;
   postMarketPrice: number | null;
   postMarketChangePct: number | null;
+  dayMarketPrice?: number | null;
+  dayMarketChangePct?: number | null;
 }
 
 interface InvestorData {
@@ -278,6 +280,8 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
             preMarketChangePct: j.preMarketChangePct ?? null,
             postMarketPrice: j.postMarketPrice ?? null,
             postMarketChangePct: j.postMarketChangePct ?? null,
+            dayMarketPrice: j.dayMarketPrice ?? null,
+            dayMarketChangePct: j.dayMarketChangePct ?? null,
           });
           // currency는 isUSStock 플래그로 fmtPrice에서 처리
         }
@@ -492,8 +496,22 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                   </span>
                 </div>
 
+                {/* 미국 시간외: 데이마켓 > 프리 > 애프터 */}
+                {isUSStock && (() => {
+                  const d = quote.dayMarketPrice != null, pre = !d && quote.preMarketPrice != null && quote.marketState === "PRE", post = !d && !pre && quote.postMarketPrice != null;
+                  const p = d ? quote.dayMarketPrice : pre ? quote.preMarketPrice : post ? quote.postMarketPrice : null;
+                  const c = d ? quote.dayMarketChangePct : pre ? quote.preMarketChangePct : post ? quote.postMarketChangePct : null;
+                  if (p == null || c == null) return null;
+                  return (
+                    <div className="mt-1.5">
+                      <span className={`text-xs px-2.5 py-1 rounded-full border num ${d ? "text-cyan-brand bg-cyan-brand/10 border-cyan-brand/30" : pre ? "text-amber-300 bg-amber-400/10 border-amber-400/30" : "text-purple-300 bg-purple-400/10 border-purple-400/30"}`}>
+                        {d ? "데이마켓" : pre ? "프리마켓" : quote.marketState === "POST" ? "애프터마켓" : "애프터 종가"} {fmtPrice(p)} {c >= 0 ? "▲" : "▼"} {Math.abs(c).toFixed(2)}%
+                      </span>
+                    </div>
+                  );
+                })()}
                 {/* 시간외 가격 pill */}
-                {currentSession === "NXT_PRE" && quote.preMarketPrice && (
+                {!isUSStock && currentSession === "NXT_PRE" && quote.preMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-blue-400 bg-blue-400/15 border-blue-400/30">
                       프리마켓 {fmtPrice(quote.preMarketPrice)}
@@ -503,7 +521,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                     </span>
                   </div>
                 )}
-                {currentSession === "NXT_POST" && quote.postMarketPrice && (
+                {!isUSStock && currentSession === "NXT_POST" && quote.postMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
                       애프터마켓 {fmtPrice(quote.postMarketPrice)}

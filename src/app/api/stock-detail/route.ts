@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { koreanName } from "@/lib/stockList";
+import { extendedOne, dayMarketOne, inDaySession, type ExtFields } from "@/lib/usExtended";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -42,9 +43,20 @@ export async function GET(request: Request) {
     const changePct = prev ? (change / prev) * 100 : 0;
     const currency  = meta.currency ?? (isUS ? "USD" : "KRW");
 
-    // NXT 시간외 데이터 (Yahoo Finance pre/post market fields)
-    const preMarketPrice  = (meta.preMarketPrice  as number | null | undefined) ?? null;
-    const postMarketPrice = (meta.postMarketPrice as number | null | undefined) ?? null;
+    // 시간외: 미국은 목록과 같은 방식(프리·애프터 차트 + 데이마켓 KIS), 국내는 Yahoo 메타 값
+    let preMarketPrice  = (meta.preMarketPrice  as number | null | undefined) ?? null;
+    let postMarketPrice = (meta.postMarketPrice as number | null | undefined) ?? null;
+    let dayMarketPrice: number | null = null, dayMarketChangePct: number | null = null;
+    let marketState: string = meta.marketState ?? "CLOSED";
+    if (isUS) {
+      let e: ExtFields = await extendedOne<ExtFields>({ code: symbol, price });
+      if (inDaySession() && process.env.KIS_APP_KEY) e = await dayMarketOne(e);
+      preMarketPrice = e.preMarketPrice ?? preMarketPrice;
+      postMarketPrice = e.postMarketPrice ?? postMarketPrice;
+      dayMarketPrice = e.dayMarketPrice ?? null;
+      dayMarketChangePct = e.dayMarketChangePct ?? null;
+      marketState = e.marketState ?? marketState;
+    }
 
     const preMarketChangePct = preMarketPrice && price
       ? parseFloat(((preMarketPrice - price) / price * 100).toFixed(2)) : null;
@@ -78,7 +90,9 @@ export async function GET(request: Request) {
       volume:     meta.regularMarketVolume ?? 0,
       week52High: fmt(week52High),
       week52Low:  week52Low === Infinity ? 0 : fmt(week52Low),
-      marketState: meta.marketState ?? "CLOSED",
+      marketState,
+      dayMarketPrice: dayMarketPrice != null ? fmt(dayMarketPrice) : null,
+      dayMarketChangePct,
       preMarketPrice:   preMarketPrice  ? fmt(preMarketPrice)  : null,
       preMarketChangePct,
       postMarketPrice:  postMarketPrice ? fmt(postMarketPrice) : null,

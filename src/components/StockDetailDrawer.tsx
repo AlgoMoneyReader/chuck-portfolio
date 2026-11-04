@@ -12,6 +12,7 @@ interface StockDetail {
   isUS: boolean; currency: string;
   preMarketPrice: number | null;  preMarketChangePct: number | null;
   postMarketPrice: number | null; postMarketChangePct: number | null;
+  dayMarketPrice?: number | null; dayMarketChangePct?: number | null;
 }
 
 interface NewsSummary { summary: string; headlines: string[] }
@@ -85,9 +86,13 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
     ? ((data.price - data.week52Low) / (data.week52High - data.week52Low)) * 100
     : 50;
 
-  const extPrice = data?.postMarketPrice  ?? data?.preMarketPrice  ?? null;
-  const extPct   = data?.postMarketChangePct ?? data?.preMarketChangePct ?? null;
-  const extLabel = data?.postMarketPrice ? "시간후" : "시간전";
+  // 목록과 같은 우선순위: 데이마켓(한국 낮) > 프리 > 애프터
+  const hasDay  = data?.dayMarketPrice != null;
+  const hasPre  = !hasDay && data?.preMarketPrice != null && data?.marketState === "PRE";
+  const hasPost = !hasDay && !hasPre && data?.postMarketPrice != null;
+  const extPrice = hasDay ? data!.dayMarketPrice! : hasPre ? data!.preMarketPrice : hasPost ? data!.postMarketPrice : null;
+  const extPct   = hasDay ? data!.dayMarketChangePct ?? null : hasPre ? data!.preMarketChangePct : hasPost ? data!.postMarketChangePct : null;
+  const extLabel = hasDay ? "데이마켓" : hasPre ? "프리마켓" : data?.marketState === "POST" ? "애프터마켓" : "애프터 종가";
 
   return (
     <>
@@ -173,13 +178,15 @@ export default function StockDetailDrawer({ code, market, name, onClose }: Props
                         })
                       </p>
                     </div>
-                    {isUS && extPrice && extPct !== null && (
-                      <p className="text-xs text-gray-500 mt-0.5 num">
-                        {extLabel} {fmtUSD(extPrice)}
-                        <span className={extPct >= 0 ? "text-signal-green ml-1" : "text-signal-red ml-1"}>
+                    {isUS && extPrice != null && extPct != null && (
+                      <div className="mt-2 inline-flex items-baseline gap-2 rounded-lg bg-navy-sub/60 px-3 py-1.5 num">
+                        <span className={`text-xs font-bold ${hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
+                        <span className="text-base font-bold text-white">{fmtUSD(extPrice)}</span>
+                        <span className={`text-sm font-semibold ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                           {extPct >= 0 ? "▲" : "▼"}{Math.abs(extPct).toFixed(2)}%
                         </span>
-                      </p>
+                        <span className="text-[10px] text-gray-500">정규장 종가 대비</span>
+                      </div>
                     )}
                   </div>
 
