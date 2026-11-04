@@ -24,7 +24,7 @@ export interface MarketEvent {
   result?: {
     eps?: string | null; epsForecast?: string | null; surprisePct?: number | null;   // 미국
     sales?: number | null; op?: number | null; net?: number | null;                  // 국내(억원)
-    salesYoY?: number | null; opYoY?: number | null;
+    salesYoY?: number | null; opYoY?: number | null; opTurn?: string | null;
   };
 }
 
@@ -178,7 +178,7 @@ const krEvents = unstable_cache(async (today: string): Promise<{ items: MarketEv
 // 잠정실적 원문 결과(공시는 바뀌지 않으므로 오래 보관)
 const prelimOf = unstable_cache(async (rcept: string) => {
   try { return await fetchPrelim(rcept, 8000); } catch { return null; }
-}, ["prelim-result-v1"], { revalidate: 30 * 86400 });
+}, ["prelim-result-v2"], { revalidate: 30 * 86400 });
 
 // 한국 시간 기준: 미국 장 마감 후 발표는 새벽(~06시), 장 시작 전 발표는 밤(~22시), 시각 모름은 맨 뒤
 const sortTime = (t: string) => (t === "장후" ? "06:00" : t === "장전" ? "22:00" : t || "99:99");
@@ -199,7 +199,7 @@ export async function GET() {
   await pool(targets, 8, async e => {
     if (Date.now() - reqStart > 48_000) return;   // 60초 제한 안에서만
     const p = await prelimOf(e.rcept!);
-    if (p && (p.sales != null || p.op != null)) e.result = { sales: p.sales, op: p.op, net: p.net, salesYoY: p.salesYoY, opYoY: p.opYoY };
+    if (p && (p.sales != null || p.op != null)) e.result = { sales: p.sales, op: p.op, net: p.net, salesYoY: p.salesYoY, opYoY: p.opYoY, opTurn: p.opTurn ?? null };
   });
   const kr = krRes.items;
   if (krRes.partial) errors.push("국내: 시간 제한으로 일부 공시만 반영");
