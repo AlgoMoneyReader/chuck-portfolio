@@ -65,6 +65,27 @@ function inSession() {
   return ![0, 6].includes(k.getUTCDay()) && m >= 9 * 60 && m <= 15 * 60 + 35;
 }
 
+// ── 코스피200 선물 투자자별 (KIS 시장별 투자자매매동향(시세) FHPTJ04030000) ──
+// 공식 문서에서 선물용 코드값을 확인하지 못해 후보를 차례로 시도하고 처음 맞는 조합을 기억한다
+const FUT_CANDIDATES: [string, string][] = [["K2I", "F001"], ["999", "S001"], ["KSP", "F001"], ["K2I", "S001"], ["999", "F001"]];
+let futWorking: [string, string] | null = null;
+async function futuresFlow(): Promise<{ foreign: number; institution: number; individual: number; foreignQty: number; institutionQty: number; individualQty: number; params: string } | null> {
+  const list = futWorking ? [futWorking, ...FUT_CANDIDATES.filter(c => c !== futWorking)] : FUT_CANDIDATES;
+  for (const [a, b] of list) {
+    try {
+      const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-investor-time-by-market", "FHPTJ04030000", { FID_INPUT_ISCD: a, FID_INPUT_ISCD_2: b });
+      const r = (Array.isArray(j.output) ? j.output[0] : j.output) as Row | undefined;
+      if (!r || r.frgn_ntby_tr_pbmn == null) continue;
+      const v = { foreign: eok(r.frgn_ntby_tr_pbmn), institution: eok(r.orgn_ntby_tr_pbmn), individual: eok(r.prsn_ntby_tr_pbmn),
+        foreignQty: num(r.frgn_ntby_qty) ?? 0, institutionQty: num(r.orgn_ntby_qty) ?? 0, individualQty: num(r.prsn_ntby_qty) ?? 0, params: `${a}/${b}` };
+      if (Math.abs(v.foreign) + Math.abs(v.individual) + Math.abs(v.institution) === 0) continue;
+      futWorking = [a, b];
+      return v;
+    } catch { /* 다음 후보 */ }
+  }
+  return null;
+}
+
 const cache: { at: number; body: object | null } = { at: 0, body: null };
 const TTL = 60_000;
 
@@ -87,6 +108,9 @@ export async function GET() {
       daily[mk] = rows.slice(0, 10).reverse().map(x => ({ date: x.stck_bsop_date, ...core(x) }));
     } catch (e) { errors.push(`${mk}: ${String(e).slice(0, 80)}`); investors[mk] = null; daily[mk] = []; }
   }
+
+  const futures = await futuresFlow().catch(() => null);
+  if (!futures) errors.push("선물: 코드 확인 필요");
 
   const sectorRows = await pool(SECTORS, 5, async ([code, name]) => {
     try {
@@ -120,7 +144,7 @@ export async function GET() {
     } else if (error && !/does not exist|Could not find|relation/.test(error.message)) errors.push(`시간별: ${error.message.slice(0, 60)}`);
   }
 
-  const body = { investors, daily, sectors, intraday, asOf: kstNow().toISOString().slice(11, 16), errors };
+  const body = { investors, daily, sectors, intraday, futures, asOf: kstNow().toISOString().slice(11, 16), errors };
   if (investors.KOSPI || sectors.length) { cache.at = Date.now(); cache.body = body; }
   return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
 }

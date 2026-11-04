@@ -37,7 +37,10 @@ export default function AfterHoursWidget() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">주요 종목 시세</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">주요 종목 시세</h2>
+        <Link href="/flow#market" className="text-xs text-gray-400 hover:text-cyan-brand">더보기 ›</Link>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {loading
           ? Array.from({ length: 6 }).map((_, i) => (

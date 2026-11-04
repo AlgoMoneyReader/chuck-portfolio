@@ -12,8 +12,8 @@ export default function FlowPage() {
         <p className="text-xs text-gray-500 mt-0.5">거래주체별 · 시간별 · 업종별 수급과 종목 검색·시장 동향을 한곳에서</p>
       </div>
       <FlowBoard />
-      <StockSearchPanel />
-      <MarketSummary />
+      <div id="search" className="scroll-mt-32"><StockSearchPanel /></div>
+      <div id="market" className="scroll-mt-32"><MarketSummary /></div>
     </main>
   );
 }
