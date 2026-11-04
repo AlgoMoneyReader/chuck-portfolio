@@ -28,7 +28,8 @@ interface QuoteData {
 interface ChartPoint { date: string; close: number | null; }
 
 interface InvestorData {
-  foreign: number; institution: number; individual: number;
+  foreign: number; institution: number; individual: number | null;
+  confirmed?: { foreign: number; institution: number; individual: number };
   foreignQty: number; institutionQty: number; individualQty: number;
   invDate: string;
   volumeRatio: number; week52Pct: number;
@@ -658,9 +659,9 @@ export default function StockSearchPanel() {
               ) : investor ? (
                 <div className="space-y-2">
                   {[
-                    { label:"외국인", icon:"🌐", amt:investor.foreign,     qty:investor.foreignQty ?? 0 },
-                    { label:"기관",   icon:"🏦", amt:investor.institution,  qty:investor.institutionQty ?? 0 },
-                    { label:"개인",   icon:"👤", amt:investor.individual,   qty:investor.individualQty ?? 0 },
+                    { label:"외국인", icon:"🌐", amt:investor.confirmed?.foreign ?? investor.foreign,     qty:investor.foreignQty ?? 0 },
+                    { label:"기관",   icon:"🏦", amt:investor.confirmed?.institution ?? investor.institution,  qty:investor.institutionQty ?? 0 },
+                    { label:"개인",   icon:"👤", amt:investor.confirmed?.individual ?? investor.individual ?? 0,   qty:investor.individualQty ?? 0 },
                   ].map(({ label, icon, amt, qty }) => {
                     const val = supplyTab === "amount" ? amt : qty;
                     const pos = val >= 0;

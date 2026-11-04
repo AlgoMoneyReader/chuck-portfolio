@@ -46,7 +46,8 @@ interface TechData {
 interface InvData {
   foreign: number;
   institution: number;
-  individual: number;
+  individual: number | null;
+  flowBasis?: { type: "confirmed" | "live"; label: string };
   foreign5D: number;
   foreign10D: number;
   foreign20D: number;
@@ -514,7 +515,9 @@ export default function StockSignalReport({ ticker, market = "KS" }: StockSignal
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h3 className="card-title">수급 흐름</h3>
-            {inv.invDate && (
+            {inv.flowBasis ? (
+              <span className={`text-[10px] num ${inv.flowBasis.type === "live" ? "text-gold" : "text-gray-600"}`}>{inv.flowBasis.label} 기준</span>
+            ) : inv.invDate && (
               <span className="text-[10px] text-gray-600 num">
                 {inv.invDate.slice(0, 4)}.{inv.invDate.slice(4, 6)}.{inv.invDate.slice(6, 8)} 기준
               </span>
@@ -530,8 +533,8 @@ export default function StockSignalReport({ ticker, market = "KS" }: StockSignal
             ].map(({ label, val }) => (
               <div key={label} className="bg-navy-sub/60 rounded-lg px-2 py-2 text-center">
                 <p className="text-[10px] text-gray-500 mb-0.5">{label}</p>
-                <p className={`text-sm font-bold num ${val >= 0 ? "text-cyan-400" : "text-red-400"}`}>
-                  {val >= 0 ? "+" : ""}{val.toLocaleString("ko-KR")}억
+                <p className={`text-sm font-bold num ${val == null ? "text-gray-500" : val >= 0 ? "text-cyan-400" : "text-red-400"}`}>
+                  {val == null ? "—" : `${val >= 0 ? "+" : ""}${val.toLocaleString("ko-KR")}억`}
                 </p>
               </div>
             ))}
