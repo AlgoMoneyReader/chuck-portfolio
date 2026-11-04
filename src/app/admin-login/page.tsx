@@ -93,7 +93,7 @@ function LoginForm() {
         </form>
 
         <p className="text-center text-xs text-gray-700">
-          알읽남 Investment Dashboard
+          알읽남 증시 레이더
         </p>
       </div>
     </main>

@@ -18,7 +18,7 @@ export default function Header({ lastUpdated }: HeaderProps) {
             <h1 className="text-sm font-bold text-white leading-tight">
               Chuck Portfolio
             </h1>
-            <p className="text-[10px] text-gray-500 leading-tight">알읽남 · 개인 투자 대시보드</p>
+            <p className="text-[10px] text-gray-500 leading-tight">알읽남 · 증시 레이더</p>
           </div>
         </div>
 

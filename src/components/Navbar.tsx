@@ -13,7 +13,7 @@ export default function Navbar() {
           <Image src="/logo-mark.png" alt="" width={30} height={30} priority
             className="rounded-lg ring-1 ring-white/10" />
           <span className="text-gold font-black text-[17px] tracking-tight">알읽남</span>
-          <span className="text-electric-blue/60 text-xs hidden sm:block font-medium">@alliknam</span>
+          <span className="text-gray-300 text-[13px] font-semibold tracking-tight">증시 레이더</span>
         </Link>
 
         <div className="flex items-center gap-1">

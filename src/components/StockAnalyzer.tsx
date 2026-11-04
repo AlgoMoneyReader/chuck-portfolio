@@ -211,7 +211,7 @@ ${bodyHTML}
   이 리포트는 알읽남 AI 분석 시스템(Gemini 2.5 Flash + Google Search Grounding)이 생성한 자료입니다.
   투자 의사결정의 참고 자료로만 활용하시기 바라며, 실제 투자에 따른 손익은 투자자 본인에게 귀속됩니다.
   본 리포트의 정보는 공개된 자료를 기반으로 하며, 투자 권유를 목적으로 하지 않습니다.
-  © 알읽남 Investment Dashboard · ${date}
+  © 알읽남 증시 레이더 · ${date}
 </div>
 
 <script>window.onload = () => { window.print(); };<\/script>

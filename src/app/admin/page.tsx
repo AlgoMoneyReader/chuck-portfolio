@@ -27,7 +27,7 @@ export default function AdminPage() {
       <PortfolioManager />
 
       <footer className="text-center text-xs text-gray-600 py-4 border-t border-navy-border">
-        알읽남 Investment Dashboard · Admin View
+        알읽남 증시 레이더 · Admin View
       </footer>
     </main>
   );
