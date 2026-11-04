@@ -13,6 +13,7 @@ const SYMBOL_MAP: Record<string, string> = {
   "다우 선물":    "YM=F",
   "다우존스":     "^DJI",
   "러셀 2000":   "^RUT",
+  "필라델피아 반도체": "^SOX",
   "금":          "GC=F",
   "WTI 원유":    "CL=F",
   "USD/KRW":    "KRW=X",

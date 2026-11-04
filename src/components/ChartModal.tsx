@@ -396,7 +396,7 @@ export default function ChartModal({ label, onClose }: Props) {
                   {(nightFutures.candles?.length ?? 0) > 0 ? (
                     <div className="flex-1 min-h-0 flex flex-col">
                       <div className="flex gap-1 pb-1 shrink-0 overflow-x-auto scrollbar-none">
-                        {TIMEFRAMES.filter(([k]) => !["D", "W", "M"].includes(k)).map(([k, l]) => (
+                        {TIMEFRAMES.filter(([k]) => k !== "M").map(([k, l]) => (
                           <button key={k} onClick={() => setFutTf(k)}
                             className={`px-3 py-1 text-xs rounded-lg whitespace-nowrap ${futTf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 font-semibold" : "text-gray-500 hover:text-gray-300"}`}>{l}</button>
                         ))}

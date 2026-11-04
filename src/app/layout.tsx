@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import PricePoller from "@/components/PricePoller";
 import BottomTabBar from "@/components/BottomTabBar";
 import MarketTicker from "@/components/MarketTicker";
+import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
@@ -34,8 +35,10 @@ export default function RootLayout({
         {/* 전역 실시간 시세 폴링 — 렌더링 없음, 5초마다 Zustand 스토어 업데이트 */}
         <PricePoller />
         <AuthProvider>
-          <Navbar />
-          <MarketTicker />
+          <StickyHeader>
+            <Navbar />
+            <MarketTicker />
+          </StickyHeader>
           {children}
           <BottomTabBar />
         </AuthProvider>

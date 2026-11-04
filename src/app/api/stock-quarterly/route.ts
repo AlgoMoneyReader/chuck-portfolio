@@ -86,7 +86,7 @@ const load = unstable_cache(async (code: string) => {
       sales: eok(won(rep.sales?.[c])), op: eok(won(rep.op?.[c])), net: eok(won(rep.net?.[c])),
     }));
   }
-  return { quarters: quarters.slice(-6), annual: annual.filter(a => a.sales != null || a.op != null) };
+  return { quarters: quarters.slice(-8), annual: annual.filter(a => a.sales != null || a.op != null) };
 }, ["dart-quarterly-v1"], { revalidate: 12 * 3600 });
 
 export async function GET(request: Request) {

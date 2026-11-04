@@ -227,6 +227,32 @@ async function tryYahoo(): Promise<object | null> {
   return null;
 }
 
+// 일봉·주봉: KIS 선물 일별 차트(FHKIF03020100). 최근월물이라 상장 이후 기간만 있다
+const dailyCache: Record<string, { at: number; candles: object[] }> = {};
+async function dailyCandles(code: string, mkt: string, period: "D" | "W"): Promise<object[]> {
+  const key = `${code}-${mkt}-${period}`;
+  const hit = dailyCache[key];
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.candles;
+  const d8 = (off: number) => new Date(Date.now() + 9 * 3_600_000 - off * 86_400_000).toISOString().slice(0, 10).replace(/-/g, "");
+  for (const m of mkt === "F" ? ["F"] : [mkt, "F"]) {
+    try {
+      const j = await kisGet("/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice", "FHKIF03020100", {
+        FID_COND_MRKT_DIV_CODE: m, FID_INPUT_ISCD: code, FID_INPUT_DATE_1: d8(period === "D" ? 365 : 730), FID_INPUT_DATE_2: d8(0), FID_PERIOD_DIV_CODE: period,
+      });
+      const candles = ((j.output2 ?? []) as Record<string, string>[])
+        .filter(r => r.stck_bsop_date && num(r.futs_prpr) > 0)
+        .map(r => ({
+          time: `${r.stck_bsop_date.slice(0, 4)}-${r.stck_bsop_date.slice(4, 6)}-${r.stck_bsop_date.slice(6, 8)}`,
+          open: num(r.futs_oprc) || num(r.futs_prpr), high: num(r.futs_hgpr) || num(r.futs_prpr),
+          low: num(r.futs_lwpr) || num(r.futs_prpr), close: num(r.futs_prpr), volume: num(r.acml_vol) || 0,
+        }))
+        .sort((a, b) => a.time.localeCompare(b.time));
+      if (candles.length) { dailyCache[key] = { at: Date.now(), candles }; return candles; }
+    } catch { /* 다음 시장코드 */ }
+  }
+  return [];
+}
+
 // tf 가 있으면 캔들 차트용으로 묶은 봉을 함께 돌려준다
 function withTf(data: object, tf: string | null): object {
   const d = data as { candles?: Candle[]; previousClose?: number; label?: string };
@@ -239,6 +265,13 @@ export async function GET(request: Request) {
   const session = sp.get("session") === "day" ? "day" : "night";
   const tf = sp.get("tf");
   const hit = cache[session];
+  if (tf === "D" || tf === "W") {
+    let base = hit?.data as { code?: string; market?: string; previousClose?: number; label?: string } | undefined;
+    if (!base) { const dbg: string[] = []; base = ((await tryKIS(dbg, session)) ?? undefined) as typeof base; if (base) cache[session] = { data: base, at: Date.now() }; }
+    if (!base?.code) return NextResponse.json({ candles: [], error: "선물 종목 정보를 찾지 못했습니다" });
+    const candles = await dailyCandles(base.code, base.market ?? "F", tf);
+    return NextResponse.json({ ...base, points: [], candles, prevClose: null, source: `${base.label ?? "KIS"} · ${tf === "D" ? "일봉" : "주봉"}` });
+  }
   if (hit && Date.now() - hit.at < TTL) {
     return NextResponse.json({ ...withTf(hit.data, tf), cached: true });
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+import { OPEN_CHART_EVENT } from "./MarketTicker";
 const ChartModal = lazy(() => import("./ChartModal"));
 
 interface IndexData {
@@ -17,6 +18,7 @@ interface MarketData {
   nasdaq:  IndexData | null;
   dow:     IndexData | null;
   russell: IndexData | null;
+  sox?:    IndexData | null;
   usdKrw:  IndexData | null;
   esFut:   IndexData | null;
   nqFut:   IndexData | null;
@@ -27,7 +29,7 @@ interface MarketData {
 }
 
 const CHART_LABELS = new Set([
-  "KOSPI", "KOSDAQ", "S&P 500", "NASDAQ", "다우존스", "러셀 2000",
+  "KOSPI", "KOSDAQ", "S&P 500", "NASDAQ", "다우존스", "러셀 2000", "필라델피아 반도체",
   "S&P500 선물", "나스닥 선물", "다우 선물", "금", "WTI 원유", "USD/KRW",
 ]);
 
@@ -171,6 +173,15 @@ export default function LiveMarketPulse() {
   const [btc, setBtc]             = useState<CryptoData | null>(null);
   const [lines, setLines]         = useState<Record<string, number[]>>({});
 
+  // 상단 티커에서 지표를 누르면 차트 모달 (다른 탭에서 오면 ?chart= 로)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("chart");
+    if (q) { setChart(q); window.history.replaceState(null, "", window.location.pathname); }
+    const h = (e: Event) => setChart((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_CHART_EVENT, h);
+    return () => window.removeEventListener(OPEN_CHART_EVENT, h);
+  }, []);
+
   useEffect(() => {
     const load = () => fetch("/api/sparklines", { cache: "no-store" })
       .then(r => r.json()).then(j => setLines(j.lines ?? {})).catch(() => {});
@@ -233,11 +244,12 @@ export default function LiveMarketPulse() {
         {/* ② 미국 현물 지수 */}
         <div>
           <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">미국 지수</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             <IndexCard label="S&P 500" line={lines["S&P 500"]}    data={data?.sp500   ?? null} onSelect={setChart} />
             <IndexCard label="NASDAQ" line={lines["NASDAQ"]}     data={data?.nasdaq  ?? null} onSelect={setChart} />
             <IndexCard label="다우존스" line={lines["다우존스"]}   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
             <IndexCard label="러셀 2000" line={lines["러셀 2000"]}  data={data?.russell ?? null} onSelect={setChart} sub="Russell 2000" />
+            <IndexCard label="필라델피아 반도체" line={lines["필라델피아 반도체"]} data={data?.sox ?? null} onSelect={setChart} sub="SOX" />
           </div>
         </div>
 
