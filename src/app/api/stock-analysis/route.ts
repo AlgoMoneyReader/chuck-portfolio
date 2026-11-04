@@ -76,13 +76,17 @@ export async function GET(request: Request) {
   const code   = searchParams.get("code") ?? "";
   const name   = searchParams.get("name") ?? "";
   const market = searchParams.get("market") ?? "KS";
+  // 화면의 '진보적 사고 Grade'(단기 수급·모멘텀 점수). AI 의견이 이와 따로 놀지 않도록 함께 넘긴다
+  const grade  = (searchParams.get("grade") ?? "").slice(0, 2);
+  const gradeScore = searchParams.get("score") ?? "";
+  const gradeNote  = (searchParams.get("gnote") ?? "").slice(0, 200);
 
   if (!code || !name) {
     return NextResponse.json({ error: "code, name required" }, { status: 400 });
   }
 
   // 같은 종목은 하루 한 번만 AI 호출 (한도 절약)
-  const ck = `${code}-${new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)}`;
+  const ck = `${code}-${grade}-${new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)}`;
   const hit = ANALYSIS_CACHE.get(ck);
   if (hit) return NextResponse.json({ ...hit, cached: true });
 
@@ -167,12 +171,14 @@ ${currentPriceLine}
 Yahoo Finance 재무 데이터: ${finData || "조회 불가"}
 최근 뉴스 헤드라인:
 ${newsData || "없음"}
+${grade ? `알읽남 진보적 사고 Grade(단기 수급·모멘텀 정량 점수): ${grade} (${gradeScore}/100점) — ${gradeNote}` : ""}
 
 [지시사항 — 반드시 준수]
 1. Google Search로 아래 키워드를 검색해 최신 정보를 반드시 반영하세요:${searchKeywords}
 2. ${year}년 데이터를 최우선 사용. 없으면 ${prevY}년 4분기 데이터 사용.
 3. 각 수치에 날짜(예: ${year}년 1분기 / Q1 ${year})를 반드시 명시. 학습 데이터 기반 추정은 "(추정)" 표기.
-4. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
+4. valuation 의 최종 의견은 펀더멘털(중장기) 관점이고, Grade 는 단기 수급 관점이다.${grade ? ` 두 관점이 다르면(예: Grade D인데 펀더멘털 매수) 모순처럼 보이지 않게 verdict 에서 "중장기 ○○ / 단기 ○○ → 대응: 분할매수·관망 등"으로 반드시 조율해서 한 문장으로 쓰세요. Grade D·C면 즉시 '강력 매수' 같은 표현은 쓰지 마세요.` : ""}
+5. 아래 JSON 형식 그대로만 반환하세요 (코드블록 없이).
 
 {
   "businessModel": "한 문장: 핵심 비즈니스 모델 (무엇으로 돈을 버는가)",
@@ -180,6 +186,7 @@ ${newsData || "없음"}
   "cons": ["리스크1 — 구체적 위험·날짜", "리스크2 — 구체적 위험·날짜", "리스크3 — 구체적 위험·날짜"],
   "financialHealth": "최신 실적 기준 영업이익률·부채비율·현금흐름 2~3문장 (분기·연도 명시)",
   "valuation": "현재 주가 저평가/고평가 여부 + 최종 의견 (매수/보유/매도) — 최신 목표주가·밸류에이션 근거",
+  "verdict": "단기 수급 Grade와 펀더멘털을 종합한 최종 대응 한 문장 (예: 중장기 매수 / 단기 수급 약세 → 분할 접근)",
   "summary": ["알읽남 톤의 핵심 한줄 (최신 정보 반영)", "핵심 한줄2", "핵심 한줄3"]
 }`.trim();
 
