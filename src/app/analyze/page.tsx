@@ -1,26 +1,22 @@
-import StockAnalyzer from "@/components/StockAnalyzer";
+import StockSearchPanel from "@/components/StockSearchPanel";
 import RequireLogin from "@/components/RequireLogin";
 
 interface Props {
-  // Next.js App Router: searchParams는 서버 컴포넌트에서 동기적으로 접근 가능
   searchParams: { ticker?: string; name?: string };
 }
 
+// 레이더(AI 종목분석) = 종목 검색 + 차트 + 수급 + AI 레이더 분석
 export default function AnalyzePage({ searchParams }: Props) {
   return (
-    <main className="max-w-4xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
+    <main className="max-w-5xl mx-auto px-4 py-6 space-y-5 animate-fade-in">
       <div>
-        <h1 className="text-xl font-bold text-white">AI 종목 분석</h1>
+        <h1 className="text-xl font-bold text-white">AI 레이더 분석</h1>
         <p className="text-sm text-gray-400 mt-1">
-          종목을 입력하면 펀드매니저급 리서치 보고서를 생성합니다 · 회원 하루 5회
+          수급·흐름 신호(레이더)와 실적·밸류·뉴스(AI)를 합쳐 매수/관망/매도 판단과 대응 전략을 드립니다 · 회원 하루 5회
         </p>
       </div>
-      {/* initialTicker / initialName: 쌍끌이 위젯·섹터 모달에서 종목 클릭 시 자동 채워짐 */}
-      <RequireLogin title="AI 종목분석은 로그인 후 이용할 수 있습니다">
-        <StockAnalyzer
-          initialTicker={searchParams.ticker ?? ""}
-          initialName={searchParams.name ?? ""}
-        />
+      <RequireLogin title="AI 레이더 분석은 로그인 후 이용할 수 있습니다">
+        <StockSearchPanel initialTicker={searchParams.ticker ?? ""} initialName={searchParams.name ?? ""} />
       </RequireLogin>
     </main>
   );
