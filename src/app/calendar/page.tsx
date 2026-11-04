@@ -10,14 +10,31 @@ interface Ev {
   url?: string; tentative?: boolean; source?: string; at?: string;
 }
 
+// 통화 코드 → 국기
+const FLAG: Record<string, string> = {
+  KRW: "🇰🇷", USD: "🇺🇸", EUR: "🇪🇺", CNY: "🇨🇳", JPY: "🇯🇵", GBP: "🇬🇧",
+  AUD: "🇦🇺", CAD: "🇨🇦", CHF: "🇨🇭", NZD: "🇳🇿", ALL: "🌐",
+};
+// 유로존 지표 중 독일·프랑스·이탈리아·스페인 발표는 그 나라 국기·이름으로
+function countryOf(e: { country: string; countryName: string; original?: string }): { flag: string; name: string } {
+  if (e.country === "EUR") {
+    const t = e.original ?? "";
+    if (/^German/i.test(t)) return { flag: "🇩🇪", name: "독일" };
+    if (/^French/i.test(t)) return { flag: "🇫🇷", name: "프랑스" };
+    if (/^Italian/i.test(t)) return { flag: "🇮🇹", name: "이탈리아" };
+    if (/^Spanish/i.test(t)) return { flag: "🇪🇸", name: "스페인" };
+  }
+  return { flag: FLAG[e.country] ?? "🏳️", name: e.countryName };
+}
+
 const COUNTRY_FILTERS = [
-  { key: "ALL", label: "모든 국가" },
-  { key: "KRW", label: "한국" },
-  { key: "USD", label: "미국" },
-  { key: "EUR", label: "유로존" },
-  { key: "CNY", label: "중국" },
-  { key: "JPY", label: "일본" },
-  { key: "GBP", label: "영국" },
+  { key: "ALL", label: "🌐 모든 국가" },
+  { key: "KRW", label: "🇰🇷 한국" },
+  { key: "USD", label: "🇺🇸 미국" },
+  { key: "EUR", label: "🇪🇺 유로존" },
+  { key: "CNY", label: "🇨🇳 중국" },
+  { key: "JPY", label: "🇯🇵 일본" },
+  { key: "GBP", label: "🇬🇧 영국" },
 ];
 const STAR_FILTERS = [0, 3, 2, 1];
 
@@ -196,7 +213,7 @@ export default function CalendarPage() {
 
       {mode === "events" ? (
         <div className="flex gap-2">
-          {([["ALL", "전체"], ["KR", "국내"], ["US", "미국"]] as const).map(([k, l]) => (
+          {([["ALL", "🌐 전체"], ["KR", "🇰🇷 국내"], ["US", "🇺🇸 미국"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setMkt(k)}
               className={`px-3.5 py-1.5 rounded-full text-xs font-semibold ${mkt === k ? "bg-white text-navy" : "bg-navy-card text-gray-400 border border-navy-border"}`}>{l}</button>
           ))}
@@ -393,7 +410,7 @@ function EconItem({ e }: { e: Ev }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Stars n={e.stars} />
-          <span className="text-[10px] text-gray-400 bg-navy-sub px-1.5 py-0.5 rounded">{e.countryName}</span>
+          {(() => { const c = countryOf(e); return <span className="text-[10px] text-gray-400 bg-navy-sub px-1.5 py-0.5 rounded"><span className="mr-1">{c.flag}</span>{c.name}</span>; })()}
           {e.tentative && <span className="text-[10px] text-gold bg-gold/10 px-1.5 py-0.5 rounded">{e.day < kstToday() ? "추정" : "예정"}</span>}
         </div>
         <p className="text-sm font-semibold text-white mt-1">{e.title}</p>
@@ -427,7 +444,7 @@ function EventItem({ e }: { e: MarketEvent }) {
         <div className="flex items-center gap-2">
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${KIND_STYLE[e.kind]}`}>{e.kind}</span>
           <span className="text-[10px] text-gray-400 bg-navy-sub px-1.5 py-0.5 rounded">
-            {e.country === "KR" ? (e.market === "KOSDAQ" ? "코스닥" : e.market === "KOSPI" ? "유가증권" : "국내") : "미국"}
+            <span className="mr-1">{e.country === "KR" ? "🇰🇷" : "🇺🇸"}</span>{e.country === "KR" ? (e.market === "KOSDAQ" ? "코스닥" : e.market === "KOSPI" ? "유가증권" : "국내") : "미국"}
           </span>
         </div>
         <p className="text-sm font-semibold text-white mt-1">
