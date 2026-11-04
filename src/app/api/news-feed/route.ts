@@ -13,6 +13,7 @@ export interface NewsItem {
   publishedAt: string | null;
   category: NewsCategory;
   stocks: { code: string; name: string; market: "KS" | "KQ" }[];
+  desc?: string; // RSS 요약(있으면), AI 시황 근거용
 }
 
 interface Feed { url: string; source: string; defaultCat: NewsCategory; marketOnly?: boolean; google?: boolean }
@@ -126,8 +127,11 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
     if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w))) continue;
     const stocks = matchStocks(title);
     if (!f.marketOnly && !stocks.length && !MARKET_RE.test(title)) continue;
+    const rawDesc = decode(/<description[^>]*>([\s\S]*?)<\/description>/.exec(block)?.[1] ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const desc = !f.google && rawDesc && rawDesc !== title ? rawDesc.slice(0, 220) : undefined;
     out.push({
       title,
+      desc,
       url,
       source: f.source,
       publishedAt: parseDate(date),
