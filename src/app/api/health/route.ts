@@ -4,6 +4,7 @@ import { getKisToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
+export const maxDuration = 60;
 
 // 설정 점검용. 키 값은 절대 내보내지 않고 있음/없음과 연결 결과만 보여준다
 const ENV = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "GEMINI_API_KEY", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
@@ -18,7 +19,7 @@ export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const [kis, dart, gemini, tables, providers] = await Promise.all([
+  const [kis, dart, gemini, tables, providers, dartCorpCode, naverNotice, region] = await Promise.all([
     check(async () => { await getKisToken(); return "정상"; }),
     check(async () => {
       const key = process.env.DART_API_KEY;
@@ -48,7 +49,22 @@ export async function GET() {
       const ext = s.external ?? {};
       return `kakao: ${ext.kakao ? "켜짐" : "꺼짐"}`;
     }),
+    // 공시·분기 실적에 필요한 DART 고유번호 파일(corpCode.xml) 다운로드를 시간·크기까지 잰다
+    check(async () => {
+      const key = process.env.DART_API_KEY;
+      if (!key) return "키 없음";
+      const t0 = Date.now();
+      const res = await fetch(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${key}`, { cache: "no-store", signal: AbortSignal.timeout(55000) });
+      const buf = await res.arrayBuffer();
+      const head = new TextDecoder().decode(buf.slice(0, 2));
+      return `HTTP ${res.status} · ${Math.round(buf.byteLength / 1024)}KB · ${((Date.now() - t0) / 1000).toFixed(1)}초 · ${head === "PK" ? "zip 정상" : `zip 아님: ${new TextDecoder().decode(buf.slice(0, 120))}`}`;
+    }),
+    check(async () => {
+      const r = await fetch("https://finance.naver.com/item/news_notice.naver?code=005930&page=1", { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(8000) });
+      return `HTTP ${r.status}`;
+    }),
+    check(async () => `${process.env.VERCEL_REGION ?? "알 수 없음"}`),
   ]);
 
-  return NextResponse.json({ env, kis, dart, gemini, supabaseTables: tables, loginProviders: providers }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ env, kis, dart, gemini, supabaseTables: tables, loginProviders: providers, dartCorpCode, naverNotice, serverRegion: region }, { headers: { "Cache-Control": "no-store" } });
 }
