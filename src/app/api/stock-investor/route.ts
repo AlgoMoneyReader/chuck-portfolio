@@ -165,11 +165,12 @@ export async function GET(request: Request) {
     if (invDate !== today8 && market !== "US") {
       try {
         const live = await getLiveFlow(code);
-        if (live.available) {
-          foreign = live.foreignEok ?? 0;
-          institution = live.institutionEok ?? 0;
-          individual = null; // 가집계에는 개인이 없다
-          flowBasis = { type: "live", label: `오늘 ${live.asOf} 가집계(추정)` };
+        if (live.available || live.globalEok != null) {
+          // 외국인: 외국계 창구 실시간 우선, 기관: 거래소 가집계
+          foreign = live.globalEok ?? live.foreignEok ?? 0;
+          institution = live.available ? live.institutionEok ?? 0 : 0;
+          individual = null; // 장중 개인 집계는 없다
+          flowBasis = { type: "live", label: `오늘 장중 추정 (외국인 ${live.globalEok != null ? `${live.updatedAt} 창구` : `${live.asOf} 가집계`}${live.available ? ` · 기관 ${live.asOf} 가집계` : ""})` };
         }
       } catch { /* 확정치 그대로 */ }
     }
