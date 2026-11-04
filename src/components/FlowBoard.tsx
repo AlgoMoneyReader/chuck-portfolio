@@ -195,7 +195,6 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
 
   const inv = b.investors[mk];
   const max = inv ? Math.max(1, ...KEYS.map(k => Math.abs(inv[k]))) : 1;
-  const intra = b.intraday[mk] ?? [];
   const daily = b.daily[mk] ?? [];
   const sectors = [...(mk === "KOSDAQ" ? b.sectorsKQ ?? [] : b.sectors)].sort((x, y) =>
     sectorSort === "smart" ? (y.foreign + y.institution) - (x.foreign + x.institution) : y[sectorSort] - x[sectorSort]);
@@ -256,32 +255,6 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
               </div>
             )}
           </>
-        )}
-      </Card>
-
-      {/* ② 시간별 */}
-      <Card title="시간별 누적 순매수 (오늘)" note={intra.length ? `${intra[0].hm} ~ ${intra[intra.length - 1].hm}` : undefined}>
-        {intra.length >= 2 ? (
-          <>
-            <Legend />
-            <div className="h-56 -ml-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={intra} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="#1E2A4A" strokeDasharray="2 4" vertical={false} />
-                  <XAxis dataKey="hm" tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={28} />
-                  <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} width={44}
-                    tickFormatter={(v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v}`)} />
-                  <ReferenceLine y={0} stroke="#374151" />
-                  <Tooltip {...tip} />
-                  {KEYS.map(k => <Line key={k} type="monotone" dataKey={k} stroke={C[k]} strokeWidth={2} dot={false} isAnimationActive={false} />)}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-gray-500 leading-relaxed">
-            장중(09:00~15:30)에 1분 간격으로 시장 전체 순매수를 기록해 흐름을 그립니다. 기록이 쌓이면 여기에 시간대별 그래프가 나타납니다.
-          </p>
         )}
       </Card>
 

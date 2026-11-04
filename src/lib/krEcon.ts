@@ -166,3 +166,39 @@ function mk(c: { day: string; time: string; title: string; stars: number; url: s
     forecast: null, previous: null, actual: null, url: c.url,
   };
 }
+
+
+// ── 해외 지표 결과값(actual) 채우기용: Investing.com 위젯(영문, 서울 시간) 전체 통화 파싱 ──
+export interface GlobalActual { day: string; time: string; currency: string; title: string; actual: string }
+const WIDGET_GLOBAL = "https://sslecal2.investing.com/?columns=exc_flags,exc_currency,exc_importance,exc_actual,exc_forecast,exc_previous&features=datepicker,timezone&countries=5,72,37,35,4,11&calType=week&timeZone=88&lang=1";
+
+export async function fetchInvestingActuals(): Promise<GlobalActual[]> {
+  const res = await fetch(WIDGET_GLOBAL, {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130 Safari/537.36", Accept: "text/html", Referer: "https://www.investing.com/" },
+    signal: AbortSignal.timeout(8000), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`investing HTTP ${res.status}`);
+  const html = await res.text();
+  const out: GlobalActual[] = [];
+  for (const m of Array.from(html.matchAll(/<tr\b([^>]*eventRowId_[^>]*)>([\s\S]*?)<\/tr>/g))) {
+    const attrs = m[1], body = m[2];
+    const dt = /data-event-datetime="(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})/.exec(attrs);
+    if (!dt) continue;
+    const cur = /flagCur[^>]*>[\s\S]*?([A-Z]{3})\s*<\/td>/.exec(body)?.[1] ?? "";
+    const ev = /<td[^>]*class="[^"]*\bevent\b[^"]*"[^>]*>([\s\S]*?)<\/td>/.exec(body);
+    const act = /<td[^>]*(?:id="eventActual_\d+"|class="[^"]*\bact\b[^"]*")[^>]*>([\s\S]*?)<\/td>/.exec(body);
+    const actual = act ? clean(act[1]) : "";
+    if (!cur || !ev || !actual || actual === "-" ) continue;
+    out.push({ day: `${dt[1]}-${dt[2]}-${dt[3]}`, time: `${dt[4]}:${dt[5]}`, currency: cur, title: clean(ev[1]), actual });
+  }
+  return out;
+}
+
+// 제목 단어 겹침(0~1)
+export function titleOverlap(a: string, b: string): number {
+  const w = (x: string) => new Set(x.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(t => t.length > 1 && !["m/m","y/y","q/q","the","of"].includes(t)));
+  const A = w(a), B = w(b);
+  if (!A.size || !B.size) return 0;
+  let n = 0; A.forEach(t => { if (B.has(t)) n++; });
+  return n / Math.min(A.size, B.size);
+}

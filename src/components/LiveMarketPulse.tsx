@@ -31,7 +31,7 @@ interface MarketData {
 
 const CHART_LABELS = new Set([
   "KOSPI", "KOSDAQ", "S&P 500", "NASDAQ", "다우존스", "러셀 2000", "필라델피아 반도체", "VIX",
-  "S&P500 선물", "나스닥 선물", "다우 선물", "금", "WTI 원유", "USD/KRW",
+  "S&P500 선물", "나스닥 선물", "다우 선물", "금", "WTI 원유", "USD/KRW", "주간선물", "야간선물",
 ]);
 
 // ── 하루 흐름 미니 그래프 (첫 점 = 전일 종가) ─────────────────────────────────
@@ -263,8 +263,8 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" } = {
             <div className="grid grid-cols-2 gap-2">
               <IndexCard label="KOSPI" line={lines["KOSPI"]}  data={data?.kospi  ?? null} onSelect={setChart} />
               <IndexCard label="KOSDAQ" line={lines["KOSDAQ"]} data={data?.kosdaq ?? null} onSelect={setChart} />
-              <IndexCard label="주간선물" line={fut.dayLine} data={fut.day} onSelect={() => setChartState({ label: "KOSPI", tab: "day" })} sub="코스피200 · 08:45~15:45" />
-              <IndexCard label="야간선물" line={fut.nightLine} data={fut.night} onSelect={() => setChartState({ label: "KOSPI", tab: "night" })} sub="코스피200 · 18:00~05:00" />
+              <IndexCard label="주간선물" line={fut.dayLine} data={fut.day} onSelect={() => setChartState({ label: "코스피200 선물", tab: "day" })} sub="코스피200 · 08:45~15:45" />
+              <IndexCard label="야간선물" line={fut.nightLine} data={fut.night} onSelect={() => setChartState({ label: "코스피200 선물", tab: "night" })} sub="코스피200 · 18:00~05:00" />
             </div>
             <SmallRow label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱" format="number" unit="원" onSelect={setChart} />
           </>
