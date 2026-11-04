@@ -11,7 +11,7 @@ const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 interface Quote { pct: number; cap: number; price: number }
 
-// 1순위: 나스닥 공식 사이트 전 종목 시세(등락률·시가총액). 유니버스 종목만 남겨 3분 공유 캐시
+// 나스닥 전 종목 스크리너: 시가총액(칸 크기)용. 등락률은 장 마감 후에도 한동안 전날 값이 남아 있어 쓰지 않는다(6시간 캐시)
 const nasdaqQuotes = unstable_cache(async (): Promise<Record<string, Quote>> => {
   const res = await fetch("https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&download=true", {
     headers: {
@@ -38,9 +38,9 @@ const nasdaqQuotes = unstable_cache(async (): Promise<Record<string, Quote>> => 
   }
   if (Object.keys(out).length < 100) throw new Error(`nasdaq rows ${rows.length}, matched ${Object.keys(out).length}`);
   return out;
-}, ["us-heatmap-nasdaq-v1"], { revalidate: 180 });
+}, ["us-heatmap-nasdaq-v1"], { revalidate: 6 * 3600 });
 
-// 2순위: Yahoo spark 로 등락률만 (시가총액 없음 → 같은 크기)
+// 등락률: Yahoo spark (직전/현재 세션 기준, 시장 동향 목록과 같은 출처). 지수별 60초 공유 캐시
 async function yahooQuotes(symbols: string[]): Promise<Record<string, Quote>> {
   const out: Record<string, Quote> = {};
   const chunks: string[][] = [];
@@ -61,19 +61,26 @@ async function yahooQuotes(symbols: string[]): Promise<Record<string, Quote>> {
   return out;
 }
 
+const yahooCached = unstable_cache(async (index: string, symbols: string[]) => yahooQuotes(symbols), ["us-heatmap-yahoo-v1"], { revalidate: 60 });
+
 export async function GET(request: Request) {
   const index = (new URL(request.url).searchParams.get("index") ?? "SPY").toUpperCase();
   if (!INDEXES.includes(index as typeof INDEXES[number])) return NextResponse.json({ error: "index" }, { status: 400 });
 
   const members = Object.entries(TICKERS).filter(([, v]) => v.idx.includes(index));
-  let quotes: Record<string, Quote> = {};
-  let source = "Nasdaq.com (시가총액 가중)";
-  try {
-    quotes = await nasdaqQuotes();
-  } catch (e) {
-    quotes = await yahooQuotes(members.map(([s]) => s));
-    source = `Yahoo (시가총액 정보 없음, 같은 크기) · nasdaq 실패: ${String(e).slice(0, 60)}`;
+  const syms = members.map(([s]) => s);
+  const [yq, nq] = await Promise.all([
+    yahooCached(index, syms).catch(() => ({} as Record<string, Quote>)),
+    nasdaqQuotes().catch(() => null),
+  ]);
+  // 등락률·가격은 Yahoo(최신), 칸 크기는 Nasdaq 시가총액. Yahoo 에 없는 종목만 Nasdaq 값으로
+  const quotes: Record<string, Quote> = {};
+  for (const s of syms) {
+    const y = yq[s], n = nq?.[s];
+    if (y) quotes[s] = { pct: y.pct, price: y.price, cap: n?.cap || 1 };
+    else if (n) quotes[s] = n;
   }
+  const source = `등락률 Yahoo · 칸 크기 ${nq ? "Nasdaq 시가총액" : "동일(시가총액 정보 없음)"}`;
 
   const items = members
     .map(([s, v]) => {
