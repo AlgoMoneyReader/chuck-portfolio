@@ -8,8 +8,9 @@ import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "알읽남 — 투자 대시보드",
-  description: "실시간 시장 데이터 · 포트폴리오 관리 · AI 종목 분석",
+  title: "알읽남 - 증시 레이더",
+  description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더",
+  openGraph: { title: "알읽남 - 증시 레이더", description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더", siteName: "알읽남 증시 레이더", locale: "ko_KR", type: "website" },
   applicationName: "알읽남",
   appleWebApp: { capable: true, title: "알읽남", statusBarStyle: "black" },
 };

@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "알읽남 — 투자 대시보드",
+    name: "알읽남 - 증시 레이더",
     short_name: "알읽남",
-    description: "실시간 시장 데이터 · 뉴스 · 경제 캘린더 · 커뮤니티",
+    description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더",
     start_url: "/",
     scope: "/",
     display: "standalone",
