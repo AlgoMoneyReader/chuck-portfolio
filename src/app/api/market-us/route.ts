@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { extendedOne, dayMarketOne, inDaySession } from "@/lib/usExtended";
+import { nasdaqQuotes, US_TICKERS } from "@/lib/usCaps";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ type Quote = {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
   dollarVolume?: number;
+  capUsd?: number | null;
   marketState: string;
   dayMarketPrice?: number | null;
   dayMarketChangePct?: number | null;
@@ -277,6 +279,24 @@ export async function GET(request: Request) {
     if (body.stocks.length) resCache.set(ck, { at: Date.now(), body });
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   };
+
+  // ⓪-0 시가총액 TOP30 (지수 구성 종목 중, Nasdaq 시가총액 순)
+  if (type === "cap") {
+    const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : "SPY";
+    const members = Object.entries(US_TICKERS).filter(([, v]) => v.idx.includes(tag)).map(([s]) => s);
+    const caps = await nasdaqQuotes().catch(() => null);
+    const ranked = members
+      .filter(s => !(s === "GOOG" && members.includes("GOOGL")))
+      .sort((a, b) => (caps?.[b]?.cap ?? 0) - (caps?.[a]?.cap ?? 0))
+      .slice(0, 30);
+    const quotes = await fetchSparkQuotes(ranked);
+    const byCode = new Map(quotes.map(q => [q.code, q]));
+    const rows = ranked.flatMap((s, i) => {
+      const q = byCode.get(s);
+      return q ? [{ ...q, rank: i + 1, name: US_TICKERS[s]?.n ?? q.name, capUsd: caps?.[s]?.cap ?? null }] : [];
+    });
+    return send({ stocks: await withExtended(rows), timestamp: ts, basis: "marketCap" });
+  }
 
   // ⓪-1 주요 종목 TOP10(시가총액 상위 대형주, 증시 탭 요약용)
   if (type === "mega") {

@@ -67,6 +67,7 @@ interface TopGainerRow {
   changePct: number; volume: number;
   tradeAmount: number;
   nxtPrice?: number | null; nxtPct?: number | null;   // 넥스트레이드 프리·애프터마켓 시세
+  capEok?: number;                                     // 시가총액(억원)
 }
 
 // ── Naver Finance 실시간 현재가 API ──────────────────────────────────────────
@@ -166,12 +167,31 @@ async function kisFluctuation(isc: string, suffix: string, sort: "0000" | "0001"
   } catch { return null; }
 }
 
+// 시가총액 순위 (KIS FHPST01740000, 최대 30)
+async function kisCapRank(isc: string, suffix: string): Promise<TopGainerRow[] | null> {
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/ranking/market-cap", "FHPST01740000", {
+      fid_cond_mrkt_div_code: "J", fid_cond_scr_div_code: "20174", fid_div_cls_code: "0", fid_input_iscd: isc,
+      fid_trgt_cls_code: "0", fid_trgt_exls_cls_code: "0", fid_input_price_1: "", fid_input_price_2: "", fid_vol_cnt: "",
+    });
+    const rows: TopGainerRow[] = [];
+    ((j.output ?? []) as KisRow[]).forEach((r, i) => {
+      const row = toRow(r, i, suffix);
+      if (row) rows.push({ ...row, capEok: num(r.stck_avls) ?? num(r.hts_avls) ?? 0 });
+    });
+    return rows.length ? rows.slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 })) : null;
+  } catch { return null; }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const market = searchParams.get("market") ?? "KOSPI";
+  // 정규장 밖 시세(NXT·애프터)를 붙일 목록: 보고 있는 목록만 붙여 KIS 호출을 줄인다
+  const nxList = (searchParams.get("nx") ?? "all") as "gainers" | "losers" | "amount" | "cap" | "all";
+  const cacheKey = `${market}:${nxList}`;
 
   // 서버사이드 캐시 HIT
-  const cached = serverCache[market];
+  const cached = serverCache[cacheKey];
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return NextResponse.json(cached.data, {
       headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "HIT" },
@@ -183,10 +203,11 @@ export async function GET(request: Request) {
     const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
     const isc = market === "KOSDAQ" ? "1001" : "0001";
 
-    const [kAmount, kUp, kDown] = await Promise.all([
+    const [kAmount, kUp, kDown, kCap] = await Promise.all([
       kisAmountRank(isc, mktSuffix),
       kisFluctuation(isc, mktSuffix, "0000"),
       kisFluctuation(isc, mktSuffix, "0001"),
+      kisCapRank(isc, mktSuffix),
     ]);
 
     const dataMap = await fetchAllCodes(codes);
@@ -225,17 +246,18 @@ export async function GET(request: Request) {
 
     // ── 정규장 밖(프리·애프터·장 종료): 넥스트레이드 시세를 붙인다 ──
     const sess = krSession();
-    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmount ?? topByAmount;
+    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmount ?? topByAmount, cap = kCap ?? [];
     let basis = sess.key === "regular" || sess.key === "auction-close" ? "KRX 정규장" : "KRX 직전 정규장 종가 기준";
     const allZero = valid.length > 0 && valid.every(v => v.changePct === 0);
     if (sess.key !== "regular") {
-      const codes = Array.from(new Set([...gainers, ...losers, ...amount, ...valid].map(r => r.code)));
+      const pickFor = { gainers, losers, amount, cap, all: [...gainers, ...losers, ...amount, ...cap] }[nxList] ?? gainers;
+      const codes = Array.from(new Set([...pickFor, ...(allZero && !kUp && (nxList === "gainers" || nxList === "losers" || nxList === "all") ? valid : [])].map(r => r.code)));
       const nx = await nxtQuotes(codes);
       const withNx = <T extends Omit<TopGainerRow, "rank">>(r: T): T => {
         const q = nx[r.code];
         return q ? { ...r, nxtPrice: q.price, nxtPct: parseFloat(q.pct.toFixed(2)) } : r;
       };
-      gainers = gainers.map(withNx); losers = losers.map(withNx); amount = amount.map(withNx);
+      gainers = gainers.map(withNx); losers = losers.map(withNx); amount = amount.map(withNx); cap = cap.map(withNx);
       // 개장 전엔 KRX 순위가 0% 로 초기화됨 → 주요 종목을 NXT 등락률로 순위
       if (allZero && !kUp) {
         const nxRows = valid.map(withNx).filter(r => r.nxtPct != null);
@@ -253,10 +275,11 @@ export async function GET(request: Request) {
       topGainers: gainers,
       topLosers: losers,
       topByAmount: amount,
+      topByCap: cap,
       source: { amount: kAmount ? "KIS 시장 전체" : "주요 종목 목록", gainers: kUp ? "KIS 시장 전체" : "주요 종목 목록", losers: kDown ? "KIS 시장 전체" : "주요 종목 목록" },
       timestamp: new Date().toISOString(),
     };
-    serverCache[market] = { data: payload, ts: Date.now() };
+    serverCache[cacheKey] = { data: payload, ts: Date.now() };
 
     return NextResponse.json(payload, {
       headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "MISS" },
