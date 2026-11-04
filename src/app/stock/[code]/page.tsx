@@ -366,23 +366,31 @@ function FlowTab({ code, market }: { code: string; market: string }) {
   return (
     <div className="space-y-4">
       {!confirmedToday && live && (
-        <Section title="오늘 장중 수급" note={live.updatedAt ? `${live.updatedAt} 갱신 · 억원` : "억원"}>
-          <div className="grid grid-cols-3 gap-3">
-            {live.available ? (
-              <>
-                <Stat label={`외국인 (${live.asOf})`} value={`${(live.foreignEok ?? 0) > 0 ? "+" : ""}${eok(live.foreignEok)}`} subCls={tone(live.foreignEok)} sub={(live.foreignEok ?? 0) >= 0 ? "순매수" : "순매도"} />
-                <Stat label={`기관 (${live.asOf})`} value={`${(live.institutionEok ?? 0) > 0 ? "+" : ""}${eok(live.institutionEok)}`} subCls={tone(live.institutionEok)} sub={(live.institutionEok ?? 0) >= 0 ? "순매수" : "순매도"} />
-              </>
-            ) : (
-              <p className="col-span-2 text-xs text-gray-500 self-center">{live.note ?? "장중 가집계를 불러오지 못했습니다"}</p>
-            )}
-            {live.globalEok != null && (
-              <Stat label="외국계 창구 (실시간)" value={`${live.globalEok > 0 ? "+" : ""}${eok(live.globalEok)}`} subCls={tone(live.globalEok)} sub={live.globalEok >= 0 ? "순매수" : "순매도"} />
-            )}
-          </div>
+        <Section title="오늘 장중 수급" note="억원 · 추정">
+          {(() => {
+            // 토스 방식: 외국인은 외국계 창구 실시간, 기관은 거래소 가집계, 개인은 직전 확정치
+            const fx = live.globalEok != null
+              ? { v: live.globalEok, at: `오늘 ${live.updatedAt} 기준` }
+              : live.available ? { v: live.foreignEok ?? 0, at: `오늘 ${live.asOf} 기준` } : null;
+            const inst = live.available ? { v: live.institutionEok ?? 0, at: `오늘 ${live.asOf} 기준` } : null;
+            const prevDay = f.invDate ? `${+f.invDate.slice(4, 6)}/${+f.invDate.slice(6, 8)} 확정` : "직전 확정";
+            const cols: [string, { v: number; at: string } | null][] = [
+              ["외국인", fx], ["기관", inst], ["개인", { v: c.individual, at: prevDay }],
+            ];
+            return (
+              <div className="grid grid-cols-3 gap-3">
+                {cols.map(([l, x]) => (
+                  <div key={l}>
+                    <p className="text-[11px] text-gray-500">{l}</p>
+                    <p className={`text-base font-bold num mt-0.5 ${x ? tone(x.v) : "text-gray-600"}`}>{x ? `${x.v > 0 ? "+" : ""}${eok(x.v)}` : "—"}</p>
+                    <p className="text-[10px] text-gray-500 num mt-0.5">{x ? x.at : "09:30 첫 집계"}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           <p className="text-[10px] text-gray-600 leading-relaxed">
-            외국인·기관은 거래소 가집계(09:30·10:00·11:20·13:20·14:30)라 정해진 시각에만 바뀝니다{live.nextSlot ? ` · 다음 집계 ${live.nextSlot}` : ""}.
-            외국계 창구는 외국계 증권사를 통한 순매수로 체결마다 바뀌는 실시간 근사치입니다. 확정값은 장 마감 후.
+            외국인은 외국계 증권사 창구 순매수(실시간 근사치), 기관은 거래소 가집계(09:30·10:00·11:20·13:20·14:30){live.nextSlot ? ` · 다음 집계 ${live.nextSlot}` : ""}, 개인은 장중 집계가 없어 직전 거래일 확정치입니다.
           </p>
         </Section>
       )}
