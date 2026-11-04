@@ -133,7 +133,8 @@ export default function MarketMap() {
   }, [region, index]);
 
   const items = useMemo(() => (data?.items ?? []).filter(i => i.cap > 0), [data]);
-  const H = Math.round(width * (sector ? 1.05 : 0.85));
+  // 휴대폰은 세로로 길게, PC 처럼 넓은 화면은 가로로 넓적하게 + 최대 높이 제한
+  const H = Math.round(width < 640 ? width * (sector ? 1.05 : 0.85) : Math.min(width * (sector ? 0.55 : 0.45), sector ? 600 : 480));
 
   const sectors = useMemo(() => {
     const m = new Map<string, Item[]>();

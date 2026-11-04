@@ -3,9 +3,28 @@ import { dartCorpMap as corpMap } from "@/lib/dart";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
+export const maxDuration = 60;
 
 function ymd(offsetDays: number): string {
   return new Date(Date.now() + 9 * 3_600_000 + offsetDays * 86_400_000).toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+// DART 가 느리거나 실패할 때: 네이버 증권 종목 공시 목록(DART 공시를 그대로 옮긴 목록)
+async function naverNotices(code: string) {
+  const res = await fetch(`https://finance.naver.com/item/news_notice.naver?code=${code}&page=1`, {
+    headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", Referer: `https://finance.naver.com/item/main.naver?code=${code}` },
+    signal: AbortSignal.timeout(8000), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`naver HTTP ${res.status}`);
+  const html = new TextDecoder("euc-kr").decode(await res.arrayBuffer());
+  const clean = (t: string) => t.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+  return Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)).flatMap(m => {
+    const a = /href="([^"]*news_notice_read[^"]*)"[^>]*>([\s\S]*?)<\/a>/.exec(m[1]);
+    if (!a) return [];
+    const date = /class="date"[^>]*>([\s\S]*?)<\/td>/.exec(m[1])?.[1];
+    const href = a[1].replace(/&amp;/g, "&");
+    return [{ report: clean(a[2]), filer: "", date: clean(date ?? "").slice(0, 10), url: href.startsWith("http") ? href : `https://finance.naver.com${href}` }];
+  }).slice(0, 30);
 }
 
 export async function GET(request: Request) {
@@ -30,6 +49,10 @@ export async function GET(request: Request) {
     }));
     return NextResponse.json({ items });
   } catch (e) {
-    return NextResponse.json({ items: [], error: String(e) });
+    try {
+      const items = await naverNotices(code);
+      if (items.length) return NextResponse.json({ items, source: "네이버 증권 공시 (DART 지연)" });
+    } catch { /* 아래 오류 반환 */ }
+    return NextResponse.json({ items: [], error: `공시를 불러오지 못했습니다 (${String(e).slice(0, 80)})` });
   }
 }

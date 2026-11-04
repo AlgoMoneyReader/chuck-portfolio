@@ -2,10 +2,6 @@
 
 import { useEffect, useState } from "react";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid,
-} from "recharts";
 
 interface Props { label: string; onClose: () => void; }
 interface ChartPoint { date: string; close: number | null; }
@@ -24,6 +20,7 @@ interface BreadthData { advance: number; decline: number; unchanged: number; tot
 interface NightFuturesPoint { time: string; price: number; full?: string; }
 interface NightFuturesData {
   label?: string;
+  candles?: { time: number }[];
   debug?: string[];
   currentPrice: number;
   previousClose: number;
@@ -49,37 +46,12 @@ function fmtFlow(n: number): string {
   return `${sign}${abs.toLocaleString("ko-KR")}억`;
 }
 
-function ChangeLine({ val, base }: { val: number; base: number | null }) {
-  if (!base) return null;
-  const diff = val - base;
-  const pct = diff / base * 100;
-  const up = diff >= 0;
-  return (
-    <p className={`num mt-0.5 ${up ? "text-signal-green" : "text-signal-red"}`}>
-      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%
-    </p>
-  );
-}
-
-function NightTooltip({ active, payload, label: timeStr, base }: {
-  active?: boolean; payload?: { value: number; payload?: { full?: string } }[]; label?: string; base: number | null;
-}) {
-  if (!active || !payload?.length || !timeStr) return null;
-  const val = payload[0].value;
-  return (
-    <div className="bg-navy-card border border-navy-border rounded-lg px-3 py-2 text-xs shadow-lg">
-      <p className="text-gray-400 mb-0.5">{payload[0].payload?.full ?? timeStr}</p>
-      <p className="text-white font-bold">{val.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}</p>
-      <ChangeLine val={val} base={base} />
-    </div>
-  );
-}
-
 export default function ChartModal({ label, onClose }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
   const range = "1d";  // 머리글 등락률은 항상 전일 대비
   const [tf, setTf]                             = useState<Timeframe>("1m");
+  const [futTf, setFutTf]                       = useState<Timeframe>("1m");
   const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "day" | "night">("chart");
   const [chartData, setChartData]               = useState<ChartData | null>(null);
   const [, setLoading]                     = useState(true);
@@ -191,12 +163,6 @@ export default function ChartModal({ label, onClose }: Props) {
 
   const nightIsPos  = (nightFutures?.changePct ?? 0) >= 0;
   const nightColor  = nightIsPos ? "#1D9E75" : "#E24B4A";
-  const nightGradId = `nightgrad_${label}`;
-  const nightTicks  = nightFutures?.points
-    ? nightFutures.points
-        .filter((_, i) => i % Math.max(1, Math.floor(nightFutures.points.length / 6)) === 0)
-        .map(p => p.time)
-    : [];
 
   return (
     <>
@@ -427,31 +393,15 @@ export default function ChartModal({ label, onClose }: Props) {
                   {nightFutures.debug?.length ? (
                     <p className="text-[10px] text-gray-600 -mt-2 mb-3 break-all shrink-0">{nightFutures.debug.join(" | ")}</p>
                   ) : null}
-                  {nightFutures.points.length > 0 ? (
-                    <div className="flex-1 min-h-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={nightFutures.points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id={nightGradId} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%"  stopColor={nightColor} stopOpacity={0.25} />
-                              <stop offset="95%" stopColor={nightColor} stopOpacity={0.02} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1A2D42" vertical={false} />
-                          <XAxis dataKey="time" ticks={nightTicks}
-                            tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
-                          <YAxis domain={["auto", "auto"]}
-                            tick={{ fill: "#6B7280", fontSize: 10 }}
-                            tickFormatter={v => v.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
-                            axisLine={false} tickLine={false} width={48} />
-                          <Tooltip content={<NightTooltip base={nightFutures.previousClose || null} />} />
-                          <Area type="monotone" dataKey="price"
-                            stroke={nightColor} strokeWidth={2} fill={`url(#${nightGradId})`}
-                            dot={false}
-                            activeDot={{ r: 4, fill: nightColor, stroke: "#07111E", strokeWidth: 2 }}
-                            connectNulls />
-                        </AreaChart>
-                      </ResponsiveContainer>
+                  {(nightFutures.candles?.length ?? 0) > 0 ? (
+                    <div className="flex-1 min-h-0 flex flex-col">
+                      <div className="flex gap-1 pb-1 shrink-0 overflow-x-auto scrollbar-none">
+                        {TIMEFRAMES.filter(([k]) => !["D", "W", "M"].includes(k)).map(([k, l]) => (
+                          <button key={k} onClick={() => setFutTf(k)}
+                            className={`px-3 py-1 text-xs rounded-lg whitespace-nowrap ${futTf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 font-semibold" : "text-gray-500 hover:text-gray-300"}`}>{l}</button>
+                        ))}
+                      </div>
+                      <CandleChart label={`fut-${activeTab}`} tf={futTf} height={340} digits={2} url={`/api/night-futures?session=${activeTab}`} />
                     </div>
                   ) : (
                     <div className="flex-1 flex items-center justify-center">

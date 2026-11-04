@@ -7,6 +7,24 @@ export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
 
 interface ChartPoint { time: string; price: number; full?: string; }
+interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number }
+
+// 야간 24~30시도 Date.UTC 가 다음 날로 넘겨 준다. 한국 벽시계 시각을 그대로 UTC 초로(차트 축이 한국 시간으로 보이게)
+const kstEpoch = (bsop: string, raw: string) =>
+  Date.UTC(+bsop.slice(0, 4), +bsop.slice(4, 6) - 1, +bsop.slice(6, 8), +raw.slice(0, 2), +raw.slice(2, 4)) / 1000;
+
+const TF_MIN: Record<string, number> = { "1m": 1, "2m": 2, "5m": 5, "30m": 30, "60m": 60 };
+function aggregate(cs: Candle[], minutes: number): Candle[] {
+  if (minutes <= 1) return cs;
+  const out = new Map<number, Candle>();
+  for (const c of cs) {
+    const k = Math.floor(c.time / (minutes * 60)) * minutes * 60;
+    const b = out.get(k);
+    if (!b) out.set(k, { ...c, time: k });
+    else { b.high = Math.max(b.high, c.high); b.low = Math.min(b.low, c.low); b.close = c.close; b.volume += c.volume; }
+  }
+  return Array.from(out.values());
+}
 
 const cache: Partial<Record<"day" | "night", { data: object; at: number }>> = {};
 const TTL = 60_000;
@@ -78,8 +96,8 @@ function minusOneMinute(raw: string): string {
 }
 
 // 분봉은 한 번에 100개 안팎이라, 가장 이른 봉 1분 전부터 다시 받아 18:00 세션 시작까지 이어붙인다
-async function nightBars(mkt: string, code: string, d8: string, hms: string, sessionStart = "180000"): Promise<ChartPoint[]> {
-  const bars = new Map<string, { bsop: string; raw: string; price: number }>();
+async function nightBars(mkt: string, code: string, d8: string, hms: string, sessionStart = "180000"): Promise<{ points: ChartPoint[]; candles: Candle[] }> {
+  const bars = new Map<string, { bsop: string; raw: string; price: number; o: number; h: number; l: number; v: number }>();
   let session = "";
   let date = d8, hour = hms;
   for (let i = 0; i < 10; i++) {
@@ -88,7 +106,11 @@ async function nightBars(mkt: string, code: string, d8: string, hms: string, ses
       FID_PW_DATA_INCU_YN: "Y", FID_FAKE_TICK_INCU_YN: "N", FID_INPUT_DATE_1: date, FID_INPUT_HOUR_1: hour,
     });
     const rows = ((ch.output2 ?? []) as Record<string, string>[])
-      .map(r => ({ bsop: r.stck_bsop_date ?? "", raw: r.stck_cntg_hour ?? "", price: num(r.futs_prpr ?? r.stck_prpr) }))
+      .map(r => {
+        const price = num(r.futs_prpr ?? r.stck_prpr);
+        const o = num(r.futs_oprc ?? r.stck_oprc), h = num(r.futs_hgpr ?? r.stck_hgpr), l = num(r.futs_lwpr ?? r.stck_lwpr);
+        return { bsop: r.stck_bsop_date ?? "", raw: r.stck_cntg_hour ?? "", price, o: o || price, h: h || price, l: l || price, v: num(r.cntg_vol) || 0 };
+      })
       .filter(r => r.price > 0 && r.bsop && r.raw);
     if (!session && rows.length) session = rows.reduce((m, r) => (r.bsop > m ? r.bsop : m), "");
     const mine = rows.filter(r => r.bsop === session);
@@ -99,9 +121,11 @@ async function nightBars(mkt: string, code: string, d8: string, hms: string, ses
     if (earliest.raw <= sessionStart || mine.length < rows.length) break;
     date = session; hour = minusOneMinute(earliest.raw);
   }
-  return Array.from(bars.values())
-    .sort((x, y) => x.raw.localeCompare(y.raw))
-    .map(r => ({ ...toClock(r.bsop, r.raw), price: r.price }));
+  const sorted = Array.from(bars.values()).sort((x, y) => x.raw.localeCompare(y.raw));
+  return {
+    points: sorted.map(r => ({ ...toClock(r.bsop, r.raw), price: r.price })),
+    candles: sorted.map(r => ({ time: kstEpoch(r.bsop, r.raw), open: r.o, high: r.h, low: r.l, close: r.price, volume: r.v })),
+  };
 }
 
 async function tryKIS(debug: string[], session: "day" | "night"): Promise<object | null> {
@@ -131,8 +155,9 @@ async function tryKIS(debug: string[], session: "day" | "night"): Promise<object
         const prev = num(o?.futs_prdy_clpr) || (isNaN(diff) ? price : price - diff);
 
         let points: ChartPoint[] = [];
+        let candles: Candle[] = [];
         try {
-          points = await nightBars(mkt, c.code, d8, hms, session === "day" ? "084500" : "180000");
+          ({ points, candles } = await nightBars(mkt, c.code, d8, hms, session === "day" ? "084500" : "180000"));
         } catch (e) { debug.push(`chart ${mkt}/${c.code}: ${String(e)}`); }
 
         return {
@@ -145,6 +170,7 @@ async function tryKIS(debug: string[], session: "day" | "night"): Promise<object
           changePct: prev ? parseFloat(((price - prev) / prev * 100).toFixed(2)) : 0,
           marketState: mkt === "CM" ? "NIGHT" : "DAY",
           points,
+          candles,
         };
       } catch (e) {
         debug.push(`${mkt}/${c.code}: ${String(e)}`);
@@ -201,11 +227,20 @@ async function tryYahoo(): Promise<object | null> {
   return null;
 }
 
+// tf 가 있으면 캔들 차트용으로 묶은 봉을 함께 돌려준다
+function withTf(data: object, tf: string | null): object {
+  const d = data as { candles?: Candle[]; previousClose?: number; label?: string };
+  if (!tf || !d.candles) return data;
+  return { ...data, candles: aggregate(d.candles.map(c => ({ ...c })), TF_MIN[tf] ?? 1), prevClose: d.previousClose ?? null, source: d.label ?? "KIS" };
+}
+
 export async function GET(request: Request) {
-  const session = new URL(request.url).searchParams.get("session") === "day" ? "day" : "night";
+  const sp = new URL(request.url).searchParams;
+  const session = sp.get("session") === "day" ? "day" : "night";
+  const tf = sp.get("tf");
   const hit = cache[session];
   if (hit && Date.now() - hit.at < TTL) {
-    return NextResponse.json({ ...hit.data, cached: true });
+    return NextResponse.json({ ...withTf(hit.data, tf), cached: true });
   }
 
   const debug: string[] = [];
@@ -217,5 +252,5 @@ export async function GET(request: Request) {
   if (!kis) Object.assign(data, { debug });
 
   cache[session] = { data, at: Date.now() };
-  return NextResponse.json(data);
+  return NextResponse.json(withTf(data, tf));
 }

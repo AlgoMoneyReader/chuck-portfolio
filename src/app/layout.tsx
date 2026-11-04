@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PricePoller from "@/components/PricePoller";
 import BottomTabBar from "@/components/BottomTabBar";
+import MarketTicker from "@/components/MarketTicker";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({
         <PricePoller />
         <AuthProvider>
           <Navbar />
+          <MarketTicker />
           {children}
           <BottomTabBar />
         </AuthProvider>

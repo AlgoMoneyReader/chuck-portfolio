@@ -4,7 +4,7 @@ import { dartCorpMap, dartGet } from "@/lib/dart";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // DART 단일회사 주요계정(fnlttSinglAcnt). 분기·반기 보고서의 손익은 당기 3개월(thstrm_amount)과 누적(thstrm_add_amount)을 같이 준다.
 // 4분기는 연간(사업보고서) − 3분기 누적. 금액 원 → 억원
