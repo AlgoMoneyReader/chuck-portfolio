@@ -95,7 +95,7 @@ function NightTooltip({ active, payload, label: timeStr, base }: {
 export default function ChartModal({ label, onClose }: Props) {
   const isIndex = label === "KOSPI" || label === "KOSDAQ";
 
-  const [range, setRange]                       = useState("3mo");
+  const [range, setRange]                       = useState("1d");
   const [activeTab, setActiveTab]               = useState<"chart" | "flow" | "night">("chart");
   const [chartData, setChartData]               = useState<ChartData | null>(null);
   const [loading, setLoading]                   = useState(true);

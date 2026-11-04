@@ -15,18 +15,29 @@ export interface NewsItem {
   stocks: { code: string; name: string; market: "KS" | "KQ" }[];
 }
 
-interface Feed { url: string; source: string; defaultCat: NewsCategory }
+interface Feed { url: string; source: string; defaultCat: NewsCategory; marketOnly?: boolean; google?: boolean }
 
 const FEEDS: Feed[] = [
-  { url: "https://kr.investing.com/rss/news_25.rss", source: "Investing.com", defaultCat: "해외증시" },
-  { url: "https://kr.investing.com/rss/news_14.rss", source: "Investing.com", defaultCat: "거시경제" },
-  { url: "https://kr.investing.com/rss/news_1.rss",  source: "Investing.com", defaultCat: "거시경제" },
+  { url: "https://kr.investing.com/rss/news_25.rss", source: "Investing.com", defaultCat: "해외증시", marketOnly: true },
+  { url: "https://kr.investing.com/rss/news_14.rss", source: "Investing.com", defaultCat: "거시경제", marketOnly: true },
+  { url: "https://kr.investing.com/rss/news_1.rss",  source: "Investing.com", defaultCat: "거시경제", marketOnly: true },
   { url: "https://rss.mk.co.kr/rss/30200030/",       source: "매일경제",      defaultCat: "국내증시" },
   { url: "https://rss.mk.co.kr/rss/30200031/",       source: "매일경제",      defaultCat: "국내기업" },
   { url: "https://www.hankyung.com/feed/finance",    source: "한국경제",      defaultCat: "국내증시" },
   { url: "https://www.hankyung.com/feed/economy",    source: "한국경제",      defaultCat: "거시경제" },
   { url: "https://www.yna.co.kr/rss/economy.xml",    source: "연합뉴스",      defaultCat: "거시경제" },
+  // 자체 RSS 가 불안정한 매체는 구글 뉴스 검색 RSS 로 (최근 1일, 매체 사이트 한정)
+  { url: gnews("site:fnnews.com 증권 OR 증시 OR 주가 when:1d"), source: "파이낸셜뉴스", defaultCat: "국내증시", google: true },
+  { url: gnews("site:biz.chosun.com when:1d"),                  source: "조선비즈",     defaultCat: "국내기업", google: true },
+  { url: gnews("site:mt.co.kr 증시 OR 주가 when:1d"),           source: "머니투데이",   defaultCat: "국내증시", google: true },
+  { url: gnews("site:sedaily.com 증권 OR 증시 when:1d"),        source: "서울경제",     defaultCat: "국내증시", google: true },
+  { url: gnews("site:reuters.com markets when:1d", "en"),       source: "로이터",       defaultCat: "해외증시", google: true, marketOnly: true },
 ];
+
+function gnews(q: string, lang: "ko" | "en" = "ko"): string {
+  const loc = lang === "ko" ? "hl=ko&gl=KR&ceid=KR:ko" : "hl=en-US&gl=US&ceid=US:en";
+  return `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&${loc}`;
+}
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
@@ -108,12 +119,13 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
   const out: NewsItem[] = [];
   for (const m of Array.from(xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g))) {
     const block = m[1];
-    const title = decode(/<title[^>]*>([\s\S]*?)<\/title>/.exec(block)?.[1] ?? "");
+    const rawTitle = decode(/<title[^>]*>([\s\S]*?)<\/title>/.exec(block)?.[1] ?? "");
+    const title = f.google ? rawTitle.replace(/\s+-\s+[^-]+$/, "") : rawTitle;
     const url = decode(/<link[^>]*>([\s\S]*?)<\/link>/.exec(block)?.[1] ?? /<link[^>]+href="([^"]+)"/.exec(block)?.[1] ?? "");
     const date = decode(/<pubDate>([\s\S]*?)<\/pubDate>/.exec(block)?.[1] ?? /<dc:date>([\s\S]*?)<\/dc:date>/.exec(block)?.[1] ?? "");
     if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w))) continue;
     const stocks = matchStocks(title);
-    if (f.source !== "Investing.com" && !stocks.length && !MARKET_RE.test(title)) continue;
+    if (!f.marketOnly && !stocks.length && !MARKET_RE.test(title)) continue;
     out.push({
       title,
       url,

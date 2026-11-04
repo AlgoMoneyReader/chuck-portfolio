@@ -359,8 +359,8 @@ export default function StockPage({ params }: { params: { code: string } }) {
         ) : tab === "개요" ? <OverviewTab d={d} />
           : tab === "차트" ? <ChartTab symbol={`${code}.${d.marketCode}`} />
           : tab === "수급" ? <FlowTab code={code} market={d.marketCode} />
-          : tab === "뉴스" ? <ListTab kind="news" url={`/api/stock-news?name=${encodeURIComponent(d.name)}`} />
-          : <ListTab kind="dart" url={`/api/stock-disclosures?code=${code}`} />}
+          : tab === "뉴스" ? <ListTab key="news" kind="news" url={`/api/stock-news?name=${encodeURIComponent(d.name)}`} />
+          : <ListTab key="dart" kind="dart" url={`/api/stock-disclosures?code=${code}`} />}
       </div>
     </main>
   );
