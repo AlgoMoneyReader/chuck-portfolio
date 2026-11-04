@@ -1,6 +1,8 @@
 // 국내 주식 거래 시간대 (한국 시간, 평일)
 // 08:00~08:50 NXT 프리마켓 · 08:50~09:00 개장 동시호가 · 09:00~15:20 정규장(KRX·NXT)
-// 15:20~15:30 KRX 종가 동시호가 · 15:30~20:00 NXT 애프터마켓(KRX 시간외 단일가 16:00~18:00 포함) · 그 외 장 종료
+// 15:20~15:30 KRX 종가 동시호가 · 15:30~16:00 장후 시간외 종가·NXT 애프터
+// 16:00~20:00 애프터마켓 (KRX 애프터마켓 2026-09-14 시행, 실시간 체결 + NXT) · 그 외 장 종료
+// KRX 프리마켓(07시~)은 2027년 말로 연기 → 개장 전은 NXT 만
 export type KrSessionKey = "nxt-pre" | "auction-open" | "regular" | "auction-close" | "nxt-after" | "closed";
 export interface KrSession { key: KrSessionKey; label: string; short: string; extended: boolean }
 
@@ -12,6 +14,7 @@ export function krSession(now = Date.now()): KrSession {
   if (m >= 530 && m < 540) return { key: "auction-open", label: "개장 동시호가 (08:50~09:00)", short: "동시호가", extended: true };
   if (m >= 540 && m < 920) return { key: "regular", label: "정규장 (09:00~15:20)", short: "정규장", extended: false };
   if (m >= 920 && m < 930) return { key: "auction-close", label: "종가 동시호가 (15:20~15:30)", short: "동시호가", extended: false };
-  if (m >= 930 && m < 1200) return { key: "nxt-after", label: "NXT 애프터마켓 (15:30~20:00)", short: "NXT 애프터", extended: true };
+  if (m >= 930 && m < 960) return { key: "nxt-after", label: "장후 시간외·NXT 애프터 (15:30~16:00)", short: "애프터", extended: true };
+  if (m >= 960 && m < 1200) return { key: "nxt-after", label: "애프터마켓 KRX·NXT (16:00~20:00)", short: "애프터", extended: true };
   return { key: "closed", label: m < 480 ? "장 시작 전" : "장 종료", short: "장 종료", extended: false };
 }

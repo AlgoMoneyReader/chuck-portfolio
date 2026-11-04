@@ -56,7 +56,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                 <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""} {Math.abs(s.changePct).toFixed(2)}%</p>
                 {s.extPrice != null && s.extChangePct != null && (() => {
                   const k = krSession();
-                  const tag = k.key === "nxt-pre" || k.key === "auction-open" ? "NXT 프리" : k.key === "nxt-after" ? "NXT 애프터" : "NXT 종가";
+                  const tag = k.key === "nxt-pre" || k.key === "auction-open" ? "NXT 프리" : k.key === "nxt-after" ? "애프터" : "애프터 종가";
                   return (
                     <p className="text-[10px] num mt-0.5 truncate">
                       <span className="text-purple-300">{tag}</span>{" "}

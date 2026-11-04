@@ -22,11 +22,11 @@ interface StockRow {
   nxtPrice?: number | null; nxtPct?: number | null; // 넥스트레이드 프리·애프터마켓
 }
 
-// 정규장 밖 넥스트레이드 시세 한 줄: 'NXT 애프터 218,500 +0.23%'
+// 정규장 밖 시세 한 줄: 'NXT 프리 …' / '애프터 218,500 +0.23%' (장 마감 후는 KRX·NXT 통합)
 function NxtLine({ r, className = "" }: { r: StockRow; className?: string }) {
   if (r.nxtPrice == null || r.nxtPct == null) return null;
   const s = krSession();
-  const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "NXT 애프터" : "NXT 종가";
+  const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "애프터" : "애프터 종가";
   return (
     <span className={`num whitespace-nowrap ${className}`}>
       <span className="text-purple-300 font-semibold">{tag}</span>{" "}

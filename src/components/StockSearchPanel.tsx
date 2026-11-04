@@ -80,7 +80,7 @@ function getMarketSession(): MarketSession {
   const minutes = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   if (minutes >= 480 && minutes < 530) return "NXT_PRE";   // 08:00-08:49
   if (minutes >= 540 && minutes <= 930) return "REGULAR";  // 09:00-15:30
-  if (minutes >= 940 && minutes <= 1200) return "NXT_POST"; // 15:40-20:00
+  if (minutes > 930 && minutes <= 1200) return "NXT_POST"; // 15:30-20:00 (KRX 애프터마켓 16~20시 + NXT)
   return "CLOSED";
 }
 
@@ -97,7 +97,7 @@ function MarketStatusBadge() {
   const config: Record<MarketSession, { cls: string; label: string; dot?: boolean }> = {
     NXT_PRE:  { cls: "text-blue-400 bg-blue-400/15 border border-blue-400/30",     label: "NXT 프리마켓" },
     REGULAR:  { cls: "text-signal-green bg-signal-green/15 border border-signal-green/30", label: "KRX 정규장", dot: true },
-    NXT_POST: { cls: "text-purple-400 bg-purple-400/15 border border-purple-400/30", label: "NXT 애프터마켓" },
+    NXT_POST: { cls: "text-purple-400 bg-purple-400/15 border border-purple-400/30", label: "애프터마켓 (KRX·NXT)" },
     CLOSED:   { cls: "text-gray-500 bg-gray-500/15 border border-gray-500/30",      label: "장마감" },
   };
 
@@ -508,7 +508,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                 {!isUSStock && currentSession === "NXT_POST" && quote.postMarketPrice && (
                   <div className="mt-1.5">
                     <span className="text-xs px-2.5 py-1 rounded-full border text-purple-400 bg-purple-400/15 border-purple-400/30">
-                      NXT 애프터마켓 {fmtPrice(quote.postMarketPrice)}
+                      애프터마켓 {fmtPrice(quote.postMarketPrice)}
                       {quote.postMarketChangePct != null && (
                         <> {quote.postMarketChangePct >= 0 ? "▲" : "▼"} {Math.abs(quote.postMarketChangePct).toFixed(2)}%</>
                       )}
