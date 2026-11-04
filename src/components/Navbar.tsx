@@ -7,7 +7,7 @@ import { FiSearch } from "react-icons/fi";
 
 export default function Navbar() {
   return (
-    <nav className="sticky top-0 z-50 bg-navy-sub/95 backdrop-blur-md border-b border-navy-border">
+    <nav className="bg-navy-sub/95 backdrop-blur-md border-b border-navy-border">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <Image src="/logo-mark.png" alt="" width={30} height={30} priority

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
-import { BarChart, Bar, Legend, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
@@ -69,27 +69,56 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 interface QRow { period: string; sales: number | null; op: number | null; net: number | null; salesYoY: number | null; opYoY: number | null; netYoY: number | null }
 interface ARow { year: number; sales: number | null; op: number | null; net: number | null }
 
+interface EarnRow { key: string; label: string; short: string; sales: number | null; op: number | null; net: number | null; opm: number | null; npm: number | null; qoq: number | null; yoy: number | null }
+
+const marginOf = (a: number | null, base: number | null) => (a != null && base ? (a / base) * 100 : null);
+const growth = (a: number | null, b: number | null) => (a != null && b ? ((a - b) / Math.abs(b)) * 100 : null);
+
+function EarnTooltip({ active, payload }: { active?: boolean; payload?: { payload: EarnRow }[] }) {
+  if (!active || !payload?.length) return null;
+  const r = payload[0].payload;
+  return (
+    <div className="bg-navy-card border border-navy-border rounded-xl px-3 py-2.5 text-xs shadow-xl space-y-1 min-w-[150px]">
+      <p className="text-gray-400 mb-1">{r.label}</p>
+      <p className="flex justify-between gap-4"><span className="text-[#5B8CFF]">■ 매출</span><span className="text-white num">{eok(r.sales)}</span></p>
+      <p className="flex justify-between gap-4"><span className="text-signal-green">■ 영업이익</span><span className="text-white num">{eok(r.op)}</span></p>
+      <p className="flex justify-between gap-4"><span className="text-amber-400">○ 영업이익률</span><span className="text-white num">{r.opm != null ? `${r.opm.toFixed(1)}%` : "—"}</span></p>
+      {r.qoq != null && <p className="flex justify-between gap-4"><span className="text-gray-400">전분기 대비</span><span className={`num ${tone(r.qoq)}`}>{pct(r.qoq)}</span></p>}
+      {r.yoy != null && <p className="flex justify-between gap-4"><span className="text-gray-400">전년 동기 대비</span><span className={`num ${tone(r.yoy)}`}>{pct(r.yoy)}</span></p>}
+    </div>
+  );
+}
+
 function EarningsSection({ code, kis }: { code: string; kis: Overview["financials"] }) {
   const [q, setQ] = useState<{ quarters: QRow[]; annual: ARow[]; latest: QRow | null; error?: string } | null>(null);
   const [mode, setMode] = useState<"q" | "y">("q");
   useEffect(() => {
     fetch(`/api/stock-quarterly?code=${code}`, { cache: "no-store" }).then(r => r.json()).then(setQ).catch(() => setQ(null));
   }, [code]);
+
+  const quarterRows: EarnRow[] = (q?.quarters ?? []).map((r, i, arr) => ({
+    key: r.period, label: `${r.period.slice(2, 4)}년 ${r.period.slice(-2, -1)}분기`, short: `${r.period.slice(2, 4)}.${r.period.slice(-2)}`,
+    sales: r.sales, op: r.op, net: r.net, opm: marginOf(r.op, r.sales), npm: marginOf(r.net, r.sales),
+    qoq: i > 0 ? growth(r.op, arr[i - 1].op) : null, yoy: r.opYoY,
+  }));
+  const annualRows: EarnRow[] = (q?.annual ?? []).map((r, i, arr) => ({
+    key: String(r.year), label: `${r.year}년`, short: String(r.year),
+    sales: r.sales, op: r.op, net: r.net, opm: marginOf(r.op, r.sales), npm: marginOf(r.net, r.sales),
+    qoq: null, yoy: i > 0 ? growth(r.op, arr[i - 1].op) : null,
+  }));
+  const rows = mode === "q" ? quarterRows : annualRows;
   const L = q?.latest;
-  const label = L ? `${L.period.slice(0, 4)}년 ${L.period.slice(-2, -1)}분기` : null;
-  const chart = mode === "q"
-    ? (q?.quarters ?? []).map(r => ({ name: r.period.slice(2).replace(".", "."), 매출: r.sales, 영업이익: r.op }))
-    : (q?.annual ?? []).map(r => ({ name: String(r.year), 매출: r.sales, 영업이익: r.op }));
+  const lastQ = quarterRows[quarterRows.length - 1];
 
   if (!L && !kis) return null;
   return (
-    <Section title="실적" note={L ? `${label} · DART 정기보고서` : kis?.period ? `연간 · 결산 ${ymd(kis.period)}` : undefined}>
-      {L ? (
-        <div className="grid grid-cols-3 gap-3">
-          <Stat label="매출" value={eok(L.sales)} sub={`${pct(L.salesYoY)} YoY`} subCls={tone(L.salesYoY)} />
-          <Stat label="영업이익" value={eok(L.op)} sub={`${pct(L.opYoY)} YoY`} subCls={tone(L.opYoY)} />
-          <Stat label="순이익" value={eok(L.net)} sub={`${pct(L.netYoY)} YoY`} subCls={tone(L.netYoY)} />
-        </div>
+    <Section title="실적" note={L ? "DART 정기보고서 · 연결 기준" : kis?.period ? `연간 · 결산 ${ymd(kis.period)}` : undefined}>
+      {lastQ ? (
+        <p className="text-sm text-gray-300 leading-relaxed">
+          {lastQ.label.replace(/^(\d+)년/, "20$1년")} 영업이익은 <b className="text-white">{eok(lastQ.op)}</b>
+          {lastQ.qoq != null && <> · 직전 분기 대비 <b className={tone(lastQ.qoq)}>{pct(lastQ.qoq)}</b></>}
+          {lastQ.yoy != null && <> · 전년 동기 대비 <b className={tone(lastQ.yoy)}>{pct(lastQ.yoy)}</b></>}
+        </p>
       ) : kis && (
         <div className="grid grid-cols-3 gap-3">
           <Stat label="매출" value={eok(kis.sales)} sub={`${pct(kis.salesYoY)} YoY`} subCls={tone(kis.salesYoY)} />
@@ -97,38 +126,66 @@ function EarningsSection({ code, kis }: { code: string; kis: Overview["financial
           <Stat label="순이익" value={eok(kis.netIncome)} sub={`${pct(kis.netIncomeYoY)} YoY`} subCls={tone(kis.netIncomeYoY)} />
         </div>
       )}
-      {kis && (kis.roe != null || kis.debtRatio != null) && (
-        <div className="grid grid-cols-3 gap-3">
-          <Stat label="ROE (연간)" value={kis.roe != null ? `${kis.roe.toFixed(1)}%` : "—"} />
-          <Stat label="부채비율 (연간)" value={kis.debtRatio != null ? `${kis.debtRatio.toFixed(1)}%` : "—"} />
-        </div>
-      )}
-      {chart.length > 1 && (
+
+      {rows.length > 0 && (
         <>
           <div className="flex gap-1">
             {([["q", "분기"], ["y", "연간"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setMode(k)}
-                className={`px-3 py-1 text-xs rounded-full ${mode === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
+                className={`px-3 py-1 text-xs rounded-lg ${mode === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500 border border-navy-border"}`}>{l}</button>
             ))}
           </div>
-          <div className="h-44">
+          <div className="h-52 -mx-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barGap={2}>
+              <ComposedChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={v => eok(Number(v))} />
-                <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                  contentStyle={{ background: "#0D1530", border: "1px solid #1A2545", borderRadius: 8, fontSize: 12 }}
-                  formatter={(v, n) => [eok(Number(v)), n as string]} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="매출" fill="#2563FF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-              </BarChart>
+                <XAxis dataKey="short" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+                <YAxis yAxisId="v" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={44} tickFormatter={v => eok(Number(v))} />
+                <YAxis yAxisId="p" orientation="right" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={34} tickFormatter={v => `${Math.round(Number(v))}%`} />
+                <Tooltip content={<EarnTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                <Bar yAxisId="v" dataKey="sales" name="매출" fill="#5B8CFF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Bar yAxisId="v" dataKey="op" name="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Line yAxisId="p" dataKey="opm" name="영업이익률" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#0D1530", stroke: "#F59E0B" }} isAnimationActive={false} connectNulls />
+              </ComposedChart>
             </ResponsiveContainer>
+          </div>
+
+          <div className="overflow-x-auto -mx-4 md:-mx-6 scrollbar-none">
+            <table className="text-xs num whitespace-nowrap">
+              <thead>
+                <tr className="text-gray-500">
+                  <th className="sticky left-0 bg-navy-card text-left font-normal px-4 py-2 min-w-[96px]">구분</th>
+                  {rows.map(r => <th key={r.key} className="font-normal px-3 py-2 text-right">{r.label}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-navy-border">
+                {([
+                  ["매출", (r: EarnRow) => eok(r.sales), null],
+                  ["영업이익", (r: EarnRow) => eok(r.op), null],
+                  ["영업이익률", (r: EarnRow) => (r.opm != null ? `${r.opm.toFixed(1)}%` : "—"), null],
+                  ["순이익", (r: EarnRow) => eok(r.net), null],
+                  ["순이익률", (r: EarnRow) => (r.npm != null ? `${r.npm.toFixed(1)}%` : "—"), null],
+                  ...(mode === "q" ? [["영업이익 전분기비", (r: EarnRow) => pct(r.qoq), "qoq"] as const] : []),
+                  ["영업이익 " + (mode === "q" ? "전년동기비" : "전년비"), (r: EarnRow) => pct(r.yoy), "yoy"],
+                ] as [string, (r: EarnRow) => string, "qoq" | "yoy" | null][]).map(([name, f, k]) => (
+                  <tr key={name}>
+                    <td className="sticky left-0 bg-navy-card text-gray-300 px-4 py-2">{name}</td>
+                    {rows.map(r => <td key={r.key} className={`px-3 py-2 text-right ${k ? tone(r[k]) : "text-white"}`}>{f(r)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}
-      {q?.error && !L && <p className="text-[10px] text-gray-600">분기 실적 없음: {q.error}</p>}
+
+      {kis && (kis.roe != null || kis.debtRatio != null) && (
+        <div className="grid grid-cols-3 gap-3 pt-1">
+          <Stat label="ROE (연간)" value={kis.roe != null ? `${kis.roe.toFixed(1)}%` : "—"} />
+          <Stat label="부채비율 (연간)" value={kis.debtRatio != null ? `${kis.debtRatio.toFixed(1)}%` : "—"} />
+        </div>
+      )}
+      {q?.error && !L && <p className="text-[10px] text-gray-600">분기 실적을 불러오지 못해 연간(KIS) 값만 표시합니다 · {q.error}</p>}
     </Section>
   );
 }
@@ -404,7 +461,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
   const q = d?.quote;
   return (
     <main className="max-w-3xl mx-auto animate-fade-in">
-      <div className="sticky top-14 z-20 bg-navy/95 backdrop-blur border-b border-navy-border px-4 pt-3">
+      <div className="sticky z-20 bg-navy/95 backdrop-blur border-b border-navy-border px-4 pt-3" style={{ top: "var(--hdr, 115px)" }}>
         <div className="flex items-center gap-2">
           <button onClick={() => router.back()} aria-label="뒤로" className="-ml-1 p-1 text-gray-300"><FiChevronLeft size={22} /></button>
           <div className="min-w-0 flex-1">
