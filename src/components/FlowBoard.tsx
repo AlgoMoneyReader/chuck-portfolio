@@ -26,7 +26,9 @@ const KEYS = ["foreign", "institution", "individual"] as const;
 
 const fmt = (v: number) => {
   const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "-" : "";
-  return a >= 10000 ? `${s}${(a / 10000).toFixed(2)}조` : `${s}${a.toLocaleString("ko-KR")}억`;
+  if (a >= 10000) return `${s}${(a / 10000).toFixed(2)}조`;
+  if (a > 0 && a < 1) return `${s}${Math.round(a * 10000).toLocaleString("ko-KR")}만`;
+  return `${s}${(a >= 100 ? Math.round(a) : Math.round(a * 10) / 10).toLocaleString("ko-KR")}억`;
 };
 const tone = (v: number) => (v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400");
 const md = (d: string) => `${+d.slice(4, 6)}/${+d.slice(6, 8)}`;

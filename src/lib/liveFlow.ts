@@ -34,7 +34,7 @@ export async function getLiveFlow(code: string): Promise<LiveFlow> {
   ]);
   const now = kstHM();
   const p = num(price.output?.stck_prpr) ?? 0;
-  const globalEok = gq != null && p ? Math.round((gq * p) / 1e8) : null;
+  const globalEok = gq != null && p ? Math.round((gq * p) / 1e6) / 100 : null;
   const nextSlot = SLOT_TIMES.find(t => t > now) ?? null;
   const rows = ((Array.isArray(est.output2) ? est.output2 : []) as Record<string, string>[])
     .filter(r => r.bsop_hour_gb && (r.frgn_fake_ntby_qty || r.orgn_fake_ntby_qty));
@@ -48,7 +48,7 @@ export async function getLiveFlow(code: string): Promise<LiveFlow> {
     asOf: SLOT[latest.bsop_hour_gb] ?? latest.bsop_hour_gb,
     nextSlot,
     foreignQty: fq, institutionQty: oq,
-    foreignEok: Math.round((fq * p) / 1e8), institutionEok: Math.round((oq * p) / 1e8),
+    foreignEok: Math.round((fq * p) / 1e6) / 100, institutionEok: Math.round((oq * p) / 1e6) / 100,
     globalEok, globalQty: gq,
     price: p, updatedAt: now,
   };

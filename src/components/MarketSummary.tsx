@@ -972,8 +972,7 @@ function USStockList({
       <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
-        <span className="w-20 text-right">현재가</span>
-        <span className="w-14 text-right">등락률</span>
+        <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(프리/애프터)</span></span>
         <span className={`w-14 text-right ${isValue ? "" : "hidden sm:block"}`}>{isValue ? "거래대금" : "거래량"}</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
@@ -982,15 +981,13 @@ function USStockList({
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => {
             // 시간외 표시 로직
-            const isPre  = r.marketState === "PRE"  && r.preMarketPrice  !== null;
-            const isPost = (r.marketState === "POST" || r.marketState === "POSTPOST") && r.postMarketPrice !== null;
-            const extPrice  = isPre  ? r.preMarketPrice  : isPost ? r.postMarketPrice  : null;
-            const extPct    = isPre  ? r.preMarketChangePct : isPost ? r.postMarketChangePct : null;
-            const extLabel  = isPre  ? "PRE"  : isPost ? "POST" : null;
-            // 표시 주가: 시간외 있으면 시간외가 메인, 전일종가를 보조로
-            const displayPrice  = extPrice  ?? r.price;
-            const displayPct    = extPct    ?? r.changePct;
-            const isDisplayPos  = displayPct >= 0;
+            // 정규장 종가를 메인으로, 프리·애프터마켓은 아래 줄에 따로 (증권앱 방식)
+            const hasPre  = r.preMarketPrice != null && r.marketState === "PRE";
+            const hasPost = r.postMarketPrice != null;
+            const extPrice = hasPre ? r.preMarketPrice : hasPost ? r.postMarketPrice : null;
+            const extPct   = hasPre ? r.preMarketChangePct : hasPost ? r.postMarketChangePct : null;
+            const extLabel = hasPre ? "프리" : hasPost ? (r.marketState === "POST" ? "애프터" : "애프터 종가") : null;
+            const isPos    = r.changePct >= 0;
             return (
               <div key={r.code}
                 className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
@@ -998,30 +995,24 @@ function USStockList({
               >
                 <RankBadge rank={r.rank} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                    {extLabel && (
-                      <span className={`text-[10px] font-bold px-1 py-0.5 rounded shrink-0 ${
-                        isPre ? "bg-amber-400/20 text-amber-300" : "bg-purple-400/20 text-purple-300"
-                      }`}>{extLabel}</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-600 whitespace-nowrap">
-                    {r.code}
-                    {extPrice !== null && (
-                      <span className="text-gray-600 ml-1">· 종가 {fmtUSD(r.price)}</span>
-                    )}
-                  </p>
+                  <p className="text-sm text-white font-medium truncate">{r.name}</p>
+                  <p className="text-xs text-gray-600 whitespace-nowrap">{r.code}</p>
                 </div>
-                <div className="flex flex-col items-end shrink-0 w-20">
-                  <span className="text-sm text-white num whitespace-nowrap">{fmtUSD(displayPrice!)}</span>
-                  {extPrice !== null && (
-                    <span className="text-xs text-gray-600 num whitespace-nowrap line-through">{fmtUSD(r.price)}</span>
+                <div className="flex flex-col items-end shrink-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm text-white num whitespace-nowrap">{fmtUSD(r.price)}</span>
+                    <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+                      {isPos ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
+                    </span>
+                  </div>
+                  {extPrice != null && extPct != null && (
+                    <span className="text-[11px] num whitespace-nowrap mt-0.5">
+                      <span className={`font-bold mr-1 ${hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
+                      <span className="text-gray-300">{fmtUSD(extPrice)}</span>
+                      <span className={`ml-1 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>
+                    </span>
                   )}
                 </div>
-                <span className={`w-14 text-right text-sm font-semibold num whitespace-nowrap ${isDisplayPos ? "text-signal-green" : "text-signal-red"}`}>
-                  {isDisplayPos ? "▲" : "▼"}{Math.abs(displayPct!).toFixed(2)}%
-                </span>
                 <span className={`w-14 text-right text-xs num whitespace-nowrap ${isValue ? "text-gray-300" : "text-gray-500 hidden sm:block"}`}>
                   {isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
