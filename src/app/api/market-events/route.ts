@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { kisGet } from "@/lib/kis";
-import { dartCorpMap, dartGet } from "@/lib/dart";
+import { dartGet } from "@/lib/dart";
 import { unzipFirst } from "@/lib/zip";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +16,8 @@ export interface MarketEvent {
   sub?: string;
   url?: string;
   code?: string;
+  name?: string;          // 종목명(국내) — 제목 앞부분을 종목 페이지로 연결
+  market?: "KOSPI" | "KOSDAQ" | "US";
 }
 
 const KST = 9 * 3_600_000;
@@ -56,27 +57,14 @@ const usEarnings = unstable_cache(async (from: string, days: number): Promise<Ma
             title: `${r.name} (${r.symbol})`,
             sub: [r.fiscalQuarterEnding && `${r.fiscalQuarterEnding} 분기`, r.epsForecast && `EPS 예상 ${r.epsForecast}`, `시총 $${(cap / 1e9).toFixed(0)}B`].filter(Boolean).join(" · "),
             code: r.symbol,
+            market: "US",
+            url: `https://www.nasdaq.com/market-activity/stocks/${String(r.symbol).toLowerCase()}/earnings`,
           };
         });
     } catch { return []; }
   });
   return perDay.flat();
-}, ["us-earnings-v1"], { revalidate: 3 * 3600 });
-
-// ── 국내: 시가총액 상위 종목의 DART 공시에서 IR 개최·결산실적 예고·잠정실적 ───────────
-async function topKR(): Promise<{ code: string; name: string }[]> {
-  const out: { code: string; name: string }[] = [];
-  for (const [isc, n] of [["0001", 30], ["1001", 20]] as const) {
-    try {
-      const j = await kisGet("/uapi/domestic-stock/v1/ranking/market-cap", "FHPST01740000", {
-        fid_cond_mrkt_div_code: "J", fid_cond_scr_div_code: "20174", fid_div_cls_code: "0", fid_input_iscd: isc,
-        fid_trgt_cls_code: "0", fid_trgt_exls_cls_code: "0", fid_input_price_1: "", fid_input_price_2: "", fid_vol_cnt: "",
-      });
-      out.push(...((j.output ?? []) as Record<string, string>[]).slice(0, n).map(r => ({ code: r.mksc_shrn_iscd, name: (r.hts_kor_isnm ?? "").trim() })));
-    } catch { /* 건너뜀 */ }
-  }
-  return out;
-}
+}, ["us-earnings-v2"], { revalidate: 3 * 3600 });
 
 // 공시 원문에서 '일시/예정일' 뒤 첫 날짜와 시각
 function eventDate(xml: string): { day: string; time: string } | null {
@@ -92,31 +80,72 @@ function eventDate(xml: string): { day: string; time: string } | null {
   };
 }
 
-const krEvents = unstable_cache(async (today: string): Promise<MarketEvent[]> => {
-  const [top, corpMap] = await Promise.all([topKR(), dartCorpMap()]);
-  const bgn = addDays(today, -45).replace(/-/g, ""), end = today.replace(/-/g, "");
-  type Filing = Record<string, string> & { _name: string; _code: string };
-  const filings = await pool(top, 8, async (s): Promise<Filing[]> => {
-    const corp = corpMap[s.code];
-    if (!corp) return [];
+// ── 국내: DART 전체 공시 검색(회사 지정 없음)에서 상장사의 잠정실적·결산실적 예고·IR ─────────
+// 공정공시(I002)에 잠정실적, 시장조치/안내(I003)에 IR 개최·결산실적공시 예고가 섞여 있어 둘 다 훑는다.
+// 회사 미지정 검색은 3개월 이내만 허용된다
+type Filing = { corp_cls: string; corp_name: string; stock_code: string; report_nm: string; rcept_no: string; rcept_dt: string };
+const MARKET: Record<string, "KOSPI" | "KOSDAQ"> = { Y: "KOSPI", K: "KOSDAQ" };
+
+async function dartPages(params: Record<string, string>, deadline: number): Promise<{ list: Filing[]; partial: boolean }> {
+  const first = await dartGet("list.json", { ...params, page_no: "1", page_count: "100" });
+  if (first.status === "013") return { list: [], partial: false }; // 조회 결과 없음
+  if (first.status !== "000") throw new Error(`DART ${first.status} ${first.message ?? ""}`);
+  const total = Math.min(Number(first.total_page) || 1, 60);
+  let partial = false;
+  const rest = await pool(Array.from({ length: total - 1 }, (_, k) => k + 2), 3, async p => {
+    if (Date.now() > deadline) { partial = true; return [] as Filing[]; }
     try {
-      const d = await dartGet("list.json", { corp_code: corp, bgn_de: bgn, end_de: end, page_count: "40" });
-      return d.status === "000" ? ((d.list ?? []) as Record<string, string>[]).map(r => ({ ...r, _name: s.name, _code: s.code }) as Filing) : [];
-    } catch { return []; }
+      const d = await dartGet("list.json", { ...params, page_no: String(p), page_count: "100" });
+      return d.status === "000" ? (d.list ?? []) as Filing[] : [];
+    } catch { partial = true; return [] as Filing[]; }
   });
-  const all = filings.flat();
+  return { list: [...((first.list ?? []) as Filing[]), ...rest.flat()], partial };
+}
+
+const krEvents = unstable_cache(async (today: string): Promise<{ items: MarketEvent[]; partial: boolean }> => {
+  const t0 = Date.now();
+  const end = today.replace(/-/g, "");
+  const bgn45 = addDays(today, -45).replace(/-/g, ""), bgn30 = addDays(today, -30).replace(/-/g, "");
+  // 회사 구분(Y 유가, K 코스닥)별로 나눠 받아 상장사만 남긴다
+  const queries = (["Y", "K"] as const).flatMap(cls => [
+    { pblntf_detail_ty: "I002", corp_cls: cls, bgn_de: bgn45, end_de: end },
+    { pblntf_detail_ty: "I003", corp_cls: cls, bgn_de: bgn30, end_de: end },
+  ]);
+  const fails: string[] = [];
+  const results = await Promise.all(queries.map(q => dartPages(q, t0 + 25_000)
+    .catch(e => { fails.push((e instanceof Error ? e.message : String(e)).slice(0, 60)); return { list: [] as Filing[], partial: true }; })));
+  // 전부 실패하면 빈 결과를 캐시하지 않도록 던진다
+  if (fails.length === queries.length) throw new Error(fails[0]);
+  let partial = results.some(r => r.partial);
+  const all = results.flatMap(r => r.list).filter(r => MARKET[r.corp_cls] && /^\d{6}$/.test((r.stock_code ?? "").trim()) && !/정정|취소|철회/.test(r.report_nm));
+  const byNo = new Map(all.map(r => [r.rcept_no, r]));
+  const filings = Array.from(byNo.values());
+
   const out: MarketEvent[] = [];
   const url = (no: string) => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${no}`;
   const day8 = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  const base = (r: Filing) => ({ country: "KR" as const, name: r.corp_name.trim(), code: r.stock_code.trim(), market: MARKET[r.corp_cls], sub: r.report_nm.trim().replace(/\s+/g, " "), url: url(r.rcept_no) });
 
-  for (const r of all.filter(r => /잠정\)?실적|영업\(잠정\)/.test(r.report_nm) && !/정정/.test(r.report_nm))) {
-    out.push({ day: day8(r.rcept_dt), time: "", country: "KR", kind: "잠정실적", title: `${r._name} 잠정실적 발표`, sub: r.report_nm.trim(), url: url(r.rcept_no), code: r._code });
+  // 잠정실적: 연결·별도 등 같은 날 여러 건이면 하나만
+  const seen = new Set<string>();
+  for (const r of filings.filter(r => /잠정/.test(r.report_nm) && /실적/.test(r.report_nm))) {
+    const k = `${r.stock_code}|${r.rcept_dt}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const b = base(r);
+    out.push({ ...b, day: day8(r.rcept_dt), time: "", kind: "잠정실적", title: `${b.name} 잠정실적 발표` });
   }
-  const needDoc = all.filter(r => /기업설명회|결산실적공시\s*예고/.test(r.report_nm)).slice(0, 30);
+
+  // IR·실적 예고는 원문에서 개최일/예정일을 읽는다. 유가증권 우선, 최근 공시 우선으로 최대 40건
+  const needDoc = filings
+    .filter(r => /기업설명회|결산실적공시\s*예고/.test(r.report_nm))
+    .sort((a, b) => (a.corp_cls === b.corp_cls ? b.rcept_no.localeCompare(a.rcept_no) : a.corp_cls === "Y" ? -1 : 1))
+    .slice(0, 40);
   const key = process.env.DART_API_KEY!;
-  const parsed = await pool(needDoc, 5, async r => {
+  const parsed = await pool(needDoc, 6, async r => {
+    if (Date.now() - t0 > 42_000) { partial = true; return { r, at: null, earnings: false }; }
     try {
-      const res = await fetch(`https://opendart.fss.or.kr/api/document.xml?crtfc_key=${key}&rcept_no=${r.rcept_no}`, { signal: AbortSignal.timeout(12000) });
+      const res = await fetch(`https://opendart.fss.or.kr/api/document.xml?crtfc_key=${key}&rcept_no=${r.rcept_no}`, { signal: AbortSignal.timeout(8000), cache: "no-store" });
       const xml = unzipFirst(Buffer.from(await res.arrayBuffer())).toString("utf-8");
       return { r, at: eventDate(xml), earnings: /실적/.test(xml.replace(/<[^>]+>/g, "")) };
     } catch { return { r, at: null, earnings: false }; }
@@ -124,14 +153,14 @@ const krEvents = unstable_cache(async (today: string): Promise<MarketEvent[]> =>
   for (const { r, at, earnings } of parsed) {
     if (!at) continue;
     const ir = /기업설명회/.test(r.report_nm);
+    const b = base(r);
     out.push({
-      day: at.day, time: at.time, country: "KR", kind: ir ? "IR" : "실적예고",
-      title: ir ? `${r._name} 기업설명회${earnings ? "(실적 발표)" : ""}` : `${r._name} 결산실적 공시 예정`,
-      sub: r.report_nm.trim(), url: url(r.rcept_no), code: r._code,
+      ...b, day: at.day, time: at.time, kind: ir ? "IR" : "실적예고",
+      title: ir ? `${b.name} 기업설명회${earnings ? "(실적 발표)" : ""}` : `${b.name} 결산실적 공시 예정`,
     });
   }
-  return out;
-}, ["kr-market-events-v1"], { revalidate: 6 * 3600 });
+  return { items: out, partial };
+}, ["kr-market-events-v2"], { revalidate: 4 * 3600 });
 
 // 한국 시간 기준: 미국 장 마감 후 발표는 새벽(~06시), 장 시작 전 발표는 밤(~22시), 시각 모름은 맨 뒤
 const sortTime = (t: string) => (t === "장후" ? "06:00" : t === "장전" ? "22:00" : t || "99:99");
@@ -139,14 +168,16 @@ const sortTime = (t: string) => (t === "장후" ? "06:00" : t === "장전" ? "22
 export async function GET() {
   const today = kstDate();
   const errors: string[] = [];
-  const [us, kr] = await Promise.all([
-    usEarnings(addDays(today, -3), 14).catch(e => { errors.push(`미국: ${String(e).slice(0, 80)}`); return [] as MarketEvent[]; }),
-    krEvents(today).catch(e => { errors.push(`국내: ${String(e).slice(0, 80)}`); return [] as MarketEvent[]; }),
+  const [us, krRes] = await Promise.all([
+    usEarnings(addDays(today, -10), 35).catch(e => { errors.push(`미국: ${String(e).slice(0, 80)}`); return [] as MarketEvent[]; }),
+    krEvents(today).catch(e => { errors.push(`국내: ${String(e).slice(0, 80)}`); return { items: [] as MarketEvent[], partial: false }; }),
   ]);
+  const kr = krRes.items;
+  if (krRes.partial) errors.push("국내: 시간 제한으로 일부 공시만 반영");
   const seen = new Set<string>();
   const items = [...kr, ...us]
-    .filter(e => e.day >= addDays(today, -7) && e.day <= addDays(today, 30))
+    .filter(e => e.day >= addDays(today, -45) && e.day <= addDays(today, 60))
     .filter(e => { const k = `${e.day}|${e.title}|${e.kind}`; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => (a.day + sortTime(a.time)).localeCompare(b.day + sortTime(b.time)));
-  return NextResponse.json({ items, counts: { us: us.length, kr: kr.length }, errors }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ items, counts: { us: us.length, kr: kr.length }, coverage: { from: addDays(today, -45), to: addDays(today, 60) }, errors }, { headers: { "Cache-Control": "no-store" } });
 }
