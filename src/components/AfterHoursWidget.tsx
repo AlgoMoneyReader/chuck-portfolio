@@ -18,10 +18,21 @@ export default function AfterHoursWidget() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/after-hours-stocks", { cache: "no-store" })
+    const load = () => fetch("/api/after-hours-stocks", { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (j?.stocks) setStocks(j.stocks); })
       .finally(() => setLoading(false));
+    load();
+    // 장중 30초, 그 외 5분마다 갱신
+    let iv: ReturnType<typeof setInterval>;
+    const schedule = () => {
+      const k = new Date(Date.now() + 9 * 3_600_000);
+      const hm = k.getUTCHours() * 100 + k.getUTCMinutes();
+      const open = ![0, 6].includes(k.getUTCDay()) && hm >= 900 && hm < 1530;
+      iv = setInterval(load, open ? 30_000 : 300_000);
+    };
+    schedule();
+    return () => clearInterval(iv);
   }, []);
 
   return (

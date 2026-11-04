@@ -1,18 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { FiChevronLeft } from "react-icons/fi";
 
 interface Item { s: string; n: string; sec: string; ind: string; cap: number; pct: number; price: number }
-interface Data { index: string; source: string; asOf: string; total: number; items: Item[]; breadth: { up: number; down: number; flat: number } }
+interface Data { index: string; source: string; asOf: string; total: number; items: Item[]; breadth: { up: number; down: number; flat: number }; error?: string }
 interface Rect { x: number; y: number; w: number; h: number }
 
-const INDEXES = [
-  { key: "SPY", label: "SPY", desc: "S&P 500" },
-  { key: "QQQ", label: "QQQ", desc: "나스닥 100" },
-  { key: "DIA", label: "DIA", desc: "다우존스 30" },
-  { key: "SOXX", label: "SOXX", desc: "반도체" },
-];
+type Region = "KR" | "US";
+const INDEXES: Record<Region, { key: string; label: string; desc: string }[]> = {
+  KR: [
+    { key: "KOSPI", label: "코스피", desc: "코스피 시가총액 상위" },
+    { key: "KOSDAQ", label: "코스닥", desc: "코스닥 시가총액 상위" },
+  ],
+  US: [
+    { key: "SPY", label: "SPY", desc: "S&P 500 구성 종목" },
+    { key: "QQQ", label: "QQQ", desc: "나스닥 100 구성 종목" },
+    { key: "DIA", label: "DIA", desc: "다우존스 30 구성 종목" },
+    { key: "SOXX", label: "SOXX", desc: "반도체 ETF 구성 종목" },
+  ],
+};
 const ALL = "전체";
 
 // ── 정사각형에 가깝게 나누는 트리맵 (squarify) ───────────────────────────────
@@ -101,7 +109,8 @@ function Tile({ r, bg, title, sub, onClick, active }: { r: Rect; bg: string; tit
 }
 
 export default function MarketMap() {
-  const [index, setIndex] = useState("SPY");
+  const [region, setRegion] = useState<Region>("KR");
+  const [index, setIndex] = useState("KOSPI");
   const [sector, setSector] = useState<string | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,12 +120,13 @@ export default function MarketMap() {
   useEffect(() => {
     setLoading(true); setPicked(null);
     setSector(index === "SOXX" ? ALL : null);
-    const load = () => fetch(`/api/heatmap?index=${index}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => setData(j.items ? j : null)).catch(() => setData(null)).finally(() => setLoading(false));
+    const url = region === "KR" ? `/api/kr-heatmap?market=${index}` : `/api/heatmap?index=${index}`;
+    const load = () => fetch(url, { cache: "no-store" })
+      .then(r => r.json()).then(j => setData(j)).catch(() => setData(null)).finally(() => setLoading(false));
     load();
     const iv = setInterval(load, 3 * 60 * 1000);
     return () => clearInterval(iv);
-  }, [index]);
+  }, [region, index]);
 
   const items = useMemo(() => (data?.items ?? []).filter(i => i.cap > 0), [data]);
   const H = Math.round(width * (sector ? 1.05 : 0.85));
@@ -143,7 +153,8 @@ export default function MarketMap() {
     return { up, dn, flat: inView.length - up - dn };
   }, [inView]);
 
-  const desc = INDEXES.find(i => i.key === index)?.desc ?? "";
+  const desc = INDEXES[region].find(i => i.key === index)?.desc ?? "";
+  const label = (it: Item) => (region === "KR" ? it.n : it.s);
   const tiles: React.ReactNode[] = [];
   if (width > 0 && items.length) {
     const box = { x: 0, y: 0, w: width, h: H };
@@ -155,7 +166,7 @@ export default function MarketMap() {
     } else {
       squarify(groups.map(g => g.cap), box).forEach((gr, k) => {
         const g = groups[k];
-        const head = gr.h > 40 && gr.w > 50 ? 15 : 0;
+        const head = groups.length > 1 && gr.h > 40 && gr.w > 50 ? 15 : 0;
         if (head) {
           tiles.push(
             <div key={`h-${g.name}`} className="absolute px-1 text-[10px] font-semibold text-white truncate bg-black/40"
@@ -164,7 +175,7 @@ export default function MarketMap() {
         }
         squarify(g.xs.map(i => i.cap), { x: gr.x, y: gr.y + head, w: gr.w, h: gr.h - head }).forEach((r, j) => {
           const it = g.xs[j];
-          tiles.push(<Tile key={it.s} r={r} bg={colorFor(it.pct)} title={it.s} sub={fmtPct(it.pct)} active={picked?.s === it.s} onClick={() => setPicked(it)} />);
+          tiles.push(<Tile key={it.s} r={r} bg={colorFor(it.pct)} title={label(it)} sub={fmtPct(it.pct)} active={picked?.s === it.s} onClick={() => setPicked(it)} />);
         });
       });
     }
@@ -173,9 +184,17 @@ export default function MarketMap() {
   const total = breadth.up + breadth.dn + breadth.flat || 1;
   return (
     <section className="card space-y-3">
-      <h2 className="text-base font-bold text-white">마켓맵</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-bold text-white">마켓맵</h2>
+        <div className="flex rounded-lg bg-navy-sub p-0.5 text-xs">
+          {(["KR", "US"] as Region[]).map(r => (
+            <button key={r} onClick={() => { setRegion(r); setIndex(INDEXES[r][0].key); }}
+              className={`px-3 py-1 rounded-md font-semibold ${region === r ? "bg-navy-card text-white" : "text-gray-500"}`}>{r === "KR" ? "국내" : "미국"}</button>
+          ))}
+        </div>
+      </div>
       <div className="flex gap-2 overflow-x-auto scrollbar-none">
-        {INDEXES.map(i => (
+        {INDEXES[region].map(i => (
           <button key={i.key} onClick={() => setIndex(i.key)}
             className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold ${index === i.key ? "bg-white text-navy" : "bg-navy-sub text-gray-300"}`}>{i.label}</button>
         ))}
@@ -189,21 +208,24 @@ export default function MarketMap() {
           <span className="text-sm font-bold text-white">{sector} · {inView.length}종목</span>
         </div>
       ) : (
-        <p className="text-xs text-gray-400">{desc} 구성 종목 · {items.length}종목{!sector ? " · 섹터를 누르면 종목이 보입니다" : ""}</p>
+        <p className="text-xs text-gray-400">{desc} · {items.length}종목{!sector ? ` · ${region === "KR" ? "업종" : "섹터"}을 누르면 종목이 보입니다` : ""}</p>
       )}
 
       <div ref={ref} className="relative w-full rounded-lg overflow-hidden bg-navy-sub" style={{ height: width ? H : 300 }}>
         {loading && !items.length ? <div className="absolute inset-0 animate-pulse bg-navy-border/40" />
-          : !items.length ? <p className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">히트맵 데이터를 불러올 수 없습니다</p>
+          : !items.length ? <p className="absolute inset-0 flex flex-col items-center justify-center text-sm text-gray-500 px-4 text-center">히트맵 데이터를 불러올 수 없습니다{data?.error && <span className="text-[10px] text-gray-600 mt-1 break-all">{data.error}</span>}</p>
           : tiles}
       </div>
 
       {picked && (
         <div className="flex items-center justify-between text-sm bg-navy-sub rounded-lg px-3 py-2">
-          <span className="text-white font-semibold truncate">{picked.s} <span className="text-gray-400 font-normal">{picked.n}</span></span>
-          <span className="num shrink-0">
-            <span className="text-gray-300">${picked.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>{" "}
+          <span className="text-white font-semibold truncate">
+            {region === "KR" ? picked.n : <>{picked.s} <span className="text-gray-400 font-normal">{picked.n}</span></>}
+          </span>
+          <span className="num shrink-0 flex items-center gap-2">
+            <span className="text-gray-300">{region === "KR" ? `${picked.price.toLocaleString("ko-KR")}원` : `$${picked.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}</span>
             <span className={picked.pct >= 0 ? "text-signal-green" : "text-signal-red"}>{fmtPct(picked.pct)}</span>
+            {region === "KR" && <Link href={`/stock/${picked.s}`} className="text-xs text-cyan-brand">상세 ›</Link>}
           </span>
         </div>
       )}
