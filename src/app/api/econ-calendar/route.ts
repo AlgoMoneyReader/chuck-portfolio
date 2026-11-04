@@ -149,12 +149,38 @@ async function nasdaqActuals(today: string): Promise<GlobalActual[]> {
   return all.flat();
 }
 
-// 결과값: Nasdaq + Investing.com 을 합쳐 10분 보관 (인자는 캐시 키)
-const loadActuals = unstable_cache(async (bucket: string, today: string): Promise<GlobalActual[]> => {
-  if (!bucket) return [];
-  const [nq, inv] = await Promise.all([nasdaqActuals(today), fetchInvestingActuals().catch(() => [] as GlobalActual[])]);
-  return [...nq, ...inv];
-}, ["global-actuals-v2"], { revalidate: 600 });
+// TradingView 경제 캘린더(결과값 포함). 국가 코드 → 통화
+const TV_CUR: Record<string, string> = { US: "USD", EU: "EUR", DE: "EUR", FR: "EUR", IT: "EUR", ES: "EUR", JP: "JPY", CN: "CNY", GB: "GBP", KR: "KRW", CA: "CAD", AU: "AUD", NZ: "NZD", CH: "CHF" };
+async function tradingviewActuals(today: string): Promise<GlobalActual[]> {
+  const from = `${addDays(today, -8)}T00:00:00.000Z`, to = `${addDays(today, 1)}T23:59:59.000Z`;
+  const res = await fetch(`https://economic-calendar.tradingview.com/events?from=${from}&to=${to}&countries=${Object.keys(TV_CUR).join(",")}`, {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130 Safari/537.36", Accept: "application/json", Origin: "https://www.tradingview.com", Referer: "https://www.tradingview.com/" },
+    signal: AbortSignal.timeout(10000), cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`tradingview ${res.status}`);
+  const rows = ((await res.json())?.result ?? []) as Record<string, unknown>[];
+  return rows.flatMap(r => {
+    const cur = TV_CUR[String(r.country ?? "")];
+    const a = r.actual;
+    const t = Date.parse(String(r.date ?? ""));
+    if (!cur || a == null || a === "" || isNaN(t)) return [];
+    const unit = String(r.unit ?? ""), scale = String(r.scale ?? "");
+    const actual = `${a}${scale}${unit === "%" ? "%" : ""}`;
+    const k = new Date(t + KST).toISOString();
+    return [{ day: k.slice(0, 10), time: k.slice(11, 16), currency: cur, title: String(r.title ?? r.indicator ?? ""), actual }];
+  });
+}
+
+// 결과값: TradingView + Nasdaq + Investing.com 을 합쳐 10분 보관 (인자는 캐시 키). 출처별 건수도 남긴다
+const loadActuals = unstable_cache(async (bucket: string, today: string): Promise<{ list: GlobalActual[]; stats: Record<string, string> }> => {
+  if (!bucket) return { list: [], stats: {} };
+  const stats: Record<string, string> = {};
+  const run = async (name: string, fn: () => Promise<GlobalActual[]>) => {
+    try { const r = await fn(); stats[name] = `${r.length}건`; return r; } catch (e) { stats[name] = `실패 ${String(e).slice(0, 60)}`; return []; }
+  };
+  const [tv, nq, inv] = await Promise.all([run("tradingview", () => tradingviewActuals(today)), run("nasdaq", () => nasdaqActuals(today)), run("investing", fetchInvestingActuals)]);
+  return { list: [...tv, ...nq, ...inv], stats };
+}, ["global-actuals-v3"], { revalidate: 600 });
 
 function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string }>(e: T, acts: GlobalActual[]): T {
   if (e.actual || Date.parse(e.at) > Date.now()) return e;
@@ -197,7 +223,8 @@ export async function GET() {
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-    const acts = await loadActuals(String(Math.floor(Date.now() / 600_000)), today).catch(() => [] as GlobalActual[]);
+    const loaded = await loadActuals(String(Math.floor(Date.now() / 600_000)), today).catch(e => ({ list: [] as GlobalActual[], stats: { error: String(e).slice(0, 80) } as Record<string, string> }));
+    const acts = loaded.list;
     const filled = acts.length ? items.map(e => fillActual(e, acts)) : items;
     // 한국 지표도 같은 방식으로 (시각이 맞는 한국 지표가 하나뿐일 때 채워진다)
     const krFilled = acts.length ? kr.items.map(e => fillActual({ ...e, original: e.original ?? e.title }, acts)) : kr.items;
@@ -206,6 +233,7 @@ export async function GET() {
     return NextResponse.json({
       items: all, errors: kr.note ? [...errors, kr.note] : errors,
       coverage: { global: days.length ? { from: days[0], to: days[days.length - 1] } : null, krLive: kr.live },
+      actualSources: { ...loaded.stats, matched: `${all.filter(e => e.actual).length}건` },
     });
   } catch (e) {
     // 해외 일정이 막혀도 한국 일정은 보여준다
