@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
-import { LoginBlur } from "@/components/RequireLogin";
+import RadarReport from "@/components/RadarReport";
 import { logActivity } from "@/lib/activity";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
-import StockSignalReport from "@/components/StockSignalReport";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
@@ -37,7 +36,7 @@ interface Overview {
   errors: string[];
 }
 
-const TABS = ["개요", "차트", "수급", "신호", "뉴스", "공시"] as const;
+const TABS = ["개요", "레이더", "차트", "수급", "뉴스", "공시"] as const;
 type Tab = typeof TABS[number];
 
 const won = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("ko-KR"));
@@ -534,7 +533,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
         ) : tab === "개요" ? <OverviewTab d={d} />
           : tab === "차트" ? <ChartTab symbol={`${code}.${d.marketCode}`} />
           : tab === "수급" ? <FlowTab code={code} market={d.marketCode} />
-          : tab === "신호" ? <LoginBlur label="신호 분석은 로그인 후 볼 수 있습니다"><StockSignalReport ticker={code} market={d.marketCode} /></LoginBlur>
+          : tab === "레이더" ? <RadarReport code={code} name={d.name} market={d.marketCode} />
           : tab === "뉴스" ? <ListTab key="news" kind="news" url={`/api/stock-news?name=${encodeURIComponent(d.name)}`} />
           : <ListTab key="dart" kind="dart" url={`/api/stock-disclosures?code=${code}`} />}
       </div>

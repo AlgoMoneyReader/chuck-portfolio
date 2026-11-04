@@ -649,7 +649,7 @@ function SectorHeatmap({ market }: { market: string }) {
 
             {/* 하단 힌트 */}
             <div className="px-5 py-2.5 border-t border-white/10 shrink-0">
-              <p className="text-xs text-gray-600">종목 클릭 → AI 종목 분석 페이지</p>
+              <p className="text-xs text-gray-600">종목 클릭 → AI 레이더 분석</p>
             </div>
           </div>
         </div>

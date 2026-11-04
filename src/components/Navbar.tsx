@@ -81,7 +81,7 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-0.5 min-w-0">
-          <GatedIcon href="/analyze" label="AI 종목분석"><TbRadar2 size={20} /></GatedIcon>
+          <GatedIcon href="/analyze" label="AI 레이더 분석"><TbRadar2 size={20} /></GatedIcon>
           <SearchButton />
           <GatedIcon href="/portfolio" label="My 포트폴리오"><FiPieChart size={18} /></GatedIcon>
           <Account />

@@ -3,9 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import staticMaster from "@/data/stock_master.json";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
-import { LoginBlur } from "./RequireLogin";
-import { useAuth } from "./AuthProvider";
-import { authFetch } from "@/lib/supabase/authFetch";
+import RadarReport from "./RadarReport";
+import { TbRadar2 } from "react-icons/tb";
 import { logActivity } from "@/lib/activity";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 
@@ -41,16 +40,6 @@ interface InvestorData {
   comment: string;
 }
 
-interface AnalysisData {
-  businessModel: string;
-  pros: string[];
-  cons: string[];
-  financialHealth: string;
-  valuation: string;
-  verdict?: string;
-  summary: string[];
-}
-
 /** 억원 → ±1,234억 / ±1.2조 */
 function fmtUk(n: number): string {
   const abs = Math.abs(n);
@@ -73,14 +62,6 @@ function fmtDate(d: string): string {
 }
 
 // ── Grade 색상 ───────────────────────────────────────────────────────────────
-
-const GRADE_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  S: { color: "#f59e0b", bg: "bg-amber-500/20 border-amber-500/40", label: "강력 매수" },
-  A: { color: "#22c55e", bg: "bg-green-500/20 border-green-500/40", label: "매수" },
-  B: { color: "#06b6d4", bg: "bg-cyan-500/20 border-cyan-500/40",   label: "중립" },
-  C: { color: "#f97316", bg: "bg-orange-500/20 border-orange-500/40", label: "주의" },
-  D: { color: "#ef4444", bg: "bg-red-500/20 border-red-500/40",     label: "회피" },
-};
 
 // ── 마켓 상태 타입 ────────────────────────────────────────────────────────────
 
@@ -144,7 +125,7 @@ function InlineChart({ sym }: { sym: string }) {
   );
 }
 
-export default function StockSearchPanel() {
+export default function StockSearchPanel({ initialTicker = "", initialName = "" }: { initialTicker?: string; initialName?: string } = {}) {
   // ── 전종목 마스터: 정적 JSON 직접 import (0ms, 네트워크 없음) ──────────────
   // KRX KIND에서 수집한 KOSPI+KOSDAQ 2,610개 — src/data/stock_master.json
   // 업데이트: scripts/generate-stock-master.py 실행 후 커밋
@@ -168,10 +149,8 @@ export default function StockSearchPanel() {
   const [selected, setSelected] = useState<StockItem | null>(null);
   const [quote,    setQuote]    = useState<QuoteData | null>(null);
   const [investor, setInvestor] = useState<InvestorData | null>(null);
-  const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
   const [loading,  setLoading]  = useState(false);
   const [invLoading,  setInvLoading]  = useState(false);
-  const [analLoading, setAnalLoading] = useState(false);
   const [supplyTab, setSupplyTab] = useState<"amount" | "qty">("amount");
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -282,10 +261,8 @@ export default function StockSearchPanel() {
     setHighlightIdx(-1);
     setQuote(null);
     setInvestor(null);
-    setAnalysis(null);
     setLoading(true);
     setInvLoading(!isUS); // 미국주식은 수급 조회 없음
-    setAnalLoading(true);
 
     fetch(`/api/stock-detail?code=${code}&market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
@@ -316,24 +293,16 @@ export default function StockSearchPanel() {
 
   }, []);
 
-  // 진보적 사고 AI 분석: 로그인 회원만 (AI 한도 보호)
-  const { user } = useAuth();
-  const [analErr, setAnalErr] = useState("");
-  // 수급 Grade 가 나온 뒤에 AI 를 불러 Grade 를 함께 넘긴다 (단기 수급과 펀더멘털 의견 조율)
-  const gradeKey = investor ? `${investor.grade}|${investor.score}` : "";
+  // 다른 화면에서 종목을 넘겨받으면(예: /analyze?ticker=005930.KS) 바로 연다
   useEffect(() => {
-    if (!selected) return;
-    if (!user) { setAnalLoading(false); return; }
-    if (selected.market !== "US" && invLoading) return;
-    setAnalLoading(true); setAnalErr("");
-    const g = investor ? `&grade=${encodeURIComponent(investor.grade)}&score=${investor.score}&gnote=${encodeURIComponent((investor.factors ?? []).map(f => `${f.label} ${f.score}/${f.max}(${f.desc})`).join(", ").slice(0, 190))}` : "";
-    authFetch(`/api/stock-analysis?code=${selected.code}&name=${encodeURIComponent(selected.name)}&market=${selected.market}${g}`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(j => { if (j && !j.error) setAnalysis(j); else setAnalErr(j?.error ?? "분석 실패"); })
-      .catch(e => setAnalErr(String(e)))
-      .finally(() => setAnalLoading(false));
+    if (!initialTicker) return;
+    const [code, mk] = initialTicker.toUpperCase().split(".");
+    const hit = allStocks.find(x => x.code === code);
+    if (hit) loadStock(hit);
+    else if (/^[A-Z]/.test(code)) loadStock({ code, name: initialName || code, market: "US", type: "us" } as SearchResult);
+    else if (/^\d{6}$/.test(code)) loadStock({ code, name: initialName || code, market: (mk === "KQ" ? "KQ" : "KS"), type: "regular" } as SearchResult);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, user, invLoading, gradeKey]);
+  }, [initialTicker]);
 
   // 오늘 장중 수급(외국인 창구 실시간 · 기관 가집계)
   const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string } | null>(null);
@@ -371,7 +340,6 @@ export default function StockSearchPanel() {
 
   const isPos = (quote?.changePct ?? 0) >= 0;
   const priceColor = isPos ? "text-signal-green" : "text-signal-red";
-  const gc = investor ? GRADE_CONFIG[investor.grade] : null;
   const isUSStock = selected?.market === "US";
 
   // 가격 포맷 함수 (KRW: 정수 원, USD: $소수점2자리)
@@ -387,10 +355,10 @@ export default function StockSearchPanel() {
     <section className="card space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">종목 검색 · 수급 분석</h2>
+          <h2 className="text-sm font-bold text-white flex items-center gap-1.5"><TbRadar2 className="text-cyan-brand" size={17} />AI 레이더 분석</h2>
           <MarketStatusBadge />
         </div>
-        <span className="text-xs text-gray-600">진보적 사고 기반 Grade</span>
+        <span className="text-xs text-gray-500 hidden sm:inline">종목을 검색하면 수급·흐름 신호와 실적·뉴스를 AI가 종합합니다</span>
       </div>
 
       {/* 검색창 */}
@@ -566,8 +534,8 @@ export default function StockSearchPanel() {
             <InlineChart sym={selected.sym} />
           )}
 
-          {/* 수급·등급 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* 수급현황 */}
+          <div className="grid grid-cols-1 gap-4">
 
             {/* 수급현황 — 미국주식은 대체 안내 표시 */}
             <div className="bg-navy-sub/40 rounded-xl p-4 space-y-3">
@@ -656,139 +624,10 @@ export default function StockSearchPanel() {
             </>)}
             </div>
 
-            {/* 진보적 사고 Grade */}
-            <LoginBlur label="진보적 사고 Grade는 로그인 후 볼 수 있습니다">
-            <div className="bg-navy-sub/40 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">진보적 사고 Grade <span className="normal-case tracking-normal text-[10px] text-gray-500">· 단기 수급·모멘텀</span></p>
-              {invLoading ? (
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-16 bg-navy-border rounded-lg" />
-                  <div className="h-4 bg-navy-border rounded w-3/4" />
-                </div>
-              ) : investor && gc ? (
-                <div className="space-y-3">
-                  {/* 등급 뱃지 */}
-                  <div className={`flex items-center gap-3 px-3 py-3 rounded-lg border ${gc.bg}`}>
-                    <span className="text-4xl font-black" style={{ color: gc.color }}>{investor.grade}</span>
-                    <div>
-                      <p className="text-white font-bold text-sm">{gc.label}</p>
-                      <p className="text-xs text-gray-400">{investor.score}/100점</p>
-                    </div>
-                  </div>
-
-                  {/* 스코어 바 */}
-                  <div className="space-y-2">
-                    {(investor.factors ?? []).map((f, fi) => {
-                      const fScore = f?.score ?? 0;
-                      const fMax   = f?.max   ?? 1; // 0으로 나누기 방지
-                      return (
-                        <div key={f?.label ?? fi}>
-                          <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-gray-400">{f?.label ?? ""}</span>
-                            <span className="text-gray-300">{fScore}/{fMax}</span>
-                          </div>
-                          <div className="h-1.5 bg-navy-border rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${Math.min((fScore / fMax) * 100, 100)}%`,
-                                backgroundColor: gc.color,
-                                opacity: 0.8,
-                              }} />
-                          </div>
-                          <p className="text-xs text-gray-600 mt-0.5">{f?.desc ?? ""}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500 py-2">분석 중...</p>
-              )}
-            </div>
-            </LoginBlur>
           </div>
 
-          {/* 수급 기반 코멘트 */}
-          {investor && (
-            <LoginBlur label="수급 시그널은 로그인 후 볼 수 있습니다">
-            <div className="px-4 py-3 bg-navy-sub/30 rounded-xl border border-navy-border/30">
-              <p className="text-xs text-gray-500 mb-1.5">📊 수급 시그널</p>
-              <p className="text-sm text-gray-300 leading-relaxed">{investor.comment}</p>
-            </div>
-            </LoginBlur>
-          )}
-
-          {/* AI 심층분석 */}
-          <LoginBlur label="진보적 사고 AI 분석은 로그인 후 볼 수 있습니다">
-          <div className="bg-navy-sub/30 rounded-xl border border-navy-border/30 overflow-hidden">
-            <div className="px-4 py-3 border-b border-navy-border/30 flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-300">📖 진보적 사고 — AI 심층분석 <span className="text-[10px] text-gray-500">· 펀더멘털(중장기)</span></span>
-              {analLoading && <div className="w-3 h-3 border border-cyan-brand/30 border-t-cyan-brand rounded-full animate-spin" />}
-            </div>
-            {analLoading ? (
-              <div className="p-4 space-y-2 animate-pulse">
-                {[0,1,2,3,4].map(i => <div key={i} className="h-3 bg-navy-border rounded w-full" />)}
-              </div>
-            ) : analysis ? (
-              <div className="p-4 space-y-4 text-sm">
-                {/* 3줄 요약 */}
-                <div className="space-y-1.5">
-                  {analysis.summary.map((line, i) => (
-                    <p key={i} className="text-gray-200 leading-snug">
-                      <span className="text-cyan-brand mr-1">›</span>{line}
-                    </p>
-                  ))}
-                </div>
-                <div className="border-t border-navy-border/30 pt-3 space-y-3">
-                  {/* 비즈니스 모델 */}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">💼 핵심 비즈니스</p>
-                    <p className="text-gray-300 text-xs leading-relaxed">{analysis.businessModel}</p>
-                  </div>
-                  {/* Pros / Cons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-signal-green mb-1.5 font-medium">▲ 성장 동력</p>
-                      <ul className="space-y-1">
-                        {analysis.pros.map((p, i) => (
-                          <li key={i} className="text-xs text-gray-400 leading-snug">• {p}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="text-xs text-signal-red mb-1.5 font-medium">▼ 핵심 리스크</p>
-                      <ul className="space-y-1">
-                        {analysis.cons.map((c, i) => (
-                          <li key={i} className="text-xs text-gray-400 leading-snug">• {c}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                  {/* 재무건전성 */}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">📈 재무 건전성</p>
-                    <p className="text-xs text-gray-400 leading-relaxed">{analysis.financialHealth}</p>
-                  </div>
-                  {/* 밸류에이션 */}
-                  <div className="px-3 py-2.5 bg-navy-card/60 rounded-lg">
-                    <p className="text-xs text-gray-500 mb-1">⚖️ 밸류에이션 · 최종 의견</p>
-                    <p className="text-xs text-gray-200 leading-relaxed font-medium">{analysis.valuation}</p>
-                  </div>
-                  {analysis.verdict && (
-                    <div className="px-3 py-2.5 rounded-lg border border-gold/40 bg-gold/10">
-                      <p className="text-xs text-gold mb-1 font-semibold">🎯 종합 대응 (단기 Grade {investor?.grade ?? "-"} + 펀더멘털)</p>
-                      <p className="text-xs text-gray-200 leading-relaxed font-medium">{analysis.verdict}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : !analLoading && selected && user ? (
-              <p className="text-xs text-gray-500 p-4">{analErr || "분석 데이터를 불러오지 못했습니다"}</p>
-            ) : !user ? (
-              <div className="p-4 space-y-2">{[0, 1, 2, 3].map(i => <div key={i} className="h-3 bg-navy-border rounded w-full" />)}</div>
-            ) : null}
-          </div>
-          </LoginBlur>
+          {/* AI 레이더 분석: 레이더(수급·흐름) + AI(실적·밸류·뉴스) 종합 */}
+          <RadarReport code={selected.code} name={selected.name} market={selected.market} />
 
           {/* 네이버 금융 링크 */}
           <a href={`https://finance.naver.com/item/main.naver?code=${selected.code}`}

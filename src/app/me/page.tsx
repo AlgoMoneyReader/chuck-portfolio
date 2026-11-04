@@ -12,7 +12,7 @@ import { useTheme, type Theme } from "@/lib/theme";
 
 const MENU = [
   { href: "/portfolio", Icon: FiPieChart, title: "My 포트폴리오", desc: "보유 종목 손익 · 관심 종목", admin: false },
-  { href: "/analyze", Icon: FiCpu, title: "AI 종목분석", desc: "펀드매니저급 AI 리서치 보고서", admin: false },
+  { href: "/analyze", Icon: FiCpu, title: "AI 레이더 분석", desc: "수급 신호 + 실적·뉴스 AI 종합 판단", admin: false },
   { href: "/admin", Icon: FiLock, title: "운영자", desc: "운영자 전용 메뉴", admin: true },
 ];
 
@@ -144,7 +144,7 @@ function MeContent() {
           <div className="h-5 w-32 bg-navy-card rounded animate-pulse" />
         ) : !user ? (
           <>
-            <p className="text-sm text-gray-400 mb-2">로그인하고 My 포트폴리오·AI 종목분석·커뮤니티를 이용하세요</p>
+            <p className="text-sm text-gray-400 mb-2">로그인하고 My 포트폴리오·AI 레이더 분석·커뮤니티를 이용하세요</p>
             <LoginButtons next={next && next.startsWith("/") ? `/me?next=${encodeURIComponent(next)}` : "/me"} />
           </>
         ) : !profile || editing ? (
