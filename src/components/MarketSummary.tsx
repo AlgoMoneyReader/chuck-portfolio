@@ -647,6 +647,7 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
   const [rows, setRows] = useState<HighRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
+  const [source, setSource] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -654,28 +655,29 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
       if (!res.ok) return;
       const json = await res.json();
       setRows(json.candidates ?? []);
+      setSource(json.source ?? "");
       setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market]);
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(load, 3_600_000);
+    const i = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 300_000 : 3_600_000);
     return () => clearInterval(i);
   }, [load]);
 
   return (
     <div>
       <div className="flex justify-between mb-3 text-xs">
-        <span className="text-gray-500">신고가 돌파 / 3% 이내 근접 종목</span>
+        <span className="text-gray-500">52주 신고가 돌파 · 3% 이내 근접 {source === "yahoo" ? "(주요 종목 기준)" : "(시장 전체)"}</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
       <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="w-5 text-center shrink-0">#</span>
         <span className="flex-1">종목</span>
-        <span className="w-20 text-right shrink-0">현재가</span>
-        <span className="hidden sm:block w-16 text-right shrink-0">52주 고가</span>
-        <span className="w-14 text-right shrink-0">대비</span>
+        <span className="text-right shrink-0">현재가 · 등락률</span>
+        <span className="hidden sm:block w-20 text-right shrink-0">52주 고가</span>
+        <span className="w-14 text-right shrink-0">고가 대비</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">52주 신고가 근접 종목이 없습니다</p>
@@ -696,8 +698,11 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
                 </div>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className="w-20 text-right text-sm text-white num shrink-0">{fmtPrice(r.price)}</span>
-              <span className="hidden sm:block w-16 text-right text-xs text-gray-400 num shrink-0">{fmtPrice(r.week52High)}</span>
+              <div className="flex flex-col items-end shrink-0">
+                <span className="text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
+                <span className={`text-[11px] num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+              </div>
+              <span className="hidden sm:block w-20 text-right text-xs text-gray-400 num shrink-0">{fmtPrice(r.week52High)}</span>
               <span className={`w-14 text-right text-sm font-semibold num shrink-0 ${r.distFromHigh >= 0 ? "text-gold" : "text-gray-400"}`}>
                 {r.distFromHigh >= 0 ? "+" : ""}{r.distFromHigh.toFixed(1)}%
               </span>
