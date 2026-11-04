@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { AreaChart, Area, BarChart, Bar, Legend, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
@@ -65,6 +65,105 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   );
 }
 
+interface QRow { period: string; sales: number | null; op: number | null; net: number | null; salesYoY: number | null; opYoY: number | null; netYoY: number | null }
+interface ARow { year: number; sales: number | null; op: number | null; net: number | null }
+
+function EarningsSection({ code, kis }: { code: string; kis: Overview["financials"] }) {
+  const [q, setQ] = useState<{ quarters: QRow[]; annual: ARow[]; latest: QRow | null; error?: string } | null>(null);
+  const [mode, setMode] = useState<"q" | "y">("q");
+  useEffect(() => {
+    fetch(`/api/stock-quarterly?code=${code}`, { cache: "no-store" }).then(r => r.json()).then(setQ).catch(() => setQ(null));
+  }, [code]);
+  const L = q?.latest;
+  const label = L ? `${L.period.slice(0, 4)}년 ${L.period.slice(-2, -1)}분기` : null;
+  const chart = mode === "q"
+    ? (q?.quarters ?? []).map(r => ({ name: r.period.slice(2).replace(".", "."), 매출: r.sales, 영업이익: r.op }))
+    : (q?.annual ?? []).map(r => ({ name: String(r.year), 매출: r.sales, 영업이익: r.op }));
+
+  if (!L && !kis) return null;
+  return (
+    <Section title="실적" note={L ? `${label} · DART 정기보고서` : kis?.period ? `연간 · 결산 ${ymd(kis.period)}` : undefined}>
+      {L ? (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="매출" value={eok(L.sales)} sub={`${pct(L.salesYoY)} YoY`} subCls={tone(L.salesYoY)} />
+          <Stat label="영업이익" value={eok(L.op)} sub={`${pct(L.opYoY)} YoY`} subCls={tone(L.opYoY)} />
+          <Stat label="순이익" value={eok(L.net)} sub={`${pct(L.netYoY)} YoY`} subCls={tone(L.netYoY)} />
+        </div>
+      ) : kis && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="매출" value={eok(kis.sales)} sub={`${pct(kis.salesYoY)} YoY`} subCls={tone(kis.salesYoY)} />
+          <Stat label="영업이익" value={eok(kis.opProfit)} sub={`${pct(kis.opProfitYoY)} YoY`} subCls={tone(kis.opProfitYoY)} />
+          <Stat label="순이익" value={eok(kis.netIncome)} sub={`${pct(kis.netIncomeYoY)} YoY`} subCls={tone(kis.netIncomeYoY)} />
+        </div>
+      )}
+      {kis && (kis.roe != null || kis.debtRatio != null) && (
+        <div className="grid grid-cols-3 gap-3">
+          <Stat label="ROE (연간)" value={kis.roe != null ? `${kis.roe.toFixed(1)}%` : "—"} />
+          <Stat label="부채비율 (연간)" value={kis.debtRatio != null ? `${kis.debtRatio.toFixed(1)}%` : "—"} />
+        </div>
+      )}
+      {chart.length > 1 && (
+        <>
+          <div className="flex gap-1">
+            {([["q", "분기"], ["y", "연간"]] as const).map(([k, l]) => (
+              <button key={k} onClick={() => setMode(k)}
+                className={`px-3 py-1 text-xs rounded-full ${mode === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
+            ))}
+          </div>
+          <div className="h-44">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={v => eok(Number(v))} />
+                <Tooltip cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  contentStyle={{ background: "#0D1530", border: "1px solid #1A2545", borderRadius: 8, fontSize: 12 }}
+                  formatter={(v, n) => [eok(Number(v)), n as string]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="매출" fill="#2563FF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+      {q?.error && !L && <p className="text-[10px] text-gray-600">분기 실적 없음: {q.error}</p>}
+    </Section>
+  );
+}
+
+interface Research { title: string; broker: string; date: string; url: string; pdf: string | null }
+
+function ResearchList({ code }: { code: string }) {
+  const [r, setR] = useState<{ items: Research[]; listUrl: string } | null>(null);
+  useEffect(() => {
+    fetch(`/api/stock-research?code=${code}`, { cache: "no-store" }).then(x => x.json()).then(setR).catch(() => setR(null));
+  }, [code]);
+  if (!r) return null;
+  return (
+    <div className="border-t border-navy-border pt-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-gray-300">최근 증권사 리포트</p>
+        <a href={r.listUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-cyan-brand">전체 보기 ›</a>
+      </div>
+      {r.items.length === 0 ? (
+        <p className="text-[11px] text-gray-500">리포트 목록을 가져오지 못했습니다. 전체 보기에서 확인하세요.</p>
+      ) : (
+        <ul className="divide-y divide-navy-border">
+          {r.items.map(i => (
+            <li key={i.url} className="py-2">
+              <a href={i.pdf ?? i.url} target="_blank" rel="noopener noreferrer" className="block">
+                <p className="text-sm text-white leading-snug line-clamp-2">{i.title}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{i.broker} · {i.date}{i.pdf ? " · PDF" : ""}</p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function OverviewTab({ d }: { d: Overview }) {
   const q = d.quote, c = d.consensus, f = d.financials, s = d.shortSale;
   const total = c ? c.buy + c.hold + c.sell : 0;
@@ -72,7 +171,6 @@ function OverviewTab({ d }: { d: Overview }) {
     ? `conic-gradient(#1D9E75 0 ${(c!.buy / total) * 360}deg, #F59E0B 0 ${((c!.buy + c!.hold) / total) * 360}deg, #E24B4A 0 360deg)`
     : "conic-gradient(#1A2545 0 360deg)";
   const verdict = !total ? "의견 없음" : c!.buy / total >= 0.7 ? "매수 우세" : c!.sell / total >= 0.3 ? "매도 경계" : "중립";
-  const maxSales = Math.max(1, ...(f?.history ?? []).map(h => Math.abs(h.sales ?? 0)));
 
   return (
     <div className="space-y-4">
@@ -99,32 +197,7 @@ function OverviewTab({ d }: { d: Overview }) {
         </Section>
       )}
 
-      {f && (
-        <Section title="실적" note={f.period ? `연간 · 결산 ${ymd(f.period)}` : "연간"}>
-          <div className="grid grid-cols-3 gap-3">
-            <Stat label="매출" value={eok(f.sales)} sub={`${pct(f.salesYoY)} YoY`} subCls={tone(f.salesYoY)} />
-            <Stat label="영업이익" value={eok(f.opProfit)} sub={`${pct(f.opProfitYoY)} YoY`} subCls={tone(f.opProfitYoY)} />
-            <Stat label="순이익" value={eok(f.netIncome)} sub={`${pct(f.netIncomeYoY)} YoY`} subCls={tone(f.netIncomeYoY)} />
-            <Stat label="ROE" value={f.roe != null ? `${f.roe.toFixed(1)}%` : "—"} />
-            <Stat label="부채비율" value={f.debtRatio != null ? `${f.debtRatio.toFixed(1)}%` : "—"} />
-          </div>
-          {f.history.length > 1 && (
-            <div className="flex items-end gap-3 h-28 pt-2">
-              {f.history.map(h => (
-                <div key={h.period} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex items-end justify-center gap-1 h-20">
-                    <div className="w-1/3 bg-cyan-brand/70 rounded-t" style={{ height: `${(Math.abs(h.sales ?? 0) / maxSales) * 100}%` }} title={`매출 ${eok(h.sales)}`} />
-                    <div className={`w-1/3 rounded-t ${(h.opProfit ?? 0) >= 0 ? "bg-signal-green/80" : "bg-signal-red/80"}`}
-                      style={{ height: `${(Math.abs(h.opProfit ?? 0) / maxSales) * 100}%` }} title={`영업이익 ${eok(h.opProfit)}`} />
-                  </div>
-                  <span className="text-[10px] text-gray-500 num">{h.period?.slice(0, 4)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-[10px] text-gray-600">파랑: 매출 · 초록/빨강: 영업이익</p>
-        </Section>
-      )}
+      <EarningsSection code={d.code} kis={f} />
 
       {c && (
         <Section title="목표가" note={`증권사 리포트 최근 3개월 ${c.reports}건`}>
@@ -164,6 +237,7 @@ function OverviewTab({ d }: { d: Overview }) {
               ))}
             </ul>
           )}
+          <ResearchList code={d.code} />
         </Section>
       )}
 
@@ -186,7 +260,7 @@ function OverviewTab({ d }: { d: Overview }) {
 const RANGES = [["1d", "1일"], ["5d", "5일"], ["1mo", "1개월"], ["3mo", "3개월"], ["1y", "1년"]] as const;
 
 function ChartTab({ symbol }: { symbol: string }) {
-  const [range, setRange] = useState<string>("3mo");
+  const [range, setRange] = useState<string>("1d");
   const [data, setData] = useState<{ date: string; close: number }[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -233,18 +307,35 @@ interface Flow {
 
 function FlowTab({ code, market }: { code: string; market: string }) {
   const [f, setF] = useState<Flow | null>(null);
+  const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; note?: string; error?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     fetch(`/api/stock-investor?code=${code}&market=${market}`, { cache: "no-store" })
       .then(r => r.json()).then(j => setF(j.error ? null : j)).finally(() => setLoading(false));
+    fetch(`/api/stock-flow-live?code=${code}`, { cache: "no-store" }).then(r => r.json()).then(setLive).catch(() => setLive(null));
   }, [code, market]);
   if (loading) return <div className="card h-48 animate-pulse" />;
   if (!f) return <div className="card text-sm text-gray-500 text-center py-10">수급 데이터를 불러올 수 없습니다</div>;
   const today = [["외국인", f.foreign], ["기관", f.institution], ["개인", f.individual]] as const;
   const max = Math.max(1, ...today.map(([, v]) => Math.abs(v)));
+  const todayYmd = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "");
+  const confirmedToday = f.invDate === todayYmd;
   return (
     <div className="space-y-4">
-      <Section title="투자자별 순매수" note={f.invDate ? `${ymd(f.invDate)} 기준 · 억원` : "억원"}>
+      {!confirmedToday && live && (
+        <Section title="오늘 장중 수급" note={live.available ? `${live.asOf} 가집계 · 추정 · 억원` : undefined}>
+          {live.available ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Stat label="외국인" value={`${(live.foreignEok ?? 0) > 0 ? "+" : ""}${eok(live.foreignEok)}`} subCls={tone(live.foreignEok)} sub={(live.foreignEok ?? 0) >= 0 ? "순매수" : "순매도"} />
+              <Stat label="기관" value={`${(live.institutionEok ?? 0) > 0 ? "+" : ""}${eok(live.institutionEok)}`} subCls={tone(live.institutionEok)} sub={(live.institutionEok ?? 0) >= 0 ? "순매수" : "순매도"} />
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">{live.note ?? "장중 가집계를 불러오지 못했습니다"}</p>
+          )}
+          <p className="text-[10px] text-gray-600">거래소 가집계(09:30·10:00·11:20·13:20·14:30)를 현재가로 환산한 추정치 · 확정값은 장 마감 후</p>
+        </Section>
+      )}
+      <Section title={confirmedToday ? "투자자별 순매수 (오늘 확정)" : "투자자별 순매수 (직전 거래일 확정)"} note={f.invDate ? `${ymd(f.invDate)} 기준 · 억원` : "억원"}>
         {today.map(([l, v]) => (
           <div key={l}>
             <div className="flex justify-between text-sm mb-1"><span className="text-white">{l}</span><span className={`font-bold num ${tone(v)}`}>{v > 0 ? "+" : ""}{eok(v)}</span></div>
@@ -272,6 +363,7 @@ function ListTab({ url, kind }: { url: string; kind: "news" | "dart" }) {
   const [items, setItems] = useState<{ title?: string; report?: string; url: string; source?: string; filer?: string; publishedAt?: string | null; date?: string }[]>([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sort, setSort] = useState<"rel" | "new">("new");
   useEffect(() => {
     fetch(url, { cache: "no-store" }).then(r => r.json())
       .then(j => { setItems(j.items ?? []); setErr(j.error ?? ""); })
@@ -279,9 +371,21 @@ function ListTab({ url, kind }: { url: string; kind: "news" | "dart" }) {
   }, [url]);
   if (loading) return <div className="card h-48 animate-pulse" />;
   if (!items.length) return <div className="card text-sm text-gray-500 text-center py-10">{err || (kind === "news" ? "최근 1주 뉴스가 없습니다" : "최근 6개월 공시가 없습니다")}</div>;
+  const shown = kind === "news" && sort === "new"
+    ? [...items].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
+    : items;
   return (
+    <div className="space-y-2">
+    {kind === "news" && (
+      <div className="flex gap-1 justify-end">
+        {([["new", "최신순"], ["rel", "관련도순"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setSort(k)}
+            className={`px-2.5 py-1 text-xs rounded-lg ${sort === k ? "bg-navy-card text-white border border-navy-border" : "text-gray-500"}`}>{l}</button>
+        ))}
+      </div>
+    )}
     <ul className="card !p-0 divide-y divide-navy-border">
-      {items.map(i => (
+      {shown.map(i => (
         <li key={i.url}>
           <a href={i.url} target="_blank" rel="noopener noreferrer" className="block px-4 py-3 hover:bg-white/5">
             <p className="text-sm text-white leading-snug">{i.title ?? i.report}</p>
@@ -290,6 +394,7 @@ function ListTab({ url, kind }: { url: string; kind: "news" | "dart" }) {
         </li>
       ))}
     </ul>
+    </div>
   );
 }
 
