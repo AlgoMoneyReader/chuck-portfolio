@@ -21,6 +21,10 @@ interface Report {
 }
 interface Quota { admin?: boolean; used?: number; limit?: number }
 
+// 이번 방문 동안 받은 분석 결과 보관 (종목코드 → 결과). 탭 전환·화면 이동 후에도 다시 받지 않는다
+const KEEP = new Map<string, Report>();
+const dayKey = (code: string) => `${code}:${new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)}`;
+
 const VERDICT: Record<string, { cls: string; dot: string }> = {
   매수: { cls: "bg-signal-green/15 text-signal-green border-signal-green/40", dot: "bg-signal-green" },
   분할매수: { cls: "bg-signal-green/10 text-signal-green border-signal-green/30", dot: "bg-signal-green" },
@@ -67,7 +71,7 @@ function Gauge({ label, value, sub }: { label: string; value: number | null; sub
 
 function Body({ code, name, market }: { code: string; name: string; market: string }) {
   const { user, isAdmin } = useAuth();
-  const [r, setR] = useState<Report | null>(null);
+  const [r, setR] = useState<Report | null>(() => KEEP.get(dayKey(code)) ?? null);
   const [quota, setQuota] = useState<Quota | null>(null);
   const [state, setState] = useState<"idle" | "checking" | "running">("checking");
   const [err, setErr] = useState("");
@@ -80,13 +84,22 @@ function Body({ code, name, market }: { code: string; name: string; market: stri
       const res = await authFetch(`/api/radar?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&market=${market}${run ? "&run=1" : ""}${force ? "&force=1" : ""}`, { cache: "no-store" });
       const j = await res.json();
       if (j.quota) setQuota(j.quota);
-      if (j.report) setR(j.report);
+      if (j.report) { KEEP.set(dayKey(code), j.report); setR(j.report); }
+      if (j.saveError) setErr(`결과 공유 저장 실패: ${j.saveError} (supabase/setup-all.sql 실행 확인)`);
       if (!res.ok) setErr(j.error ?? "분석 실패");
     } catch (e) { setErr(String(e)); }
     setState("idle");
   }, [code, name, market]);
 
-  useEffect(() => { setR(null); if (user) call(false); else setState("idle"); }, [user, call]);
+  // 종목이 바뀌거나 로그인 상태가 바뀔 때만 확인. 이미 받아 둔 결과가 있으면 그대로 쓴다
+  const uid = user?.id;
+  useEffect(() => {
+    const kept = KEEP.get(dayKey(code));
+    setR(kept ?? null);
+    if (kept) { setState("idle"); return; }
+    if (uid) call(false); else setState("idle");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, code]);
 
   const left = quota && !quota.admin ? Math.max(0, (quota.limit ?? 5) - (quota.used ?? 0)) : null;
 

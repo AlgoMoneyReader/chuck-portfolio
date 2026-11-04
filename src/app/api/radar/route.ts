@@ -144,9 +144,13 @@ JSON 만 반환:
     };
     // 저장(공유) + 1회 차감. 저장 테이블이 없어도 결과는 돌려준다
     if (force && quota.admin) await me.sb.from("radar_reports").update({ report, created_at: new Date().toISOString() }).eq("code", code).eq("day", day);
-    await me.sb.from("radar_reports").insert({ code, day, report, created_by: me.user.id });
+    let saveErr: string | null = null;
+    if (!(force && quota.admin)) {
+      const { error } = await me.sb.from("radar_reports").insert({ code, day, report, created_by: me.user.id });
+      saveErr = error ? error.message : null;
+    }
     const { data: used } = await me.sb.rpc("use_ai_quota");
-    return NextResponse.json({ report, cached: false, quota: used ?? quota });
+    return NextResponse.json({ report, cached: false, quota: used ?? quota, saveError: saveErr });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg, quota }, { status: e instanceof GeminiError && e.quota ? 429 : 500 });
