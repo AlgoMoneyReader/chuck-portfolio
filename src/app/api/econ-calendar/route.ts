@@ -235,7 +235,7 @@ export async function GET() {
     return NextResponse.json({
       items: all, errors: kr.note ? [...errors, kr.note] : errors,
       coverage: { global: days.length ? { from: days[0], to: days[days.length - 1] } : null, krLive: kr.live },
-      actualSources: { ...loaded.stats, matched: `${all.filter(e => e.actual).length}건` },
+      actualSources: { version: "매칭 v2 (이름 표기 통일·단위 검사)", ...loaded.stats, matched: `${all.filter(e => e.actual).length}건` },
     });
   } catch (e) {
     // 해외 일정이 막혀도 한국 일정은 보여준다
