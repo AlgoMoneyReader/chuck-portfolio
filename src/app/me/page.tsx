@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FiPieChart, FiCpu, FiLock, FiInstagram, FiChevronRight, FiUser, FiEdit2, FiHeart, FiFileText } from "react-icons/fi";
 import { useAuth } from "@/components/AuthProvider";
 import { LoginButtons, NicknameForm } from "@/components/LoginPanel";
@@ -10,10 +10,25 @@ import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
 
 const MENU = [
-  { href: "/portfolio", Icon: FiPieChart, title: "포트폴리오", desc: "보유 종목 실시간 손익 관리 (운영자)" },
-  { href: "/analyze", Icon: FiCpu, title: "AI 종목 분석", desc: "종목 검색과 AI 리서치 보고서" },
-  { href: "/admin", Icon: FiLock, title: "운영자", desc: "운영자 전용 메뉴 (비밀번호)" },
+  { href: "/portfolio", Icon: FiPieChart, title: "My 포트폴리오", desc: "보유 종목 손익 · 관심 종목", admin: false },
+  { href: "/analyze", Icon: FiCpu, title: "AI 종목분석", desc: "펀드매니저급 AI 리서치 보고서", admin: false },
+  { href: "/admin", Icon: FiLock, title: "운영자", desc: "운영자 전용 메뉴", admin: true },
 ];
+
+function QuotaBadge() {
+  const { user, isAdmin } = useAuth();
+  const [q, setQ] = useState<{ used?: number; limit?: number } | null>(null);
+  useEffect(() => {
+    const sb = getBrowserSupabase();
+    if (!sb || !user || isAdmin) return;
+    sb.rpc("ai_quota_status").then(({ data }) => setQ(data ?? null));
+  }, [user, isAdmin]);
+  if (!user) return <span className="text-[11px] text-gray-500">로그인 필요</span>;
+  if (isAdmin) return <span className="text-[11px] text-gold">무제한</span>;
+  if (!q) return null;
+  const left = Math.max(0, (q.limit ?? 5) - (q.used ?? 0));
+  return <span className="text-[11px] text-gray-400 num">오늘 <span className={left ? "text-gold font-semibold" : "text-signal-red font-semibold"}>{left}</span>/{q.limit ?? 5}회 남음</span>;
+}
 
 interface WatchItem { code: string; name: string; market: string }
 interface MyPost { id: number; title: string; created_at: string; comment_count: number; like_count: number }
@@ -68,9 +83,17 @@ function MyActivity({ userId }: { userId: string }) {
 }
 
 function MeContent() {
-  const { loading, user, profile, signOut } = useAuth();
-  const authError = useSearchParams()?.get("auth_error");
+  const { loading, user, profile, isAdmin, signOut } = useAuth();
+  const params = useSearchParams();
+  const authError = params?.get("auth_error");
+  const next = params?.get("next");
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
+
+  // 레이더·포트폴리오 아이콘을 누르고 로그인하러 온 경우: 로그인·닉네임 설정이 끝나면 원래 화면으로
+  useEffect(() => {
+    if (next && next.startsWith("/") && !next.startsWith("//") && user && profile) router.replace(next);
+  }, [next, user, profile, router]);
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-6 space-y-6 animate-fade-in">
@@ -83,8 +106,8 @@ function MeContent() {
           <div className="h-5 w-32 bg-navy-card rounded animate-pulse" />
         ) : !user ? (
           <>
-            <p className="text-sm text-gray-400 mb-2">로그인하고 커뮤니티·관심종목을 이용하세요</p>
-            <LoginButtons />
+            <p className="text-sm text-gray-400 mb-2">로그인하고 My 포트폴리오·AI 종목분석·커뮤니티를 이용하세요</p>
+            <LoginButtons next={next && next.startsWith("/") ? `/me?next=${encodeURIComponent(next)}` : "/me"} />
           </>
         ) : !profile || editing ? (
           <>
@@ -104,7 +127,7 @@ function MeContent() {
       <section>
         <p className="text-xs font-semibold text-gray-500 mb-2 px-1">메뉴</p>
         <ul className="card !p-0 divide-y divide-navy-border">
-          {MENU.map(({ href, Icon, title, desc }) => (
+          {MENU.filter(m => !m.admin || isAdmin).map(({ href, Icon, title, desc }) => (
             <li key={href}>
               <Link href={href} className="flex items-center gap-4 px-4 py-4 hover:bg-white/5">
                 <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand"><Icon size={18} /></span>
@@ -112,6 +135,7 @@ function MeContent() {
                   <span className="block text-sm font-semibold text-white">{title}</span>
                   <span className="block text-xs text-gray-500 mt-0.5">{desc}</span>
                 </span>
+                {href === "/analyze" && <QuotaBadge />}
                 <FiChevronRight className="text-gray-600" />
               </Link>
             </li>

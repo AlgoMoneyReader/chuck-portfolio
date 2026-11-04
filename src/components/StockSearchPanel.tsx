@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import staticMaster from "@/data/stock_master.json";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
+import { LoginBlur } from "./RequireLogin";
+import { useAuth } from "./AuthProvider";
+import { authFetch } from "@/lib/supabase/authFetch";
+import { useMarketPoll } from "@/lib/useMarketPoll";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,8 +28,6 @@ interface QuoteData {
   postMarketPrice: number | null;
   postMarketChangePct: number | null;
 }
-
-interface ChartPoint { date: string; close: number | null; }
 
 interface InvestorData {
   foreign: number; institution: number; individual: number | null;
@@ -78,14 +80,6 @@ const GRADE_CONFIG: Record<string, { color: string; bg: string; label: string }>
   D: { color: "#ef4444", bg: "bg-red-500/20 border-red-500/40",     label: "회피" },
 };
 
-const RANGES = [
-  { key:"1d",  label:"1일"   },
-  { key:"5d",  label:"5일"   },
-  { key:"1mo", label:"1개월" },
-  { key:"3mo", label:"3개월" },
-  { key:"1y",  label:"1년"   },
-];
-
 // ── 마켓 상태 타입 ────────────────────────────────────────────────────────────
 
 type MarketSession = "NXT_PRE" | "REGULAR" | "NXT_POST" | "CLOSED";
@@ -132,95 +126,21 @@ function MarketStatusBadge() {
 
 // ── 인라인 차트 ──────────────────────────────────────────────────────────────
 
-function InlineChart({ sym, changePct }: { sym: string; changePct: number }) {
-  const [range, setRange]   = useState("3mo");
-  const [data, setData]     = useState<ChartPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [currency, setCurrency] = useState("KRW");
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/chart-data?label=${encodeURIComponent(sym)}&range=${range}`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (j?.data) { setData(j.data); setCurrency(j.currency ?? "KRW"); }
-      })
-      .finally(() => setLoading(false));
-  }, [sym, range]);
-
-  const isPos  = changePct >= 0;
-  const color  = isPos ? "#22c55e" : "#ef4444";
-  const gradId = `ig_${sym.replace(/[^a-zA-Z0-9]/g, "")}`;
-  const tickCount = 5;
-  const step = data.length > tickCount ? Math.floor(data.length / tickCount) : 1;
-  const ticks = data.filter((_, i) => i % step === 0).map(d => d.date);
-
+// 종목 상세와 같은 캔들 차트(분봉~월봉)
+function InlineChart({ sym }: { sym: string }) {
+  const [tf, setTf] = useState<Timeframe>("5m");
   return (
     <div className="space-y-2">
-      <div className="flex gap-1">
-        {RANGES.map(r => (
-          <button key={r.key} onClick={() => setRange(r.key)}
-            className={`px-2.5 py-0.5 text-xs rounded-full transition-all ${
-              range === r.key
-                ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40 font-semibold"
-                : "text-gray-500 hover:text-gray-300"
-            }`}>{r.label}</button>
+      <div className="flex gap-1 overflow-x-auto scrollbar-none">
+        {TIMEFRAMES.map(([k, l]) => (
+          <button key={k} onClick={() => setTf(k)}
+            className={`shrink-0 px-3 py-1 text-xs rounded-lg ${tf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
         ))}
       </div>
-      <div className="h-44 w-full">
-        {loading ? (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-cyan-brand/30 border-t-cyan-brand rounded-full animate-spin" />
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={color} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1A2D42" vertical={false} />
-              <XAxis dataKey="date" ticks={ticks}
-                tick={{ fill: "#6B7280", fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis domain={["auto","auto"]}
-                tick={{ fill: "#6B7280", fontSize: 9 }}
-                tickFormatter={v =>
-                  currency === "KRW"
-                    ? v >= 1000 ? (v/1000).toFixed(0)+"K" : String(v)
-                    : v.toFixed(0)
-                }
-                axisLine={false} tickLine={false} width={44} />
-              <Tooltip
-                content={({ active, payload, label: d }) => {
-                  if (!active || !payload?.length) return null;
-                  // null 포인트(connectNulls)에서 value가 null일 수 있음
-                  const v = payload[0]?.value;
-                  if (v == null) return null;
-                  const num = v as number;
-                  return (
-                    <div className="bg-navy-card border border-navy-border rounded-lg px-2.5 py-1.5 text-xs">
-                      <p className="text-gray-400">{d}</p>
-                      <p className="text-white font-bold">
-                        {currency === "KRW" ? num.toLocaleString("ko-KR")+"원" : num.toFixed(2)}
-                      </p>
-                    </div>
-                  );
-                }}
-              />
-              <Area type="monotone" dataKey="close"
-                stroke={color} strokeWidth={1.5} fill={`url(#${gradId})`}
-                dot={false} activeDot={{ r: 3, fill: color, stroke:"#07111E", strokeWidth:2 }} connectNulls />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+      <CandleChart label={sym} tf={tf} height={300} digits={sym.includes(".") ? 0 : 2} />
     </div>
   );
 }
-
-// ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function StockSearchPanel() {
   // ── 전종목 마스터: 정적 JSON 직접 import (0ms, 네트워크 없음) ──────────────
@@ -391,11 +311,31 @@ export default function StockSearchPanel() {
         .finally(() => setInvLoading(false));
     }
 
-    fetch(`/api/stock-analysis?code=${code}&name=${encodeURIComponent(name)}&market=${market}`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j && !j.error) setAnalysis(j); })
-      .finally(() => setAnalLoading(false));
   }, []);
+
+  // 진보적 사고 AI 분석: 로그인 회원만 (AI 한도 보호)
+  const { user } = useAuth();
+  const [analErr, setAnalErr] = useState("");
+  useEffect(() => {
+    if (!selected) return;
+    if (!user) { setAnalLoading(false); return; }
+    setAnalLoading(true); setAnalErr("");
+    authFetch(`/api/stock-analysis?code=${selected.code}&name=${encodeURIComponent(selected.name)}&market=${selected.market}`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(j => { if (j && !j.error) setAnalysis(j); else setAnalErr(j?.error ?? "분석 실패"); })
+      .catch(e => setAnalErr(String(e)))
+      .finally(() => setAnalLoading(false));
+  }, [selected, user]);
+
+  // 오늘 장중 수급(외국인 창구 실시간 · 기관 가집계)
+  const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string } | null>(null);
+  const loadLive = useCallback(() => {
+    if (!selected || selected.market === "US") { setLive(null); return; }
+    fetch(`/api/stock-flow-live?code=${selected.code}`, { cache: "no-store" })
+      .then(r => r.json()).then(j => setLive(j.error ? null : j)).catch(() => {});
+  }, [selected]);
+  useEffect(() => { setLive(null); loadLive(); }, [loadLive]);
+  useMarketPoll(loadLive, 30_000);
 
   // ── 키보드 이벤트 ─────────────────────────────────────────────────────────
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -615,7 +555,7 @@ export default function StockSearchPanel() {
 
           {/* 차트 */}
           {selected && quote && (
-            <InlineChart sym={selected.sym} changePct={quote?.changePct ?? 0} />
+            <InlineChart sym={selected.sym} />
           )}
 
           {/* 수급·등급 */}
@@ -637,7 +577,7 @@ export default function StockSearchPanel() {
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">수급현황</p>
                 <div className="flex items-center gap-2">
                   {investor?.invDate && (
-                    <span className="text-xs text-gray-600">기준: {fmtDate(investor.invDate)}</span>
+                    <span className="text-xs text-gray-600">확정 기준: {fmtDate(investor.invDate)}</span>
                   )}
                   {/* 금액/수량 탭 */}
                   <div className="flex rounded-lg overflow-hidden border border-navy-border">
@@ -652,6 +592,19 @@ export default function StockSearchPanel() {
                   </div>
                 </div>
               </div>
+              {live && (live.available || live.globalEok != null) && investor?.invDate !== new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "") && (
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["외국인", live.globalEok ?? live.foreignEok, live.globalEok != null ? `${live.updatedAt} 창구` : `${live.asOf} 가집계`],
+                    ["기관", live.available ? live.institutionEok : null, `${live.asOf ?? "09:30"} 가집계`],
+                  ] as const).map(([l, v, at]) => (
+                    <div key={l} className="px-3 py-2 rounded-lg bg-cyan-brand/5 border border-cyan-brand/20">
+                      <p className="text-[11px] text-gray-400">오늘 {l} <span className="text-gray-600 num">· {at}</span></p>
+                      <p className={`text-sm font-bold num ${v == null ? "text-gray-600" : v >= 0 ? "text-signal-green" : "text-signal-red"}`}>{v == null ? "—" : `${v > 0 ? "+" : ""}${v.toLocaleString("ko-KR")}억`}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               {invLoading ? (
                 <div className="space-y-2 animate-pulse">
                   {[0,1,2].map(i => <div key={i} className="h-10 bg-navy-border rounded-lg" />)}
@@ -696,6 +649,7 @@ export default function StockSearchPanel() {
             </div>
 
             {/* 진보적 사고 Grade */}
+            <LoginBlur label="진보적 사고 Grade는 로그인 후 볼 수 있습니다">
             <div className="bg-navy-sub/40 rounded-xl p-4 space-y-3">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">진보적 사고 Grade</p>
               {invLoading ? (
@@ -743,17 +697,21 @@ export default function StockSearchPanel() {
                 <p className="text-xs text-gray-500 py-2">분석 중...</p>
               )}
             </div>
+            </LoginBlur>
           </div>
 
           {/* 수급 기반 코멘트 */}
           {investor && (
+            <LoginBlur label="수급 시그널은 로그인 후 볼 수 있습니다">
             <div className="px-4 py-3 bg-navy-sub/30 rounded-xl border border-navy-border/30">
               <p className="text-xs text-gray-500 mb-1.5">📊 수급 시그널</p>
               <p className="text-sm text-gray-300 leading-relaxed">{investor.comment}</p>
             </div>
+            </LoginBlur>
           )}
 
           {/* AI 심층분석 */}
+          <LoginBlur label="진보적 사고 AI 분석은 로그인 후 볼 수 있습니다">
           <div className="bg-navy-sub/30 rounded-xl border border-navy-border/30 overflow-hidden">
             <div className="px-4 py-3 border-b border-navy-border/30 flex items-center gap-2">
               <span className="text-xs font-medium text-gray-300">📖 진보적 사고 — AI 심층분석</span>
@@ -810,10 +768,13 @@ export default function StockSearchPanel() {
                   </div>
                 </div>
               </div>
-            ) : !analLoading && selected ? (
-              <p className="text-xs text-gray-500 p-4">분석 데이터를 불러오지 못했습니다</p>
+            ) : !analLoading && selected && user ? (
+              <p className="text-xs text-gray-500 p-4">{analErr || "분석 데이터를 불러오지 못했습니다"}</p>
+            ) : !user ? (
+              <div className="p-4 space-y-2">{[0, 1, 2, 3].map(i => <div key={i} className="h-3 bg-navy-border rounded w-full" />)}</div>
             ) : null}
           </div>
+          </LoginBlur>
 
           {/* 네이버 금융 링크 */}
           <a href={`https://finance.naver.com/item/main.naver?code=${selected.code}`}

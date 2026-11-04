@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { authFetch } from "@/lib/supabase/authFetch";
+import { getBrowserSupabase } from "@/lib/supabase/client";
+import { useAuth } from "./AuthProvider";
 import StockSignalReport from "./StockSignalReport";
 
 interface AnalysisResult {
@@ -283,6 +286,14 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { user } = useAuth();
+  const [quota, setQuota] = useState<{ admin?: boolean; used?: number; limit?: number } | null>(null);
+  useEffect(() => {
+    const sb = getBrowserSupabase();
+    if (!sb || !user) { setQuota(null); return; }
+    sb.rpc("ai_quota_status").then(({ data }) => setQuota(data ?? null));
+  }, [user]);
+  const left = quota && !quota.admin ? Math.max(0, (quota.limit ?? 5) - (quota.used ?? 0)) : null;
 
   async function handleAnalyze() {
     if (!ticker && !companyName) {
@@ -294,12 +305,13 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
     setResult(null);
 
     try {
-      const res = await fetch("/api/analyze", {
+      const res = await authFetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker, companyName, thesis, goal }),
       });
       const json = await res.json();
+      if (json.quota) setQuota(json.quota);
       if (!res.ok) throw new Error(json.error ?? "분석 실패");
       setResult(json);
     } catch (e) {
@@ -380,7 +392,7 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
 
         <button
           onClick={handleAnalyze}
-          disabled={loading}
+          disabled={loading || left === 0}
           className="w-full py-3 bg-gold text-navy font-bold rounded-xl hover:bg-gold-light transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
@@ -392,6 +404,11 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
             "◎ AI 리서치 보고서 생성"
           )}
         </button>
+        <p className="text-[11px] text-gray-500 text-center num">
+          {quota?.admin ? "운영자 · 사용 제한 없음"
+            : left != null ? <>오늘 남은 횟수 <span className={left > 0 ? "text-gold font-semibold" : "text-signal-red font-semibold"}>{left}</span> / {quota?.limit ?? 5}회 · 매일 자정 초기화</>
+            : "하루 5회까지 이용할 수 있습니다"}
+        </p>
       </div>
 
       {/* Signal Report — ticker가 입력되면 항상 표시 */}

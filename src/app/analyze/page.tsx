@@ -1,4 +1,5 @@
 import StockAnalyzer from "@/components/StockAnalyzer";
+import RequireLogin from "@/components/RequireLogin";
 
 interface Props {
   // Next.js App Router: searchParams는 서버 컴포넌트에서 동기적으로 접근 가능
@@ -11,14 +12,16 @@ export default function AnalyzePage({ searchParams }: Props) {
       <div>
         <h1 className="text-xl font-bold text-white">AI 종목 분석</h1>
         <p className="text-sm text-gray-400 mt-1">
-          종목을 입력하면 펀드매니저급 리서치 보고서를 즉시 생성합니다
+          종목을 입력하면 펀드매니저급 리서치 보고서를 생성합니다 · 회원 하루 5회
         </p>
       </div>
       {/* initialTicker / initialName: 쌍끌이 위젯·섹터 모달에서 종목 클릭 시 자동 채워짐 */}
-      <StockAnalyzer
-        initialTicker={searchParams.ticker ?? ""}
-        initialName={searchParams.name ?? ""}
-      />
+      <RequireLogin title="AI 종목분석은 로그인 후 이용할 수 있습니다">
+        <StockAnalyzer
+          initialTicker={searchParams.ticker ?? ""}
+          initialName={searchParams.name ?? ""}
+        />
+      </RequireLogin>
     </main>
   );
 }

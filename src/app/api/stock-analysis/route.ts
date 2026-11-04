@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { gemini, GeminiError } from "@/lib/gemini";
+import { requestUser } from "@/lib/supabase/requestUser";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,10 @@ export async function GET(request: Request) {
       { error: "GEMINI_API_KEY가 설정되지 않았습니다." },
       { status: 503 }
     );
+  }
+
+  if (!(await requestUser(request))) {
+    return NextResponse.json({ error: "로그인 후 이용할 수 있습니다", needLogin: true }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);

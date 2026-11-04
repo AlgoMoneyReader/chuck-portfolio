@@ -9,7 +9,7 @@ const TABS = [
   { href: "/news",      label: "뉴스",     Icon: FiFileText,      match: (p: string) => p.startsWith("/news") },
   { href: "/calendar",  label: "캘린더",   Icon: FiCalendar,      match: (p: string) => p.startsWith("/calendar") },
   { href: "/community", label: "커뮤니티", Icon: FiMessageCircle, match: (p: string) => p.startsWith("/community") },
-  { href: "/me",        label: "내정보",   Icon: FiUser,          match: (p: string) => ["/me", "/portfolio", "/admin", "/prompts"].some(x => p.startsWith(x)) },
+  { href: "/me",        label: "My",   Icon: FiUser,          match: (p: string) => ["/me", "/portfolio", "/admin", "/prompts"].some(x => p.startsWith(x)) },
 ];
 
 export default function BottomTabBar() {

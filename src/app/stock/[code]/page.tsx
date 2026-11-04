@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
+import AddToPortfolio from "@/components/AddToPortfolio";
+import { LoginBlur } from "@/components/RequireLogin";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart } from "react-icons/fi";
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -507,6 +509,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
               </p>
             )}
           </div>
+          {d && <AddToPortfolio code={code} name={d.name} market={d.marketCode} price={q?.price} />}
           <button onClick={toggleFav} aria-label="관심종목"
             className={`w-10 h-10 rounded-full flex items-center justify-center ${fav ? "bg-pink-500/15 text-pink-400" : "bg-navy-card text-gray-500"}`}>
             <FiHeart size={18} className={fav ? "fill-current" : ""} />
@@ -528,7 +531,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
         ) : tab === "개요" ? <OverviewTab d={d} />
           : tab === "차트" ? <ChartTab symbol={`${code}.${d.marketCode}`} />
           : tab === "수급" ? <FlowTab code={code} market={d.marketCode} />
-          : tab === "신호" ? <StockSignalReport ticker={code} market={d.marketCode} />
+          : tab === "신호" ? <LoginBlur label="신호 분석은 로그인 후 볼 수 있습니다"><StockSignalReport ticker={code} market={d.marketCode} /></LoginBlur>
           : tab === "뉴스" ? <ListTab key="news" kind="news" url={`/api/stock-news?name=${encodeURIComponent(d.name)}`} />
           : <ListTab key="dart" kind="dart" url={`/api/stock-disclosures?code=${code}`} />}
       </div>

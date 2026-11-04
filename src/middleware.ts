@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "admin_session";
 
 // 인증이 필요한 경로 목록
-const PROTECTED = ["/admin", "/portfolio"];
+const PROTECTED = ["/admin"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -34,5 +34,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/portfolio/:path*", "/portfolio"],
+  matcher: ["/admin/:path*"],
 };
