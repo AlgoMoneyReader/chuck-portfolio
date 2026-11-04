@@ -120,16 +120,50 @@ const loadKR = unstable_cache(async (today: string) => {
 
 // 발표가 끝난 해외 지표의 결과값: Investing.com 에서 같은 통화·같은 시각 지표를 찾아 채운다 (10분 보관)
 // 인자는 10분 단위 캐시 키로만 쓴다
-const loadActuals = unstable_cache(async (bucket: string): Promise<GlobalActual[]> => {
-  try { return bucket ? await fetchInvestingActuals() : []; } catch { return []; }
-}, ["global-actuals-v1"], { revalidate: 600 });
+// Nasdaq 경제지표 일정(결과값 포함). 국가명 → 통화 코드
+const NQ_CUR: Record<string, string> = {
+  "United States": "USD", "Euro Zone": "EUR", "Eurozone": "EUR", "Germany": "EUR", "France": "EUR", "Italy": "EUR", "Spain": "EUR",
+  "Japan": "JPY", "China": "CNY", "United Kingdom": "GBP", "South Korea": "KRW", "Korea": "KRW",
+  "Canada": "CAD", "Australia": "AUD", "New Zealand": "NZD", "Switzerland": "CHF",
+};
+async function nasdaqActuals(today: string): Promise<GlobalActual[]> {
+  const days = Array.from({ length: 8 }, (_, i) => addDays(today, -i + 1)); // 내일(미국 날짜 차이)~7일 전
+  const all = await Promise.all(days.map(async date => {
+    try {
+      const res = await fetch(`https://api.nasdaq.com/api/calendar/economicevents?date=${date}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/130 Safari/537.36", Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+        signal: AbortSignal.timeout(8000), cache: "no-store",
+      });
+      if (!res.ok) return [];
+      const rows = ((await res.json())?.data?.rows ?? []) as Record<string, string>[];
+      return rows.flatMap(r => {
+        const actual = String(r.actual ?? "").replace(/&nbsp;/g, "").trim();
+        const cur = NQ_CUR[String(r.country ?? "").trim()];
+        const hm = /^(\d{1,2}):(\d{2})/.exec(String(r.gmt ?? ""));
+        if (!actual || actual === "-" || !cur || !hm) return [];
+        const k = new Date(Date.parse(`${date}T${hm[1].padStart(2, "0")}:${hm[2]}:00Z`) + KST).toISOString();
+        return [{ day: k.slice(0, 10), time: k.slice(11, 16), currency: cur, title: String(r.eventName ?? ""), actual }];
+      });
+    } catch { return []; }
+  }));
+  return all.flat();
+}
+
+// 결과값: Nasdaq + Investing.com 을 합쳐 10분 보관 (인자는 캐시 키)
+const loadActuals = unstable_cache(async (bucket: string, today: string): Promise<GlobalActual[]> => {
+  if (!bucket) return [];
+  const [nq, inv] = await Promise.all([nasdaqActuals(today), fetchInvestingActuals().catch(() => [] as GlobalActual[])]);
+  return [...nq, ...inv];
+}, ["global-actuals-v2"], { revalidate: 600 });
 
 function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string }>(e: T, acts: GlobalActual[]): T {
   if (e.actual || Date.parse(e.at) > Date.now()) return e;
-  const cands = acts.filter(a => a.day === e.day && a.time === e.time && a.currency === e.country);
+  // 같은 통화, 발표 시각 ±10분 안의 지표 중 제목이 가장 비슷한 것
+  const t0 = Date.parse(`${e.day}T${e.time || "00:00"}:00+09:00`);
+  const cands = acts.filter(a => a.currency === e.country && Math.abs(Date.parse(`${a.day}T${a.time}:00+09:00`) - t0) <= 10 * 60_000);
   if (!cands.length) return e;
   const best = cands.map(a => ({ a, s: titleOverlap(a.title, e.original) })).sort((x, y) => y.s - x.s)[0];
-  return best && (cands.length === 1 || best.s >= 0.5) ? { ...e, actual: best.a.actual } : e;
+  return best && (cands.length === 1 || best.s >= 0.34) ? { ...e, actual: best.a.actual } : e;
 }
 
 export async function GET() {
@@ -163,9 +197,11 @@ export async function GET() {
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-    const acts = await loadActuals(String(Math.floor(Date.now() / 600_000)));
+    const acts = await loadActuals(String(Math.floor(Date.now() / 600_000)), today).catch(() => [] as GlobalActual[]);
     const filled = acts.length ? items.map(e => fillActual(e, acts)) : items;
-    const all = [...filled.filter(e => e.country !== "KRW"), ...kr.items].sort((a, b) => a.at.localeCompare(b.at));
+    // 한국 지표도 같은 방식으로 (시각이 맞는 한국 지표가 하나뿐일 때 채워진다)
+    const krFilled = acts.length ? kr.items.map(e => fillActual({ ...e, original: e.original ?? e.title }, acts)) : kr.items;
+    const all = [...filled.filter(e => e.country !== "KRW"), ...krFilled].sort((a, b) => a.at.localeCompare(b.at));
     const days = items.map(e => e.day).sort();
     return NextResponse.json({
       items: all, errors: kr.note ? [...errors, kr.note] : errors,
