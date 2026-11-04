@@ -52,7 +52,7 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <line x1="0" x2={W} y1={baseY} y2={baseY} stroke="#4B5563" strokeWidth="0.6" strokeDasharray="2 2" />
+      <line x1="0" x2={W} y1={baseY} y2={baseY} className="stroke-gray-600" strokeWidth="0.6" strokeDasharray="2 2" />
       <polygon points={`0,${H} ${line} ${W},${H}`} fill={`url(#${id})`} />
       <polyline points={line} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>

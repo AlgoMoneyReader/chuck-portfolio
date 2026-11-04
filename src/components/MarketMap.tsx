@@ -102,7 +102,7 @@ function Tile({ r, bg, title, sub, onClick, active }: { r: Rect; bg: string; tit
   const showSub = sub && m > 34 && r.w > 42;
   return (
     <button onClick={onClick} title={`${title}${sub ? ` ${sub}` : ""}`}
-      className={`absolute flex flex-col items-center justify-center overflow-hidden text-white leading-tight ${active ? "ring-2 ring-white z-10" : ""}`}
+      className={`absolute flex flex-col items-center justify-center overflow-hidden text-white on-color leading-tight ${active ? "ring-2 ring-white z-10" : ""}`}
       style={{ left: r.x + 1, top: r.y + 1, width: Math.max(0, r.w - 2), height: Math.max(0, r.h - 2), background: bg }}>
       {showTitle && <span className="font-extrabold truncate max-w-full px-0.5" style={{ fontSize: big }}>{title}</span>}
       {showSub && <span className="num opacity-90 truncate max-w-full" style={{ fontSize: subSize }}>{sub}</span>}
@@ -175,7 +175,7 @@ export default function MarketMap() {
         const head = groups.length > 1 && gr.h > 40 && gr.w > 50 ? 15 : 0;
         if (head) {
           tiles.push(
-            <div key={`h-${g.name}`} className="absolute px-1 text-[10px] font-semibold text-white truncate bg-black/40"
+            <div key={`h-${g.name}`} className="absolute px-1 text-[10px] font-semibold text-white on-color truncate bg-black/40"
               style={{ left: gr.x + 1, top: gr.y + 1, width: Math.max(0, gr.w - 2), height: head - 1, lineHeight: `${head - 1}px` }}>{g.name}</div>
           );
         }
@@ -231,7 +231,7 @@ export default function MarketMap() {
 
       <div className="grid grid-cols-7 gap-1">
         {[-3, -2, -1, 0, 1, 2, 3].map(p => (
-          <span key={p} className="text-center text-[11px] font-semibold text-white py-1 rounded num" style={{ background: colorFor(p) }}>
+          <span key={p} className="text-center text-[11px] font-semibold text-white on-color py-1 rounded num" style={{ background: colorFor(p) }}>
             {p > 0 ? `+${p}` : p}%
           </span>
         ))}

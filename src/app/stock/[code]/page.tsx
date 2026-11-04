@@ -12,6 +12,7 @@ import StockSignalReport from "@/components/StockSignalReport";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
+import { useChartColors } from "@/lib/theme";
 
 interface Overview {
   code: string; name: string; marketCode: "KS" | "KQ";
@@ -95,6 +96,7 @@ function EarnTooltip({ active, payload }: { active?: boolean; payload?: { payloa
 
 function EarningsSection({ code, kis }: { code: string; kis: Overview["financials"] }) {
   const [q, setQ] = useState<{ quarters: QRow[]; annual: ARow[]; latest: QRow | null; error?: string } | null>(null);
+  const dotFill = useChartColors().dot;
   const [mode, setMode] = useState<"q" | "y">("q");
   useEffect(() => {
     fetch(`/api/stock-quarterly?code=${code}`, { cache: "no-store" }).then(r => r.json()).then(setQ).catch(() => setQ(null));
@@ -150,7 +152,7 @@ function EarningsSection({ code, kis }: { code: string; kis: Overview["financial
                 <Tooltip content={<EarnTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
                 <Bar yAxisId="v" dataKey="sales" name="매출" fill="#5B8CFF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
                 <Bar yAxisId="v" dataKey="op" name="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Line yAxisId="p" dataKey="opm" name="영업이익률" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: "#0D1530", stroke: "#F59E0B" }} isAnimationActive={false} connectNulls />
+                <Line yAxisId="p" dataKey="opm" name="영업이익률" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: dotFill, stroke: "#F59E0B" }} isAnimationActive={false} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -232,7 +234,7 @@ function OverviewTab({ d }: { d: Overview }) {
   const total = c ? c.buy + c.hold + c.sell : 0;
   const donut = total
     ? `conic-gradient(#1D9E75 0 ${(c!.buy / total) * 360}deg, #F59E0B 0 ${((c!.buy + c!.hold) / total) * 360}deg, #E24B4A 0 360deg)`
-    : "conic-gradient(#1A2545 0 360deg)";
+    : "conic-gradient(rgb(var(--c-navy-border)) 0 360deg)";
   const verdict = !total ? "의견 없음" : c!.buy / total >= 0.7 ? "매수 우세" : c!.sell / total >= 0.3 ? "매도 경계" : "중립";
 
   return (

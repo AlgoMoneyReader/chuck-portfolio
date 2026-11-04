@@ -170,7 +170,7 @@ function ScoreRing({ score, grade, label }: { score: number; grade: Grade; label
     <div className="flex flex-col items-center gap-1">
       <div className="relative w-20 h-20">
         <svg viewBox="0 0 88 88" className="w-full h-full -rotate-90">
-          <circle cx="44" cy="44" r={r} fill="none" stroke="#1e293b" strokeWidth="7" />
+          <circle cx="44" cy="44" r={r} fill="none" stroke="#1e293b" className="sig-track" strokeWidth="7" />
           <circle
             cx="44" cy="44" r={r}
             fill="none"
