@@ -306,7 +306,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
   }, [initialTicker]);
 
   // 오늘 장중 수급(외국인 창구 실시간 · 기관 가집계)
-  const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string } | null>(null);
+  const [live, setLive] = useState<{ available: boolean; final?: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string } | null>(null);
   const loadLive = useCallback(() => {
     if (!selected || selected.market === "US") { setLive(null); return; }
     fetch(`/api/stock-flow-live?code=${selected.code}`, { cache: "no-store" })
@@ -572,8 +572,8 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
               {live && (live.available || live.globalEok != null) && investor?.invDate !== new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10).replace(/-/g, "") && (
                 <div className="grid grid-cols-2 gap-2">
                   {([
-                    ["외국인", live.globalEok ?? live.foreignEok, live.globalEok != null ? `${live.updatedAt} 창구` : `${live.asOf} 가집계`],
-                    ["기관", live.available ? live.institutionEok : null, `${live.asOf ?? "09:30"} 가집계`],
+                    ["외국인", live.final ? live.foreignEok : live.globalEok ?? live.foreignEok, live.final ? "장마감 확정" : live.globalEok != null ? `${live.updatedAt} 창구` : `${live.asOf} 가집계`],
+                    ["기관", live.available ? live.institutionEok : null, live.final ? "장마감 확정" : `${live.asOf ?? "09:30"} 가집계`],
                   ] as const).map(([l, v, at]) => (
                     <div key={l} className="px-3 py-2 rounded-lg bg-cyan-brand/5 border border-cyan-brand/20">
                       <p className="text-[11px] text-gray-400">오늘 {l} <span className="text-gray-600 num">· {at}</span></p>
