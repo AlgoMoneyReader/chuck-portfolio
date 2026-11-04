@@ -46,7 +46,7 @@ export async function GET() {
       if (!url || !anon) return "Supabase 환경변수 없음";
       const s = await (await fetch(`${url}/auth/v1/settings`, { headers: { apikey: anon }, cache: "no-store" })).json();
       const ext = s.external ?? {};
-      return `kakao: ${ext.kakao ? "켜짐" : "꺼짐"} · google: ${ext.google ? "켜짐" : "꺼짐"}`;
+      return `kakao: ${ext.kakao ? "켜짐" : "꺼짐"}`;
     }),
   ]);
 
