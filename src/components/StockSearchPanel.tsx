@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import staticMaster from "@/data/stock_master.json";
+import { US_POPULAR } from "@/data/usPopular";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 import RadarReport from "./RadarReport";
 import { TbRadar2 } from "react-icons/tb";
@@ -161,38 +162,10 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
   const skipNextSearchRef = useRef(false);
   const justSelectedRef = useRef(false);
 
-  // ── 검색: 300ms 디바운스 API 검색 (항상 동작 — master 로드 여부 무관) ────
+  // 빈 검색어면 목록 닫기 (예전 서버 검색은 늦게 도착해 미국 종목 결과를 덮어써 제거)
   useEffect(() => {
-    const q = searchQuery.trim();
-    if (!q) {
-      setSuggestions([]);
-      setDropdownOpen(false);
-      return;
-    }
-
-    // 종목 선택 직후엔 재검색 skip (드롭다운 재오픈 버그 방지)
-    if (skipNextSearchRef.current) {
-      skipNextSearchRef.current = false;
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/stock-search?q=${encodeURIComponent(q)}`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) return;
-        const raw = await res.json();
-        // 방어적 타입 체크: 배열이 아닌 응답(에러 객체 등)이 오면 무시
-        const apiHits: SearchResult[] = Array.isArray(raw) ? raw : [];
-        setSuggestions(apiHits);
-        setDropdownOpen(apiHits.length > 0);
-        setHighlightIdx(-1);
-      } catch { /* silent */ }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]); // searchQuery만 의존 → master 로드 시 타이머 취소 없음
+    if (!searchQuery.trim()) { setSuggestions([]); setDropdownOpen(false); }
+  }, [searchQuery]);
 
   // ── 클라이언트 필터: 마스터 로드 완료 시 즉시 결과 교체 (debounce 불필요) ──
   useEffect(() => {
@@ -206,13 +179,21 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
 
     const lq = q.toLowerCase();
     try {
-      const hits = allStocks
+      const kr = allStocks
         // ★ 옵셔널 체이닝: name/code가 undefined인 항목에서 TypeError 방지
         .filter((s) =>
           (s.name?.toLowerCase() ?? "").includes(lq) ||
           (s.code ?? "").includes(lq)
         )
-        .slice(0, 10);
+        .sort((a, b) => (a.name.toLowerCase().startsWith(lq) ? 0 : 1) - (b.name.toLowerCase().startsWith(lq) ? 0 : 1) || a.name.length - b.name.length)
+        .slice(0, 8);
+      // 미국 인기 종목·ETF: 티커·영문명·한글 별칭(테슬라·속슬 등)
+      const us: SearchResult[] = US_POPULAR
+        .filter(u => u.code.toLowerCase().startsWith(lq) || u.name.toLowerCase().includes(lq) || u.ko.toLowerCase().includes(lq))
+        .sort((a, b) => (a.code.toLowerCase() === lq ? -1 : 0) - (b.code.toLowerCase() === lq ? -1 : 0))
+        .slice(0, 6)
+        .map(u => ({ code: u.code, name: `${u.ko.split(" ")[0]} · ${u.name}`, market: "US", type: u.type === "etf" ? "us-etf" : "us" } as SearchResult));
+      const hits = /^[A-Za-z]/.test(lq) ? [...us, ...kr] : [...kr, ...us];
 
       // 영문 입력이면 hits가 0이어도 US stock 버튼을 위해 dropdown 열기
       if (hits.length === 0 && /^[A-Za-z]/.test(lq)) {
@@ -378,7 +359,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
             onKeyDown={handleKeyDown}
             placeholder={
               allStocks.length > 0
-                ? `종목명·코드 검색 (${allStocks.length.toLocaleString("ko-KR")}개 로드됨)`
+                ? "종목명·코드·미국 티커 (예: 삼성전자, 테슬라, SOXL)"
                 : masterFetching
                   ? "KIS 종목 데이터 수집 중... (종목코드 먼저 검색 가능)"
                   : "종목코드로 검색 (예: 005930) · 한글 검색은 KIS 로그인 필요"
@@ -426,9 +407,12 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
               const itemMarket = item?.market ?? "KS";
               const itemType   = item?.type   ?? "regular";
               const marketLabel =
+                itemType === "us-etf" ? "🇺🇸 ETF" :
+                itemMarket === "US"   ? "🇺🇸 미국" :
                 itemType === "etf"    ? "ETF"    :
                 itemMarket === "KS"   ? "KOSPI"  : "KOSDAQ";
               const marketColor =
+                itemMarket === "US"   ? "text-gold" :
                 itemType === "etf"    ? "text-gold" :
                 itemMarket === "KS"   ? "text-gray-600" : "text-cyan-brand/60";
               return (
@@ -449,7 +433,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
               );
             })}
             {/* 미국주식 직접 검색 옵션 (영문 입력 감지) */}
-            {/^[A-Za-z]/.test(searchQuery.trim()) && (
+            {/^[A-Za-z]/.test(searchQuery.trim()) && !suggestions.some(x => x.market === "US" && x.code === searchQuery.trim().toUpperCase()) && (
               <button
                 onClick={() => {
                   const ticker = searchQuery.trim().toUpperCase().replace(/[^A-Z0-9.]/g, "");
@@ -460,7 +444,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
                 <span className="flex-1 text-sm font-bold text-gold font-mono">
                   {searchQuery.trim().toUpperCase()}
                 </span>
-                <span className="text-xs text-gray-400">미국주식 검색</span>
+                <span className="text-xs text-gray-400">미국 티커로 보기</span>
                 <span className="text-xs font-medium text-gold bg-gold/10 px-1.5 py-0.5 rounded">🇺🇸 US</span>
               </button>
             )}
