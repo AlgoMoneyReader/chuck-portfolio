@@ -49,6 +49,24 @@ function sinceLastClose(): number {
 
 const CAT_RANK: Record<string, number> = { 국내증시: 0, 해외증시: 1, 거시경제: 2, "정책·이슈": 3, 국내기업: 4 };
 
+// 지수 움직임과 관련된 기사인지
+const INDEX_RE = /코스피|코스닥|KOSPI|KOSDAQ|증시|국내 ?주식|지수|장중|마감|개장|외국인|기관|순매도|순매수|매도세|매수세|프로그램/;
+const DRIVER_RE = /반도체|삼성전자|SK하이닉스|삼전|하이닉스|2차전지|환율|달러|원화|금리|국채|연준|Fed|FOMC|나스닥|뉴욕증시|S&P|엔비디아|관세|유가|트럼프|중국|엔화|AI/;
+const DOWN_RE = /하락|급락|약세|내림|떨어|밀려|밀린|후퇴|털썩|추락|폭락|흔들|출렁|매도|빠져|빠지|뒷걸음|주저앉|붕괴|불안|우려|공포|충격/;
+const UP_RE = /상승|급등|강세|오름|올라|반등|랠리|돌파|신고가|회복|매수|훈풍|기대|껑충|치솟/;
+const NOISE_RE = /\[오늘 이 종목\]|공모|청약|상장 첫날|IPO|수요예측|최대주주|인사\]|부고|포토|\[포토\]|운세|이벤트|칼럼|기고|초고수는 지금/;
+
+function relevance(n: News, up: boolean): number {
+  const t = `${n.title} ${n.desc ?? ""}`;
+  if (NOISE_RE.test(n.title)) return -1;
+  let sc = 0;
+  if (INDEX_RE.test(n.title)) sc += 4; else if (INDEX_RE.test(t)) sc += 1;
+  if (DRIVER_RE.test(n.title)) sc += 2;
+  if ((up ? UP_RE : DOWN_RE).test(n.title)) sc += 2;
+  if (n.category === "국내증시") sc += 1;
+  return sc;
+}
+
 // 시세·수급(보조 근거)과 같은 시간대 뉴스(주 근거)
 async function collect(origin: string, market: string, fallback?: string) {
   const [mkt, flow, feed] = await Promise.all([
@@ -74,9 +92,7 @@ async function collect(origin: string, market: string, fallback?: string) {
 
   const since = sinceLastClose();
   const news = ((feed?.items ?? []) as News[])
-    .filter(n => n.publishedAt && Date.parse(n.publishedAt) >= since)
-    .sort((a, b) => (CAT_RANK[a.category] ?? 9) - (CAT_RANK[b.category] ?? 9) || (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""))
-    .slice(0, 70);
+    .filter(n => n.publishedAt && Date.parse(n.publishedAt) >= since);
   return { facts: lines, news, idxPct: idx?.changePct as number | undefined };
 }
 
@@ -100,10 +116,15 @@ export async function GET(request: Request) {
   }
 
   const price = url.searchParams.get("price");
-  const { facts, news, idxPct } = await collect(url.origin, market, price && !isNaN(qPct) ? `${price} (${qPct >= 0 ? "+" : ""}${qPct.toFixed(2)}%)` : undefined);
-  const pct = idxPct ?? (isNaN(qPct) ? 0 : qPct);
+  const { facts, news: rawNews, idxPct } = await collect(url.origin, market, price && !isNaN(qPct) ? `${price} (${qPct >= 0 ? "+" : ""}${qPct.toFixed(2)}%)` : undefined);
+  const pct = !isNaN(qPct) && qPct !== 0 ? qPct : idxPct ?? 0; // 화면 상단 값과 일치시킨다
   const up = pct >= 0;
   const dir = up ? "상승" : "하락";
+  // 지수 관련 기사 우선, 무관한 기사(종목 소개·공모주 등) 제외
+  const scored = rawNews.map(n => ({ n, sc: relevance(n, up) })).filter(x => x.sc >= 2);
+  const news = scored
+    .sort((a, b) => b.sc - a.sc || (CAT_RANK[a.n.category] ?? 9) - (CAT_RANK[b.n.category] ?? 9) || (b.n.publishedAt ?? "").localeCompare(a.n.publishedAt ?? ""))
+    .slice(0, 60).map(x => x.n);
   const title = up ? "왜 올랐을까" : "왜 내렸을까";
   const subtitle = `${market} ${Math.abs(pct).toFixed(2)}% ${up ? "▲" : "▼"}`;
   const updatedAt = `${day.slice(5).replace("-", "/")} ${kstHM()} 기준 · 뉴스 ${news.length}건 분석`;
@@ -126,6 +147,7 @@ ${newsText || "(없음)"}
 과제: 위 뉴스를 읽고 오늘 ${market}가 ${dir}한 핵심 원인 3가지를 찾으세요.
 - 숫자 나열이 아니라 "무슨 일이 있었고 → 그래서 어떤 업종·종목·투자자가 어떻게 움직였는지" 인과관계로 설명
 - 여러 기사에 반복되는 이슈, 시총 상위·주도 업종 관련 이슈를 우선. 지수 ${dir} 방향과 맞지 않는 이슈는 제외
+- 개별 종목 소개, 공모주, 특정 기업 단신처럼 지수 ${dir}을 설명하지 못하는 기사는 근거로 쓰지 말 것
 - 반드시 위 뉴스 번호로 근거를 달 것(refs). 뉴스에 없는 사건·수치를 지어내지 말 것
 - 수치는 뉴스 본문이나 [시세·수급]에 있는 것만 사용
 - title은 12자 이내 원인 키워드, body는 2문장 이내(120자 이내)
@@ -134,11 +156,19 @@ ${newsText || "(없음)"}
 JSON만 반환:
 {"summary":"...","reasons":[{"title":"...","body":"...","refs":[1,5]},{"title":"...","body":"...","refs":[2]},{"title":"...","body":"...","refs":[3]}]}`;
 
+  const aiErrors: string[] = [];
   try {
     if (!news.length) throw new Error("no news");
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", generationConfig: { responseMimeType: "application/json", temperature: 0.3 } });
-    const result = await model.generateContent(prompt);
-    const j = parseJson(result.response.text().trim());
+    let j: { summary?: string; reasons?: unknown } | null = null;
+    for (const name of ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]) {
+      try {
+        const model = genAI.getGenerativeModel({ model: name, generationConfig: { responseMimeType: "application/json", temperature: 0.3 } });
+        const result = await model.generateContent(prompt, { timeout: 25_000 });
+        j = parseJson(result.response.text().trim());
+        if (Array.isArray(j?.reasons) && j.reasons.length) break;
+      } catch (e) { aiErrors.push(`${name}: ${String(e).slice(0, 120)}`); }
+    }
+    if (!j) throw new Error("ai");
     const reasons: Reason[] = (Array.isArray(j.reasons) ? j.reasons : []).slice(0, 3)
       .map((r: { title?: string; body?: string; refs?: unknown }) => ({ title: String(r.title ?? ""), body: String(r.body ?? ""), sources: ref(r.refs) }))
       .filter((r: Reason) => r.body);
@@ -148,10 +178,12 @@ JSON만 반환:
     return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
   } catch {
     // AI 실패 시 같은 시간대 국내 증시 주요 기사를 그대로 보여준다
-    const top = news.filter(n => n.category === "국내증시").slice(0, 3);
-    const reasons: Reason[] = top.map(n => ({ title: n.source, body: n.title, sources: [{ title: n.title, url: n.url, source: n.source }] }));
+    // AI 실패 시: 지수를 직접 다루고 방향이 맞는 기사만 보여준다
+    const dirRe = up ? UP_RE : DOWN_RE;
+    const top = news.filter(n => INDEX_RE.test(n.title) && dirRe.test(n.title)).slice(0, 3);
+    const reasons: Reason[] = top.map(n => ({ title: "", body: n.title.replace(/\s+-\s+[^-]+$/, ""), sources: [{ title: n.title, url: n.url, source: n.source }] }));
     return NextResponse.json(
-      { title, subtitle, summary: "", reasons, bullets: reasons.length ? reasons.map(r => r.body) : ["시황 분석을 준비 중입니다."], updatedAt },
+      { title, subtitle, summary: reasons.length ? "AI 분석이 지연되어 관련 기사를 먼저 보여드립니다" : "", reasons, bullets: reasons.length ? reasons.map(r => r.body) : ["시황 분석을 준비 중입니다."], updatedAt, aiErrors },
       { headers: { "Cache-Control": "no-store" } });
   }
 }
