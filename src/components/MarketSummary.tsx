@@ -178,7 +178,7 @@ function TopMoversHalf({
   }, [load]);
 
   const accentColor = isGainer ? "text-signal-green" : "text-signal-red";
-  const title       = isGainer ? "상승 TOP20" : "하락 TOP20";
+  const title       = isGainer ? "상승 TOP30" : "하락 TOP30";
   const icon        = isGainer ? "▲" : "▼";
 
   return (
@@ -914,6 +914,8 @@ interface USStockRow {
   preMarketChangePct: number | null;
   postMarketPrice:    number | null;
   postMarketChangePct: number | null;
+  dayMarketPrice?: number | null;
+  dayMarketChangePct?: number | null;
 }
 interface USSectorRow { sector: string; symbol: string; changePct: number; price: number; }
 interface USSectorStockRow {
@@ -934,7 +936,7 @@ function fmtVolUS(n: number): string {
 function USStockList({
   type, index, onSelect,
 }: {
-  type: "gainers" | "losers" | "actives";
+  type: "gainers" | "losers" | "actives" | "etf";
   index: string;
   onSelect: (d: DrawerState) => void;
 }) {
@@ -958,8 +960,10 @@ function USStockList({
     return () => clearInterval(iv);
   }, [load]);
 
-  const isValue = type === "actives";
-  const subLabel = isValue
+  const isValue = type === "actives" || type === "etf";
+  const subLabel = type === "etf"
+    ? "국내 투자자 인기 ETF·레버리지 · 거래대금 순 (지수 선택 무관)"
+    : isValue
     ? (index === "DOW" ? "다우존스 30 · 거래대금(가격×거래량) 순" : `${index === "NASDAQ" ? "나스닥 상장" : "미국"} 주요 대형주 + 당일 거래 급증 종목 · 거래대금 순`)
     : index === "SP500" ? "S&P 500 기준" : index === "NASDAQ" ? "NASDAQ 기준" : "다우존스 30 기준";
 
@@ -982,11 +986,13 @@ function USStockList({
           {rows.map(r => {
             // 시간외 표시 로직
             // 정규장 종가를 메인으로, 프리·애프터마켓은 아래 줄에 따로 (증권앱 방식)
-            const hasPre  = r.preMarketPrice != null && r.marketState === "PRE";
-            const hasPost = r.postMarketPrice != null;
-            const extPrice = hasPre ? r.preMarketPrice : hasPost ? r.postMarketPrice : null;
-            const extPct   = hasPre ? r.preMarketChangePct : hasPost ? r.postMarketChangePct : null;
-            const extLabel = hasPre ? "프리" : hasPost ? (r.marketState === "POST" ? "애프터" : "애프터 종가") : null;
+            // 한국 낮(데이마켓) > 프리 > 애프터 순으로 보여준다
+            const hasDay  = r.dayMarketPrice != null;
+            const hasPre  = !hasDay && r.preMarketPrice != null && r.marketState === "PRE";
+            const hasPost = !hasDay && !hasPre && r.postMarketPrice != null;
+            const extPrice = hasDay ? r.dayMarketPrice : hasPre ? r.preMarketPrice : hasPost ? r.postMarketPrice : null;
+            const extPct   = hasDay ? r.dayMarketChangePct : hasPre ? r.preMarketChangePct : hasPost ? r.postMarketChangePct : null;
+            const extLabel = hasDay ? "데이마켓" : hasPre ? "프리" : hasPost ? (r.marketState === "POST" ? "애프터" : "애프터 종가") : null;
             const isPos    = r.changePct >= 0;
             return (
               <div key={r.code}
@@ -1007,7 +1013,7 @@ function USStockList({
                   </div>
                   {extPrice != null && extPct != null && (
                     <span className="text-[11px] num whitespace-nowrap mt-0.5">
-                      <span className={`font-bold mr-1 ${hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
+                      <span className={`font-bold mr-1 ${hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
                       <span className="text-gray-300">{fmtUSD(extPrice)}</span>
                       <span className={`ml-1 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>
                     </span>
@@ -1220,11 +1226,11 @@ type RegionTabType = "KR" | "US";
 type MainTabType = "top10" | "amount" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 type USIndexType = "SP500" | "NASDAQ" | "DOW";
-type USContentTab = "gainers" | "losers" | "actives" | "sector";
+type USContentTab = "gainers" | "losers" | "actives" | "etf" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
   { id: "top10",  label: "상승/하락"  },
-  { id: "amount", label: "거래대금 TOP20" },
+  { id: "amount", label: "거래대금 TOP30" },
   { id: "volume", label: "거래량 급등" },
   { id: "sector", label: "섹터 흐름"  },
   { id: "high52", label: "52주 신고가" },
@@ -1238,9 +1244,10 @@ const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
 ];
 
 const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
-  { id: "gainers", label: "상승 TOP10" },
-  { id: "losers",  label: "하락 TOP10" },
-  { id: "actives", label: "거래대금 TOP10" },
+  { id: "gainers", label: "상승 TOP30" },
+  { id: "losers",  label: "하락 TOP30" },
+  { id: "actives", label: "거래대금 TOP30" },
+  { id: "etf",     label: "인기 ETF·레버리지" },
   { id: "sector",  label: "섹터 흐름"   },
 ];
 

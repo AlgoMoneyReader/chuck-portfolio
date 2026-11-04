@@ -142,7 +142,7 @@ async function kisAmountRank(isc: string, suffix: string): Promise<TopGainerRow[
       FID_VOL_CNT: "", FID_INPUT_DATE_1: "",
     });
     const rows = ((j.output ?? []) as KisRow[]).map((r, i) => toRow(r, i, suffix)).filter((r): r is TopGainerRow => !!r);
-    return rows.length ? rows.sort((a, b) => b.tradeAmount - a.tradeAmount).slice(0, 20).map((r, i) => ({ ...r, rank: i + 1 })) : null;
+    return rows.length ? rows.sort((a, b) => b.tradeAmount - a.tradeAmount).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 })) : null;
   } catch { return null; }
 }
 
@@ -159,7 +159,7 @@ async function kisFluctuation(isc: string, suffix: string, sort: "0000" | "0001"
     const ok = sort === "0000" ? rows.filter(r => r.changePct > 0) : rows.filter(r => r.changePct < 0);
     if (!ok.length) return null;
     return ok.sort((a, b) => (sort === "0000" ? b.changePct - a.changePct : a.changePct - b.changePct))
-      .slice(0, 20).map((r, i) => ({ ...r, rank: i + 1 }));
+      .slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
   } catch { return null; }
 }
 
@@ -207,17 +207,17 @@ export async function GET(request: Request) {
 
     const topGainers: TopGainerRow[] = [...valid]
       .sort((a, b) => b.changePct - a.changePct)
-      .slice(0, 20)
+      .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
     const topLosers: TopGainerRow[] = [...valid]
       .sort((a, b) => a.changePct - b.changePct)
-      .slice(0, 20)
+      .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
     const topByAmount: TopGainerRow[] = [...valid]
       .sort((a, b) => b.tradeAmount - a.tradeAmount)
-      .slice(0, 20)
+      .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
     const payload = {
