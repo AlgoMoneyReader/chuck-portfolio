@@ -6,6 +6,8 @@ import {
 } from "recharts";
 import staticMaster from "@/data/stock_master.json";
 import FundingScenario from "./FundingScenario";
+import { useAuth } from "./AuthProvider";
+import { getBrowserSupabase } from "@/lib/supabase/client";
 
 type StockItem = { code: string; name: string; market: "KS" | "KQ"; type: string };
 const ALL_KR_STOCKS = staticMaster.stocks as StockItem[];
@@ -64,9 +66,9 @@ function loadFromStorage(): Holding[] {
   }
 }
 
-function saveToStorage(holdings: Holding[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings));
-}
+// 시세 등 화면용 필드는 저장하지 않는다
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const strip = (list: Holding[]) => list.map(({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => rest);
 
 function krwFormat(n: number) {
   return n.toLocaleString("ko-KR") + "원";
@@ -76,7 +78,26 @@ function usdFormat(n: number) {
 }
 
 export default function PortfolioManager() {
+  const { user, isAdmin } = useAuth();
   const [holdings, setHoldings] = useState<Holding[]>([]);
+
+  // 계정별 저장(Supabase portfolios). 처음 로그인하면 이 브라우저에 있던 목록을 옮겨 온다
+  const persist = useCallback(async (list: Holding[]) => {
+    const sb = getBrowserSupabase();
+    if (!sb || !user) return;
+    const { error } = await sb.from("portfolios").upsert({ user_id: user.id, holdings: strip(list), updated_at: new Date().toISOString() });
+    if (error) alert("저장하지 못했습니다: " + error.message);
+  }, [user]);
+  const loadHoldings = useCallback(async (): Promise<Holding[]> => {
+    const sb = getBrowserSupabase();
+    if (!sb || !user) return [];
+    const { data, error } = await sb.from("portfolios").select("holdings").eq("user_id", user.id).maybeSingle();
+    if (error) return [];
+    if (data) return (data.holdings ?? []) as Holding[];
+    const local = loadFromStorage();
+    if (local.length) { await persist(local); localStorage.removeItem(STORAGE_KEY); }
+    return local;
+  }, [user, persist]);
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Holding | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,10 +143,6 @@ export default function PortfolioManager() {
     sector: "기타",
   });
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    setHoldings(loadFromStorage());
-  }, []);
 
   const refreshPrices = useCallback(async (list: Holding[]) => {
     if (list.length === 0) return list;
@@ -160,11 +177,10 @@ export default function PortfolioManager() {
   }, []);
 
   const loadAndRefresh = useCallback(async () => {
-    const stored = loadFromStorage();
-    const updated = await refreshPrices(stored);
-    setHoldings(updated);
-    saveToStorage(updated.map(({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => { void currentPrice; void changePct; void profitLoss; void profitLossPct; void evalAmount; return rest; }));
-  }, [refreshPrices]);
+    const stored = await loadHoldings();
+    setHoldings(stored);
+    setHoldings(await refreshPrices(stored));
+  }, [refreshPrices, loadHoldings]);
 
   useEffect(() => {
     loadAndRefresh();
@@ -232,16 +248,11 @@ export default function PortfolioManager() {
 
       // ① 즉시 저장 + 모달 닫기
       setHoldings(updated);
-      saveToStorage(updated);
+      await persist(updated);
       setShowForm(false);
 
       // ② 백그라운드 시세 갱신
-      const refreshed = await refreshPrices(updated);
-      setHoldings(refreshed);
-      saveToStorage(refreshed.map(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ({ currentPrice, changePct, profitLoss, profitLossPct, evalAmount, ...rest }) => rest
-      ));
+      setHoldings(await refreshPrices(updated));
     } catch (err) {
       console.error("[handleSave] 오류:", err);
       alert("저장 중 오류가 발생했습니다: " + String(err));
@@ -252,7 +263,7 @@ export default function PortfolioManager() {
     if (!confirm(`${ticker}를 삭제하시겠습니까?`)) return;
     const updated = holdings.filter((h) => h.ticker !== ticker);
     setHoldings(updated);
-    saveToStorage(updated);
+    persist(updated);
   }
 
   async function runDiagnosis() {
@@ -491,7 +502,7 @@ export default function PortfolioManager() {
       )}
 
       {/* ── 자금 계획 분석 시나리오 ──────────────────────────────────────── */}
-      <FundingScenario holdings={holdings} />
+      {isAdmin && <FundingScenario holdings={holdings} />}
 
       {/* Add/Edit Modal */}
       {showForm && (

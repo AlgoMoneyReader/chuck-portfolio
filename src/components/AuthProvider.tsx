@@ -11,6 +11,7 @@ interface AuthState {
   loading: boolean;
   user: User | null;
   profile: Profile | null;
+  isAdmin: boolean;
   signIn: (provider: "kakao", next?: string) => Promise<void>;
   signOut: () => Promise<void>;
   reloadProfile: () => Promise<void>;
@@ -22,12 +23,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = getBrowserSupabase();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (u: User | null) => {
-    if (!supabase || !u) { setProfile(null); return; }
-    const { data } = await supabase.from("profiles").select("*").eq("id", u.id).maybeSingle();
+    if (!supabase || !u) { setProfile(null); setIsAdmin(false); return; }
+    const [{ data }, adm] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", u.id).maybeSingle(),
+      supabase.from("admins").select("user_id").eq("user_id", u.id).maybeSingle(),
+    ]);
     setProfile((data as Profile) ?? null);
+    setIsAdmin(!!adm.data);
   }, [supabase]);
 
   useEffect(() => {
@@ -53,12 +59,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase?.auth.signOut();
     setUser(null);
     setProfile(null);
+    setIsAdmin(false);
   }, [supabase]);
 
   const reloadProfile = useCallback(() => loadProfile(user), [loadProfile, user]);
 
   return (
-    <Ctx.Provider value={{ configured: !!supabase, loading, user, profile, signIn, signOut, reloadProfile }}>
+    <Ctx.Provider value={{ configured: !!supabase, loading, user, profile, isAdmin, signIn, signOut, reloadProfile }}>
       {children}
     </Ctx.Provider>
   );

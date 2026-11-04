@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gemini, GeminiError } from "@/lib/gemini";
+import { requestUser, type Quota } from "@/lib/supabase/requestUser";
 
 export const maxDuration = 60;
 
@@ -78,6 +79,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ticker 또는 companyName이 필요합니다" }, { status: 400 });
     }
 
+    // 로그인 + 하루 5회 한도 (운영자 무제한). 생성에 성공했을 때만 1회 차감
+    const me = await requestUser(req);
+    if (!me) return NextResponse.json({ error: "로그인 후 이용할 수 있습니다", needLogin: true }, { status: 401 });
+    const { data: st } = await me.sb.rpc("ai_quota_status");
+    const quota = (st ?? {}) as Quota;
+    if (!quota.admin && (quota.used ?? 0) >= (quota.limit ?? 5)) {
+      return NextResponse.json({ error: `오늘 AI 종목분석 ${quota.limit ?? 5}회를 모두 사용했습니다. 내일 다시 이용해 주세요.`, quota }, { status: 429 });
+    }
+
     const now   = new Date();
     const today = now.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
     const year  = now.getFullYear();
@@ -112,7 +122,9 @@ ${currentPriceLine}
 
     const { text, model } = await gemini({ prompt: userMessage, system: SYSTEM_PROMPT, search: true, timeoutMs: 50_000 });
 
+    const { data: used } = await me.sb.rpc("use_ai_quota");
     return NextResponse.json({
+      quota: used,
       analysis: text,
       ticker,
       companyName,
