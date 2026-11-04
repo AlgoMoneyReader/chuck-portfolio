@@ -75,10 +75,10 @@ function SectorEarnings({ sector }: { sector: string }) {
     fetch(`/api/sector-earnings?market=KOSPI&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
       .then(r => r.json()).then(setD).catch(() => setD(null)).finally(() => setLoading(false));
   }, [sector]);
-  if (loading) return <div className="rounded-xl bg-navy-sub/50 p-3 text-xs text-gray-500 flex items-center gap-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 실적 불러오는 중… (처음엔 10~20초)</div>;
-  if (!d || !d.stocks?.length) return <div className="rounded-xl bg-navy-sub/50 p-3 text-xs text-gray-500">{d?.note ?? "실적을 불러오지 못했습니다"}</div>;
+  if (loading) return <div className="py-2 text-xs text-gray-500 flex items-center gap-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 실적 불러오는 중… (처음엔 10~20초)</div>;
+  if (!d || !d.stocks?.length) return <div className="py-2 text-xs text-gray-500">{d?.note ?? "실적을 불러오지 못했습니다"}</div>;
   return (
-    <div className="rounded-xl bg-navy-sub/50 border border-navy-border/60 p-3 space-y-2.5">
+    <div className="space-y-2.5">
       {d.total && d.period && (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <span className="text-xs font-semibold text-white">{d.period} 업종 합계 <span className="text-gray-500 font-normal">(상위 {d.count}종목)</span></span>
@@ -102,6 +102,74 @@ function SectorEarnings({ sector }: { sector: string }) {
         </tbody>
       </table>
       <p className="text-[10px] text-gray-600">* 잠정실적 · YoY는 영업이익 전년 동기 대비 · 출처 DART · 종목 이름을 누르면 상세로 이동</p>
+    </div>
+  );
+}
+
+interface SF {
+  asOf: string; note?: string;
+  total?: { foreign: number; institution: number; pct: number | null; up: number; down: number };
+  stocks: { code: string; name: string; price: number; pct: number; foreign: number | null; foreignBasis: string | null; institution: number | null; instBasis: string | null }[];
+}
+
+// 업종 동향: 종목별 현재가·등락률·외국인/기관 오늘 순매수
+function SectorFlow({ sector }: { sector: string }) {
+  const [d, setD] = useState<SF | null>(null);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(() => fetch(`/api/sector-flow?market=KOSPI&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
+    .then(r => r.json()).then(j => setD(j)).catch(() => {}).finally(() => setLoading(false)), [sector]);
+  useEffect(() => { setLoading(true); load(); }, [load]);
+  useMarketPoll(load, 60_000);
+  if (loading) return <p className="text-xs text-gray-500 flex items-center gap-2 py-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 종목 동향 불러오는 중…</p>;
+  if (!d?.stocks?.length) return <p className="text-xs text-gray-500 py-2">{d?.note ?? "동향을 불러오지 못했습니다"}</p>;
+  const basis = d.stocks.find(x => x.foreignBasis)?.foreignBasis, ibasis = d.stocks.find(x => x.instBasis)?.instBasis;
+  return (
+    <div className="space-y-2">
+      {d.total && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-400 num">
+          {d.total.pct != null && <span>업종(시총가중) <span className={`font-semibold ${tone(d.total.pct)}`}>{d.total.pct > 0 ? "+" : ""}{d.total.pct}%</span></span>}
+          <span>상승 <span className="text-signal-green">{d.total.up}</span> · 하락 <span className="text-signal-red">{d.total.down}</span></span>
+          <span>외국인 합 <span className={tone(d.total.foreign)}>{fmt(d.total.foreign)}</span></span>
+          <span>기관 합 <span className={tone(d.total.institution)}>{fmt(d.total.institution)}</span></span>
+        </div>
+      )}
+      <table className="w-full text-[11px]">
+        <thead><tr className="text-gray-500">
+          <th className="text-left font-normal pb-1">종목</th><th className="text-right font-normal pb-1">현재가</th><th className="text-right font-normal pb-1">등락</th>
+          <th className="text-right font-normal pb-1" style={{ color: C.foreign }}>외국인</th><th className="text-right font-normal pb-1" style={{ color: C.institution }}>기관</th>
+        </tr></thead>
+        <tbody className="num">
+          {d.stocks.map(x => (
+            <tr key={x.code} className="border-t border-navy-border/40">
+              <td className="py-1.5"><Link href={`/stock/${x.code}`} className="text-white hover:text-cyan-brand">{x.name}</Link></td>
+              <td className="py-1.5 text-right text-gray-300">{x.price.toLocaleString("ko-KR")}</td>
+              <td className={`py-1.5 text-right font-semibold ${tone(x.pct)}`}>{x.pct > 0 ? "+" : ""}{x.pct.toFixed(2)}%</td>
+              <td className={`py-1.5 text-right ${x.foreign == null ? "text-gray-600" : tone(x.foreign)}`}>{x.foreign == null ? "—" : fmt(x.foreign)}</td>
+              <td className={`py-1.5 text-right ${x.institution == null ? "text-gray-600" : tone(x.institution)}`}>{x.institution == null ? "—" : fmt(x.institution)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-[10px] text-gray-600">{d.asOf} 기준 · 외국인 {basis === "창구" ? "외국계 창구 실시간" : basis ?? "—"} · 기관 {ibasis ?? "가집계 전"} · 시총 상위 {d.stocks.length}종목 · 1분마다 갱신</p>
+    </div>
+  );
+}
+
+// 업종 행을 펼치면: 우상단 토글로 동향(기본) / 실적
+function SectorDetail({ sector }: { sector: string }) {
+  const [view, setView] = useState<"flow" | "earn">("flow");
+  return (
+    <div className="rounded-xl bg-navy-sub/50 border border-navy-border/60 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white">{sector}</span>
+        <div className="flex rounded-lg border border-navy-border overflow-hidden text-[11px]">
+          {([["flow", "동향"], ["earn", "실적"]] as const).map(([k, l]) => (
+            <button key={k} onClick={e => { e.stopPropagation(); setView(k); }}
+              className={`px-3 py-1 ${view === k ? "bg-cyan-brand/20 text-cyan-brand font-semibold" : "text-gray-500"}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {view === "flow" ? <SectorFlow sector={sector} /> : <SectorEarnings sector={sector} />}
     </div>
   );
 }
@@ -216,7 +284,7 @@ export default function FlowBoard() {
       </Card>
 
       {/* ③ 섹터별 */}
-      <Card title="업종별 순매수 (코스피) · 누르면 업종 실적" note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
+      <Card title="업종별 순매수 (코스피) · 누르면 종목별 동향" note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
         {!sectors.length ? <p className="text-xs text-gray-500">업종별 데이터를 불러오지 못했습니다</p> : (
           <>
             <div className="flex gap-1 overflow-x-auto scrollbar-none">
@@ -252,7 +320,7 @@ export default function FlowBoard() {
                       ))}
                     </tr>
                     {openSector === s.name && (
-                      <tr><td colSpan={4} className="pb-3"><SectorEarnings sector={s.name} /></td></tr>
+                      <tr><td colSpan={4} className="pb-3"><SectorDetail sector={s.name} /></td></tr>
                     )}
                     </Fragment>
                   ))}

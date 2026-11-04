@@ -46,6 +46,7 @@ interface AnalysisData {
   cons: string[];
   financialHealth: string;
   valuation: string;
+  verdict?: string;
   summary: string[];
 }
 
@@ -316,16 +317,21 @@ export default function StockSearchPanel() {
   // 진보적 사고 AI 분석: 로그인 회원만 (AI 한도 보호)
   const { user } = useAuth();
   const [analErr, setAnalErr] = useState("");
+  // 수급 Grade 가 나온 뒤에 AI 를 불러 Grade 를 함께 넘긴다 (단기 수급과 펀더멘털 의견 조율)
+  const gradeKey = investor ? `${investor.grade}|${investor.score}` : "";
   useEffect(() => {
     if (!selected) return;
     if (!user) { setAnalLoading(false); return; }
+    if (selected.market !== "US" && invLoading) return;
     setAnalLoading(true); setAnalErr("");
-    authFetch(`/api/stock-analysis?code=${selected.code}&name=${encodeURIComponent(selected.name)}&market=${selected.market}`, { cache: "no-store" })
+    const g = investor ? `&grade=${encodeURIComponent(investor.grade)}&score=${investor.score}&gnote=${encodeURIComponent((investor.factors ?? []).map(f => `${f.label} ${f.score}/${f.max}(${f.desc})`).join(", ").slice(0, 190))}` : "";
+    authFetch(`/api/stock-analysis?code=${selected.code}&name=${encodeURIComponent(selected.name)}&market=${selected.market}${g}`, { cache: "no-store" })
       .then(r => r.json())
       .then(j => { if (j && !j.error) setAnalysis(j); else setAnalErr(j?.error ?? "분석 실패"); })
       .catch(e => setAnalErr(String(e)))
       .finally(() => setAnalLoading(false));
-  }, [selected, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, user, invLoading, gradeKey]);
 
   // 오늘 장중 수급(외국인 창구 실시간 · 기관 가집계)
   const [live, setLive] = useState<{ available: boolean; asOf?: string; foreignEok?: number; institutionEok?: number; globalEok?: number | null; updatedAt?: string } | null>(null);
@@ -417,7 +423,7 @@ export default function StockSearchPanel() {
         </div>
 
         {/* 드롭다운: 검색어 있는데 결과 없음 → 이유 안내 */}
-        {searchQuery.trim() && !dropdownOpen && (
+        {searchQuery.trim() && !dropdownOpen && !(selected && searchQuery.startsWith(selected.name)) && (
           <div className="absolute top-full left-0 right-0 mt-1 bg-navy-card border border-navy-border rounded-xl shadow-xl px-4 py-3 text-xs"
             style={{ zIndex: 60 }}>
             {masterFetching ? (
@@ -651,7 +657,7 @@ export default function StockSearchPanel() {
             {/* 진보적 사고 Grade */}
             <LoginBlur label="진보적 사고 Grade는 로그인 후 볼 수 있습니다">
             <div className="bg-navy-sub/40 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">진보적 사고 Grade</p>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">진보적 사고 Grade <span className="normal-case tracking-normal text-[10px] text-gray-500">· 단기 수급·모멘텀</span></p>
               {invLoading ? (
                 <div className="space-y-2 animate-pulse">
                   <div className="h-16 bg-navy-border rounded-lg" />
@@ -714,7 +720,7 @@ export default function StockSearchPanel() {
           <LoginBlur label="진보적 사고 AI 분석은 로그인 후 볼 수 있습니다">
           <div className="bg-navy-sub/30 rounded-xl border border-navy-border/30 overflow-hidden">
             <div className="px-4 py-3 border-b border-navy-border/30 flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-300">📖 진보적 사고 — AI 심층분석</span>
+              <span className="text-xs font-medium text-gray-300">📖 진보적 사고 — AI 심층분석 <span className="text-[10px] text-gray-500">· 펀더멘털(중장기)</span></span>
               {analLoading && <div className="w-3 h-3 border border-cyan-brand/30 border-t-cyan-brand rounded-full animate-spin" />}
             </div>
             {analLoading ? (
@@ -766,6 +772,12 @@ export default function StockSearchPanel() {
                     <p className="text-xs text-gray-500 mb-1">⚖️ 밸류에이션 · 최종 의견</p>
                     <p className="text-xs text-gray-200 leading-relaxed font-medium">{analysis.valuation}</p>
                   </div>
+                  {analysis.verdict && (
+                    <div className="px-3 py-2.5 rounded-lg border border-gold/40 bg-gold/10">
+                      <p className="text-xs text-gold mb-1 font-semibold">🎯 종합 대응 (단기 Grade {investor?.grade ?? "-"} + 펀더멘털)</p>
+                      <p className="text-xs text-gray-200 leading-relaxed font-medium">{analysis.verdict}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : !analLoading && selected && user ? (
