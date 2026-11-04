@@ -23,17 +23,37 @@ interface StockRow {
   nxtPrice?: number | null; nxtPct?: number | null; // 넥스트레이드 프리·애프터마켓
 }
 
-// 정규장 밖 시세 한 줄: 'NXT 프리 …' / '애프터 218,500 +0.23%' (장 마감 후는 KRX·NXT 통합)
-function NxtLine({ r, className = "" }: { r: StockRow; className?: string }) {
-  if (r.nxtPrice == null || r.nxtPct == null) return null;
+// 국내 종목 한 줄 — 미국 목록과 같은 배치: 종목 | 현재가·등락률(아래 줄에 프리/애프터) | 끝 열(시총·거래대금)
+function KrStockRow({ r, onClick, rankCls, last, badge, compact = false }: {
+  r: StockRow; onClick: () => void; rankCls?: string; last?: string; badge?: string; compact?: boolean;
+}) {
   const s = krSession();
   const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "애프터" : "애프터 종가";
+  const v = r.changePct;
+  const tone = (x: number) => (x > 0 ? "text-signal-green" : x < 0 ? "text-signal-red" : "text-gray-400");
+  const val = compact ? "text-xs" : "text-sm";
   return (
-    <span className={`num whitespace-nowrap ${className}`}>
-      <span className="text-purple-300 font-semibold">{tag}</span>{" "}
-      <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>{" "}
-      <span className={r.nxtPct > 0 ? "text-signal-green" : r.nxtPct < 0 ? "text-signal-red" : "text-gray-400"}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
-    </span>
+    <div className={`flex items-center ${compact ? "gap-2 py-1.5" : "gap-3 py-2"} hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`} onClick={onClick}>
+      {rankCls ? <span className={`w-5 text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <RankBadge rank={r.rank} />}
+      <div className="flex-1 min-w-0">
+        <p className={`${val} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
+        <p className={`${compact ? "text-[10px]" : "text-xs"} text-gray-600 truncate`}>{r.code}{badge && <span className="text-gold/70"> · {badge}</span>}</p>
+      </div>
+      <div className="flex flex-col items-end shrink-0">
+        <div className="flex items-baseline gap-2">
+          <span key={`${r.code}-${r.price}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{r.price.toLocaleString("ko-KR")}{compact ? "" : "원"}</span>
+          <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(v)}`}>{v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(v).toFixed(2)}%</span>
+        </div>
+        {r.nxtPrice != null && r.nxtPct != null && (
+          <span className={`${compact ? "text-[10px]" : "text-[11px]"} num whitespace-nowrap mt-0.5`}>
+            <span className={`font-bold mr-1 ${tag === "NXT 프리" ? "text-amber-300" : "text-purple-300"}`}>{tag}</span>
+            <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded px-0.5 animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>
+            <span className={`ml-1 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
+          </span>
+        )}
+      </div>
+      {last != null && <span className="w-14 text-right text-xs text-gray-300 num whitespace-nowrap">{last}</span>}
+    </div>
   );
 }
 interface SpikeRow {
@@ -153,11 +173,6 @@ function heuristicBadge(pct: number): string {
 
 // ─── 상승 / 하락 TOP 20 (2컬럼 패널) ─────────────────────────────────────────
 
-// 컴팩트 그리드: 2컬럼 배치에 최적화 (badge·거래량 제거, 컬럼 간격 축소)
-const COMPACT_GRID =
-  "grid gap-x-1.5 items-center " +
-  "grid-cols-[14px_minmax(0,1fr)_72px_52px]";
-
 /** 상승/하락 공용 하프 컴포넌트 */
 function TopMoversHalf({
   market, mode, ts, onSelect, large = false,
@@ -168,10 +183,7 @@ function TopMoversHalf({
   onSelect: (d: DrawerState) => void;
   large?: boolean;   // 단독으로 보일 때(매매동향 상승/하락 탭) 다른 탭과 같은 글자 크기
 }) {
-  const GRID = large ? "grid gap-x-2 items-center grid-cols-[20px_minmax(0,1fr)_88px_64px]" : COMPACT_GRID;
-  const T = large
-    ? { head: "text-xs", rank: "text-xs", name: "text-sm", code: "text-xs", val: "text-sm", row: "py-2", badge: "inline" }
-    : { head: "text-[10px]", rank: "text-[10px]", name: "text-xs", code: "text-[9px]", val: "text-xs", row: "py-1.5", badge: "hidden lg:inline" };
+  const T = { head: large ? "text-xs" : "text-[10px]" };
   const [rows, setRows]     = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [badges, setBadges] = useState<Record<string, string>>({});
@@ -214,51 +226,19 @@ function TopMoversHalf({
       </div>
 
       {/* 헤더 */}
-      <div className={`${GRID} py-1.5 ${T.head} text-gray-600 font-medium border-b border-navy-border/40`}>
-        <span className="text-center">#</span>
-        <span>종목</span>
-        <span className="text-right">현재가</span>
-        <span className="text-right">등락률</span>
+      <div className={`flex gap-3 py-1.5 ${T.head} text-gray-600 font-medium border-b border-navy-border/40`}>
+        <span className="w-5 text-center">#</span>
+        <span className="flex-1">종목</span>
+        <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
       </div>
 
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/20">
           {rows.map(r => (
-            <div key={r.code}
-              className={`${GRID} ${T.row} hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`}
-              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
-            >
-              {/* 순위 */}
-              <span className={`${T.rank} font-bold text-center ${r.rank <= 3 ? accentColor : "text-gray-600"}`}>{r.rank}</span>
-
-              {/* 종목명 */}
-              <div className="min-w-0">
-                <p className={`${T.name} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
-                <div className="flex items-center gap-1 min-w-0">
-                  <span className={`${T.code} text-gray-600`}>{r.code}</span>
-                  {r.nxtPrice != null && <NxtLine r={r} className={T.code} />}
-                  {r.nxtPrice == null && badges[r.code] && (
-                    <span className={`${T.badge} ${T.code} text-gold/70 truncate ${large ? "max-w-[160px]" : "max-w-[80px]"}`}>
-                      · {badges[r.code]}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* 현재가 */}
-              <span key={`${r.code}-${r.price}`} className={`text-right ${T.val} text-white num whitespace-nowrap rounded animate-tick`}>{fmtPrice(r.price)}</span>
-
-              {/* 등락률 */}
-              {(() => {
-                // 개장 전 KRX 0% 일 땐 NXT 등락률로
-                const v = r.changePct === 0 && r.nxtPct != null ? r.nxtPct : r.changePct;
-                return (
-                  <span className={`text-right ${T.val} font-bold num whitespace-nowrap ${v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400"}`}>
-                    {v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(v).toFixed(2)}%
-                  </span>
-                );
-              })()}
-            </div>
+            <KrStockRow key={r.code} r={r} compact={!large}
+              rankCls={r.rank <= 3 ? accentColor : "text-gray-600"}
+              badge={r.nxtPrice == null ? badges[r.code] : undefined}
+              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })} />
           ))}
         </div>
       )}
@@ -303,13 +283,6 @@ function fmtTradeAmt(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
-// 거래대금 컬럼: "1,234억" 형태 표시
-const AMOUNT_GRID =
-  "grid gap-x-2 items-center " +
-  "grid-cols-[20px_minmax(0,1fr)_80px_58px] " +
-  "sm:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px] " +
-  "md:grid-cols-[20px_minmax(0,1fr)_80px_58px_64px_90px]";
-
 // 08:00~20:00 (정규장 + NXT 프리 + KRX·NXT 애프터)
 const liveHours = () => krSession().key !== "closed";
 const fmtCap = (eok?: number) => (!eok ? "—" : eok >= 10000 ? `${(eok / 10000).toFixed(eok >= 1e5 ? 0 : 1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`);
@@ -347,49 +320,24 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
   }, [load]);
 
   return (
-    <div className="max-w-[700px]">
+    <div>
       <div className="flex justify-between mb-3 text-xs">
-        <span className="text-gray-500">당일 거래대금 기준 상위 20종목</span>
+        <span className="text-gray-500">{market === "KOSDAQ" ? "코스닥" : "코스피"} {kind === "cap" ? "시가총액" : "당일 거래대금"} 상위 30종목</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      {/* 헤더 */}
-      <div className={`${AMOUNT_GRID} py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40`}>
-        <span className="text-center">#</span>
-        <span>종목</span>
-        <span className="text-right">현재가</span>
-        <span className="text-right">등락률</span>
-        <span className="text-right hidden sm:block">{kind === "cap" ? "시가총액" : "거래대금"}</span>
-        <span className="text-right hidden md:block">오늘의 이유</span>
+      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+        <span className="w-5 text-center">#</span>
+        <span className="flex-1">종목</span>
+        <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
+        <span className="w-14 text-right">{kind === "cap" ? "시가총액" : "거래대금"}</span>
       </div>
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <div key={r.code}
-              className={`${AMOUNT_GRID} py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors`}
-              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
-            >
-              <RankBadge rank={r.rank} />
-              <div className="min-w-0">
-                <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600 truncate">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span>{r.nxtPrice != null && <NxtLine r={r} className="ml-1.5" />}</p>
-              </div>
-              <span key={`${r.code}-${r.price}`} className="text-right text-sm text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
-              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
-                {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
-              </span>
-              <span className="text-right text-xs text-gray-300 num hidden sm:block whitespace-nowrap">
-                {kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
-              </span>
-              <div className="hidden md:flex justify-end">
-                {badges[r.code] ? (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-gold/10 border border-gold/20 text-gold rounded-full font-medium whitespace-nowrap max-w-full truncate">
-                    ✦ {badges[r.code]}
-                  </span>
-                ) : (
-                  <span className="text-[10px] text-gray-700">—</span>
-                )}
-              </div>
-            </div>
+            <KrStockRow key={r.code} r={r}
+              badge={r.nxtPrice == null ? badges[r.code] : undefined}
+              last={kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
+              onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })} />
           ))}
         </div>
       )}
