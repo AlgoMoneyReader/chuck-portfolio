@@ -22,7 +22,7 @@ function fmtTime(t: Time | undefined, intraday: boolean): string {
   return `${t.year}.${t.month}.${t.day}`;
 }
 
-export default function CandleChart({ label, tf, height = 320, digits = 2 }: { label: string; tf: Timeframe; height?: number; digits?: number }) {
+export default function CandleChart({ label, tf, height = 320, digits = 2, url }: { label: string; tf: Timeframe; height?: number; digits?: number; url?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [state, setState] = useState<{ candles: Candle[]; prevClose: number | null; source?: string; error?: string } | null>(null);
@@ -31,12 +31,13 @@ export default function CandleChart({ label, tf, height = 320, digits = 2 }: { l
 
   useEffect(() => {
     setState(null); setHover(null);
-    const load = () => fetch(`/api/candles?label=${encodeURIComponent(label)}&tf=${tf}`, { cache: "no-store" })
-      .then(r => r.json()).then(setState).catch(e => setState({ candles: [], prevClose: null, error: String(e) }));
+    const src = url ? `${url}${url.includes("?") ? "&" : "?"}tf=${tf}` : `/api/candles?label=${encodeURIComponent(label)}&tf=${tf}`;
+    const load = () => fetch(src, { cache: "no-store" })
+      .then(r => r.json()).then(j => setState({ ...j, candles: j.candles ?? [] })).catch(e => setState({ candles: [], prevClose: null, error: String(e) }));
     load();
     const iv = intraday ? setInterval(load, 30_000) : undefined;
     return () => { if (iv) clearInterval(iv); };
-  }, [label, tf, intraday]);
+  }, [label, tf, intraday, url]);
 
   useEffect(() => {
     if (!box.current || !state?.candles.length) return;
