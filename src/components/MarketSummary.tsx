@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import { krSession } from "@/lib/krSession";
 const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
 interface DrawerState { code: string; market: "KS" | "KQ" | "US"; name: string; }
@@ -18,6 +19,21 @@ interface StockRow {
   rank: number; code: string; name: string;
   price: number; change: number; changePct: number; volume: number;
   tradeAmount?: number; // 거래대금 (원)
+  nxtPrice?: number | null; nxtPct?: number | null; // 넥스트레이드 프리·애프터마켓
+}
+
+// 정규장 밖 넥스트레이드 시세 한 줄: 'NXT 애프터 218,500 +0.23%'
+function NxtLine({ r, className = "" }: { r: StockRow; className?: string }) {
+  if (r.nxtPrice == null || r.nxtPct == null) return null;
+  const s = krSession();
+  const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "NXT 애프터" : "NXT 종가";
+  return (
+    <span className={`num whitespace-nowrap ${className}`}>
+      <span className="text-purple-300 font-semibold">{tag}</span>{" "}
+      <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>{" "}
+      <span className={r.nxtPct > 0 ? "text-signal-green" : r.nxtPct < 0 ? "text-signal-red" : "text-gray-400"}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
+    </span>
+  );
 }
 interface SpikeRow {
   rank: number; code: string; name: string;
@@ -115,10 +131,11 @@ function SkeletonRows({ count = 8 }: { count?: number }) {
   );
 }
 
+// 지금 거래 시간대: 정규장 / NXT 프리·애프터마켓 / 동시호가 / 장 종료
 function StatusBadge() {
-  return isMarketOpen()
-    ? <span className="text-signal-green text-xs">● 장중</span>
-    : <span className="text-gray-600 text-xs">○ 장마감</span>;
+  const s = krSession();
+  const cls = s.key === "regular" ? "text-signal-green" : s.extended ? "text-purple-300" : s.key === "auction-close" ? "text-gold" : "text-gray-500";
+  return <span className={`text-xs ${cls}`}>{s.key === "closed" ? "○" : "●"} {s.label}</span>;
 }
 
 // ─── 등락률 → 즉시 heuristic 뱃지 ──────────────────────────────────────────
@@ -215,9 +232,10 @@ function TopMoversHalf({
               {/* 종목명 */}
               <div className="min-w-0">
                 <p className={`${T.name} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 min-w-0">
                   <span className={`${T.code} text-gray-600`}>{r.code}</span>
-                  {badges[r.code] && (
+                  {r.nxtPrice != null && <NxtLine r={r} className={T.code} />}
+                  {r.nxtPrice == null && badges[r.code] && (
                     <span className={`${T.badge} ${T.code} text-gold/70 truncate ${large ? "max-w-[160px]" : "max-w-[80px]"}`}>
                       · {badges[r.code]}
                     </span>
@@ -229,9 +247,15 @@ function TopMoversHalf({
               <span key={`${r.code}-${r.price}`} className={`text-right ${T.val} text-white num whitespace-nowrap rounded animate-tick`}>{fmtPrice(r.price)}</span>
 
               {/* 등락률 */}
-              <span className={`text-right ${T.val} font-bold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
-                {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
-              </span>
+              {(() => {
+                // 개장 전 KRX 0% 일 땐 NXT 등락률로
+                const v = r.changePct === 0 && r.nxtPct != null ? r.nxtPct : r.changePct;
+                return (
+                  <span className={`text-right ${T.val} font-bold num whitespace-nowrap ${v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400"}`}>
+                    {v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(v).toFixed(2)}%
+                  </span>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -341,7 +365,7 @@ function TopByAmountList({ market, onSelect }: { market: string; onSelect: (d: D
               <RankBadge rank={r.rank} />
               <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-600">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span></p>
+                <p className="text-xs text-gray-600 truncate">{r.code}<span className="sm:hidden text-gold/90 font-semibold num ml-1.5">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}</span>{r.nxtPrice != null && <NxtLine r={r} className="ml-1.5" />}</p>
               </div>
               <span key={`${r.code}-${r.price}`} className="text-right text-sm text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
               <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
@@ -1270,15 +1294,16 @@ const KR_MARKET_TABS: { id: MainTabType; label: string }[] = [
 // 상승·하락 한쪽만 (장 상태 표시 포함)
 function MoversPanel({ market, mode, onSelect }: { market: string; mode: "gainers" | "losers"; onSelect: (d: DrawerState) => void }) {
   const [ts, setTs] = useState("");
+  const [basis, setBasis] = useState("");
   useEffect(() => {
     fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); })
+      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); if (j?.basis) setBasis(j.basis); })
       .catch(() => null);
   }, [market]);
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3 text-xs"><StatusBadge /></div>
+      <div className="flex items-center gap-2 mb-3 text-xs flex-wrap"><StatusBadge />{basis && <span className="text-gray-500">· 순위 {basis}</span>}</div>
       <TopMoversHalf market={market} mode={mode} ts={ts} onSelect={onSelect} large />
     </div>
   );

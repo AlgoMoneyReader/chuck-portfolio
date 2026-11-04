@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
+import { krSession } from "@/lib/krSession";
 import RadarReport from "@/components/RadarReport";
 import { logActivity } from "@/lib/activity";
 import { useRouter } from "next/navigation";
@@ -15,6 +16,8 @@ import { relTime } from "@/lib/time";
 import { useChartColors } from "@/lib/theme";
 
 interface Overview {
+  session?: { key: string; label: string; short: string; extended: boolean };
+  nxt?: { price: number; change: number; pct: number } | null;
   code: string; name: string; marketCode: "KS" | "KQ";
   quote: {
     price: number | null; change: number | null; changePct: number | null; market: string | null; sector: string | null;
@@ -478,9 +481,10 @@ export default function StockPage({ params }: { params: { code: string } }) {
   }, [code]);
   // 장중 현재가 15초마다 갱신(실패하면 기존 값 유지)
   useMarketPoll(() => {
+    if (krSession().key === "closed") return; // 08~20시(KRX+NXT)에만
     fetch(`/api/stock-overview?code=${code}&quote=1`, { cache: "no-store" })
-      .then(r => r.json()).then(j => { if (!j.error && j.quote) setD(prev => (prev ? { ...prev, quote: { ...prev.quote, ...j.quote } } : prev)); }).catch(() => {});
-  }, 15_000);
+      .then(r => r.json()).then(j => { if (!j.error && j.quote) setD(prev => (prev ? { ...prev, quote: { ...prev.quote, ...j.quote }, nxt: j.nxt ?? null, session: j.session } : prev)); }).catch(() => {});
+  }, 15_000, { krxOnly: false, enabled: true });
 
   useEffect(() => {
     const sb = getBrowserSupabase();
@@ -510,6 +514,14 @@ export default function StockPage({ params }: { params: { code: string } }) {
               <p className="text-sm num">
                 <span className="text-white font-semibold">{won(q.price)}원</span>{" "}
                 <span className={tone(q.changePct)}>{q.changePct != null && q.changePct > 0 ? "▲" : q.changePct != null && q.changePct < 0 ? "▼" : ""} {won(Math.abs(q.change ?? 0))} ({pct(q.changePct, 2)})</span>
+                {d?.session && <span className="ml-1.5 text-[10px] text-gray-500">{d.session.key === "regular" ? "KRX 정규장" : "KRX 종가"}</span>}
+              </p>
+            )}
+            {d?.nxt && d.session && d.session.key !== "regular" && (
+              <p className="text-xs num">
+                <span className="text-purple-300 font-semibold">{d.session.key === "nxt-pre" || d.session.key === "auction-open" ? "NXT 프리마켓" : d.session.key === "nxt-after" ? "NXT 애프터마켓" : "NXT 종가"}</span>{" "}
+                <span key={d.nxt.price} className="text-white font-semibold rounded animate-tick">{won(d.nxt.price)}원</span>{" "}
+                <span className={tone(d.nxt.pct)}>{d.nxt.pct > 0 ? "+" : ""}{d.nxt.pct.toFixed(2)}%</span>
               </p>
             )}
           </div>
