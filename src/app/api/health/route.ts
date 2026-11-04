@@ -7,7 +7,7 @@ export const preferredRegion = "icn1";
 export const maxDuration = 60;
 
 // 설정 점검용. 키 값은 절대 내보내지 않고 있음/없음과 연결 결과만 보여준다
-const ENV = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "GEMINI_API_KEY", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+const ENV = ["KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
 const TABLES = ["profiles", "posts", "comments", "post_likes", "watchlist"];
 
 async function check(fn: () => Promise<string>): Promise<string> {
