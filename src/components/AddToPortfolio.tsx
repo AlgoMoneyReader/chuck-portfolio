@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { FiBriefcase, FiX } from "react-icons/fi";
 import { useAuth } from "./AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activity";
 
 // 종목 상세에서 바로 My 포트폴리오(보유 종목)에 담기
 export default function AddToPortfolio({ code, name, market, price }: { code: string; name: string; market: string; price?: number | null }) {
@@ -54,6 +55,7 @@ export default function AddToPortfolio({ code, name, market, price }: { code: st
     setSaving(false);
     if (error) { setMsg("저장 실패: " + error.message); return; }
     setOpen(false);
+    logActivity("portfolio", { code, name, qty: q, avg: a });
     router.push("/portfolio");
   };
 

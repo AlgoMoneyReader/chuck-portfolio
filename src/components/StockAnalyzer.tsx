@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { authFetch } from "@/lib/supabase/authFetch";
+import { logActivity } from "@/lib/activity";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import StockSignalReport from "./StockSignalReport";
@@ -305,6 +306,7 @@ export default function StockAnalyzer({ initialTicker = "", initialName = "" }: 
     setResult(null);
 
     try {
+      logActivity("analyze", { ticker, name: companyName });
       const res = await authFetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

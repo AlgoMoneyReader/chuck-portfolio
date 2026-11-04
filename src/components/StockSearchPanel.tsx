@@ -6,6 +6,7 @@ import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 import { LoginBlur } from "./RequireLogin";
 import { useAuth } from "./AuthProvider";
 import { authFetch } from "@/lib/supabase/authFetch";
+import { logActivity } from "@/lib/activity";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -264,6 +265,7 @@ export default function StockSearchPanel() {
     const code   = item.code   ?? "";
     const market = item.market ?? "KS";
     const name   = item.name   ?? item.code ?? "";
+    logActivity("search", { code, name, from: "종목검색" });
     const isUS   = market === "US";
 
     const stockItem: StockItem = {

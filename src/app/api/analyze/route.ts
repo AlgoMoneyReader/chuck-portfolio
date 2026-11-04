@@ -120,7 +120,7 @@ ${currentPriceLine}
 위 정보를 바탕으로 엘리트 주식 리서치 보고서를 작성해주세요.
     `.trim();
 
-    const { text, model } = await gemini({ prompt: userMessage, system: SYSTEM_PROMPT, search: true, timeoutMs: 50_000 });
+    const { text, model } = await gemini({ prompt: userMessage, system: SYSTEM_PROMPT, search: true, timeoutMs: 55_000, effort: "medium", log: { feature: "AI 리서치", userId: me.user.id, sb: me.sb, detail: `${companyName ?? ""} ${ticker ?? ""}`.trim() } });
 
     const { data: used } = await me.sb.rpc("use_ai_quota");
     return NextResponse.json({

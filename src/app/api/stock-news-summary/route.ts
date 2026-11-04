@@ -74,7 +74,7 @@ async function fetchNaverRSS(code: string): Promise<string[]> {
 
 // ── Gemini AI 요약 ────────────────────────────────────────────────────────────
 async function callGemini(prompt: string): Promise<string> {
-  return (await gemini({ prompt, models: CHEAP, maxTokens: 50, temperature: 0.3, timeoutMs: 6000 })).text;
+  return (await gemini({ prompt, models: CHEAP, maxTokens: 50, temperature: 0.3, timeoutMs: 8000, log: { feature: "종목 한줄요약" } })).text;
 }
 
 // ── 가격 방향 휴리스틱 ────────────────────────────────────────────────────────

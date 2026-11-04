@@ -86,7 +86,7 @@ async function fetchRSSItems(feedUrl: string, max = 15): Promise<RSSItem[]> {
 
 // ── Gemini 호출 ───────────────────────────────────────────────────────────────
 async function callGemini(prompt: string): Promise<string> {
-  return (await gemini({ prompt, models: CHEAP, maxTokens: 2400, temperature: 0.2, timeoutMs: 20000 })).text;
+  return (await gemini({ prompt, models: CHEAP, maxTokens: 2400, temperature: 0.2, timeoutMs: 25000, log: { feature: "시장 이슈" } })).text;
 }
 
 // ── 헤드라인 → issue 매칭 (URL 연결용) ────────────────────────────────────────
