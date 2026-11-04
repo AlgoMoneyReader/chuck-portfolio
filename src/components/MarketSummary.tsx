@@ -142,13 +142,18 @@ const COMPACT_GRID =
 
 /** 상승/하락 공용 하프 컴포넌트 */
 function TopMoversHalf({
-  market, mode, ts, onSelect,
+  market, mode, ts, onSelect, large = false,
 }: {
   market: string;
   mode: "gainers" | "losers";
   ts: string;
   onSelect: (d: DrawerState) => void;
+  large?: boolean;   // 단독으로 보일 때(매매동향 상승/하락 탭) 다른 탭과 같은 글자 크기
 }) {
+  const GRID = large ? "grid gap-x-2 items-center grid-cols-[20px_minmax(0,1fr)_88px_64px]" : COMPACT_GRID;
+  const T = large
+    ? { head: "text-xs", rank: "text-xs", name: "text-sm", code: "text-xs", val: "text-sm", row: "py-2", badge: "inline" }
+    : { head: "text-[10px]", rank: "text-[10px]", name: "text-xs", code: "text-[9px]", val: "text-xs", row: "py-1.5", badge: "hidden lg:inline" };
   const [rows, setRows]     = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [badges, setBadges] = useState<Record<string, string>>({});
@@ -185,12 +190,12 @@ function TopMoversHalf({
     <div className="min-w-0">
       {/* 섹션 제목 */}
       <div className="flex items-center justify-between mb-2">
-        <span className={`text-xs font-bold ${accentColor}`}>{icon} {title}</span>
+        <span className={`${large ? "text-sm" : "text-xs"} font-bold ${accentColor}`}>{icon} {title}</span>
         {ts && <span className="text-[10px] text-gray-600">{ts}</span>}
       </div>
 
       {/* 헤더 */}
-      <div className={`${COMPACT_GRID} py-1 text-[10px] text-gray-600 font-medium border-b border-navy-border/40`}>
+      <div className={`${GRID} py-1.5 ${T.head} text-gray-600 font-medium border-b border-navy-border/40`}>
         <span className="text-center">#</span>
         <span>종목</span>
         <span className="text-right">현재가</span>
@@ -201,19 +206,19 @@ function TopMoversHalf({
         <div className="divide-y divide-navy-border/20">
           {rows.map(r => (
             <div key={r.code}
-              className={`${COMPACT_GRID} py-1.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`}
+              className={`${GRID} ${T.row} hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`}
               onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })}
             >
               {/* 순위 */}
-              <span className={`text-[10px] font-bold text-center ${r.rank <= 3 ? accentColor : "text-gray-600"}`}>{r.rank}</span>
+              <span className={`${T.rank} font-bold text-center ${r.rank <= 3 ? accentColor : "text-gray-600"}`}>{r.rank}</span>
 
               {/* 종목명 */}
               <div className="min-w-0">
-                <p className="text-xs text-white font-medium truncate group-hover:text-cyan-brand transition-colors">{r.name}</p>
+                <p className={`${T.name} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
                 <div className="flex items-center gap-1">
-                  <span className="text-[9px] text-gray-600">{r.code}</span>
+                  <span className={`${T.code} text-gray-600`}>{r.code}</span>
                   {badges[r.code] && (
-                    <span className="hidden lg:inline text-[9px] text-gold/70 truncate max-w-[80px]">
+                    <span className={`${T.badge} ${T.code} text-gold/70 truncate ${large ? "max-w-[160px]" : "max-w-[80px]"}`}>
                       · {badges[r.code]}
                     </span>
                   )}
@@ -221,10 +226,10 @@ function TopMoversHalf({
               </div>
 
               {/* 현재가 */}
-              <span key={`${r.code}-${r.price}`} className="text-right text-xs text-white num whitespace-nowrap rounded animate-tick">{fmtPrice(r.price)}</span>
+              <span key={`${r.code}-${r.price}`} className={`text-right ${T.val} text-white num whitespace-nowrap rounded animate-tick`}>{fmtPrice(r.price)}</span>
 
               {/* 등락률 */}
-              <span className={`text-right text-xs font-bold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+              <span className={`text-right ${T.val} font-bold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
             </div>
@@ -1274,7 +1279,7 @@ function MoversPanel({ market, mode, onSelect }: { market: string; mode: "gainer
   return (
     <div>
       <div className="flex items-center gap-2 mb-3 text-xs"><StatusBadge /></div>
-      <TopMoversHalf market={market} mode={mode} ts={ts} onSelect={onSelect} />
+      <TopMoversHalf market={market} mode={mode} ts={ts} onSelect={onSelect} large />
     </div>
   );
 }
