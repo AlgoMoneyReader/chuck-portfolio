@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FiChevronLeft } from "react-icons/fi";
+
+const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
 interface Item { s: string; n: string; sec: string; ind: string; cap: number; pct: number; price: number }
 interface Data { index: string; source: string; asOf: string; total: number; items: Item[]; breadth: { up: number; down: number; flat: number }; error?: string }
@@ -114,11 +116,13 @@ export default function MarketMap() {
   const [sector, setSector] = useState<string | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
-  const [picked, setPicked] = useState<Item | null>(null);
+  const [usDetail, setUsDetail] = useState<Item | null>(null);
+  const router = useRouter();
+  const openDetail = (it: Item) => (region === "KR" ? router.push(`/stock/${it.s}`) : setUsDetail(it));
   const [ref, width] = useWidth();
 
   useEffect(() => {
-    setLoading(true); setPicked(null);
+    setLoading(true);
     setSector(index === "SOXX" ? ALL : null);
     const url = region === "KR" ? `/api/kr-heatmap?market=${index}` : `/api/heatmap?index=${index}`;
     const load = () => fetch(url, { cache: "no-store" })
@@ -175,7 +179,7 @@ export default function MarketMap() {
         }
         squarify(g.xs.map(i => i.cap), { x: gr.x, y: gr.y + head, w: gr.w, h: gr.h - head }).forEach((r, j) => {
           const it = g.xs[j];
-          tiles.push(<Tile key={it.s} r={r} bg={colorFor(it.pct)} title={label(it)} sub={fmtPct(it.pct)} active={picked?.s === it.s} onClick={() => setPicked(it)} />);
+          tiles.push(<Tile key={it.s} r={r} bg={colorFor(it.pct)} title={label(it)} sub={fmtPct(it.pct)} onClick={() => openDetail(it)} />);
         });
       });
     }
@@ -202,7 +206,7 @@ export default function MarketMap() {
 
       {sector && index !== "SOXX" ? (
         <div className="flex items-center gap-2">
-          <button onClick={() => { setSector(null); setPicked(null); }} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-navy-sub text-xs text-gray-300">
+          <button onClick={() => setSector(null)} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-navy-sub text-xs text-gray-300">
             <FiChevronLeft /> {index}
           </button>
           <span className="text-sm font-bold text-white">{sector} · {inView.length}종목</span>
@@ -217,17 +221,10 @@ export default function MarketMap() {
           : tiles}
       </div>
 
-      {picked && (
-        <div className="flex items-center justify-between text-sm bg-navy-sub rounded-lg px-3 py-2">
-          <span className="text-white font-semibold truncate">
-            {region === "KR" ? picked.n : <>{picked.s} <span className="text-gray-400 font-normal">{picked.n}</span></>}
-          </span>
-          <span className="num shrink-0 flex items-center gap-2">
-            <span className="text-gray-300">{region === "KR" ? `${picked.price.toLocaleString("ko-KR")}원` : `$${picked.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}</span>
-            <span className={picked.pct >= 0 ? "text-signal-green" : "text-signal-red"}>{fmtPct(picked.pct)}</span>
-            {region === "KR" && <Link href={`/stock/${picked.s}`} className="text-xs text-cyan-brand">상세 ›</Link>}
-          </span>
-        </div>
+      {usDetail && (
+        <Suspense fallback={null}>
+          <StockDetailDrawer code={usDetail.s} market="US" name={usDetail.n} onClose={() => setUsDetail(null)} />
+        </Suspense>
       )}
 
       <div className="grid grid-cols-7 gap-1">

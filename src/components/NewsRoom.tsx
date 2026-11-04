@@ -24,6 +24,11 @@ const SOURCE_COLOR: Record<string, string> = {
   "매일경제": "#F472B6",
   "한국경제": "#38BDF8",
   "연합뉴스": "#A78BFA",
+  "파이낸셜뉴스": "#FB923C",
+  "조선비즈": "#60A5FA",
+  "머니투데이": "#F87171",
+  "서울경제": "#2DD4BF",
+  "로이터": "#FBBF24",
 };
 const DIR = {
   up:    { icon: "▲", cls: "text-signal-green", label: "호재" },
@@ -86,8 +91,8 @@ export default function NewsRoom() {
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-white">뉴스룸</h2>
-          <p className="text-xs text-gray-500 mt-0.5">증권·경제 매체와 Investing.com의 최신 헤드라인</p>
+          <h2 className="text-base font-bold text-white">마켓 리딩</h2>
+          <p className="text-xs text-gray-500 mt-0.5">알읽남이 골라 읽어주는 오늘의 시장 뉴스 · 시장과 무관한 기사는 거릅니다</p>
         </div>
         <button
           onClick={() => load(true)}
@@ -103,7 +108,7 @@ export default function NewsRoom() {
       {issues.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-semibold text-white">주요 이슈</p>
+            <p className="text-sm font-semibold text-white">오늘의 핵심 이슈</p>
             <span className="text-[11px] text-gray-500">AI가 헤드라인을 묶어 요약</span>
           </div>
           <div className="-mx-4 px-4 md:-mx-6 md:px-6 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none">
@@ -143,7 +148,7 @@ export default function NewsRoom() {
       {/* 주요 공시 (DART) */}
       {(dart.length > 0 || dartErr) && (
         <div className="bg-navy-sub/40 border border-navy-border rounded-xl p-4">
-          <p className="text-sm font-semibold text-white">주요 공시</p>
+          <p className="text-sm font-semibold text-white">공시 레이더</p>
           <p className="text-[11px] text-gray-500 mb-3">금융감독원 DART · 실적·증자·계약 등 주가 영향이 큰 공시</p>
           {dart.length === 0 ? (
             <p className="text-xs text-gray-500">{dartErr}</p>
@@ -180,7 +185,7 @@ export default function NewsRoom() {
 
       {/* 헤드라인 */}
       <div>
-        <p className="text-sm font-semibold text-white mb-1">헤드라인 뉴스</p>
+        <p className="text-sm font-semibold text-white mb-1">실시간 헤드라인</p>
         {loading ? (
           <div className="space-y-3 mt-3">
             {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-navy-border/50 rounded-lg animate-pulse" />)}
