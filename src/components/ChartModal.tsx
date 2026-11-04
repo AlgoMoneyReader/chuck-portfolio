@@ -147,6 +147,14 @@ export default function ChartModal({ label, onClose }: Props) {
       .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNightFutures(j); }).catch(() => {});
   }, 20_000, { krxOnly: false, enabled: (activeTab === "night" || activeTab === "day") && isIndex });
 
+  // AI 시황은 10분마다 새로 (서버도 10분 캐시)
+  useMarketPoll(() => {
+    const cp = chartData?.currentPrice, pc = chartData?.previousClose;
+    const pct = cp && pc ? ((cp - pc) / pc * 100) : 0;
+    fetch(`/api/market-commentary?market=${label}&price=${cp ?? 0}&changePct=${pct.toFixed(2)}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j?.bullets) setCommentary(j); }).catch(() => {});
+  }, 600_000, { enabled: activeTab === "flow" && isIndex });
+
   // ── ESC 닫기 ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
