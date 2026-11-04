@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { curatedKR, fetchInvestingKR, fetchInvestingActuals, titleOverlap, type KrEcon, type GlobalActual } from "@/lib/krEcon";
+import { curatedKR, fetchInvestingKR, fetchInvestingActuals, titleOverlap, plausibleActual, type KrEcon, type GlobalActual } from "@/lib/krEcon";
 
 export const dynamic = "force-dynamic";
 
@@ -180,16 +180,18 @@ const loadActuals = unstable_cache(async (bucket: string, today: string): Promis
   };
   const [tv, nq, inv] = await Promise.all([run("tradingview", () => tradingviewActuals(today)), run("nasdaq", () => nasdaqActuals(today)), run("investing", fetchInvestingActuals)]);
   return { list: [...tv, ...nq, ...inv], stats };
-}, ["global-actuals-v3"], { revalidate: 600 });
+}, ["global-actuals-v4"], { revalidate: 600 });
 
-function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string }>(e: T, acts: GlobalActual[]): T {
+function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string; forecast?: string | null; previous?: string | null }>(e: T, acts: GlobalActual[]): T {
   if (e.actual || Date.parse(e.at) > Date.now()) return e;
-  // 같은 통화, 발표 시각 ±10분 안의 지표 중 제목이 가장 비슷한 것
+  // 같은 통화, 발표 시각 ±10분, 이름이 충분히 비슷(0.5 이상)하고 단위·크기가 맞는 것만
   const t0 = Date.parse(`${e.day}T${e.time || "00:00"}:00+09:00`);
-  const cands = acts.filter(a => a.currency === e.country && Math.abs(Date.parse(`${a.day}T${a.time}:00+09:00`) - t0) <= 10 * 60_000);
-  if (!cands.length) return e;
-  const best = cands.map(a => ({ a, s: titleOverlap(a.title, e.original) })).sort((x, y) => y.s - x.s)[0];
-  return best && (cands.length === 1 || best.s >= 0.34) ? { ...e, actual: best.a.actual } : e;
+  const best = acts
+    .filter(a => a.currency === e.country && Math.abs(Date.parse(`${a.day}T${a.time}:00+09:00`) - t0) <= 10 * 60_000)
+    .map(a => ({ a, s: titleOverlap(a.title, e.original) }))
+    .filter(x => x.s >= 0.5 && plausibleActual(x.a.actual, e.forecast ?? null, e.previous ?? null))
+    .sort((x, y) => y.s - x.s)[0];
+  return best ? { ...e, actual: best.a.actual } : e;
 }
 
 export async function GET() {

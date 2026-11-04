@@ -194,11 +194,42 @@ export async function fetchInvestingActuals(): Promise<GlobalActual[]> {
   return out;
 }
 
-// 제목 단어 겹침(0~1)
+// 지표 이름 정규화: m/m·MoM·(MoM) → mom 처럼 출처마다 다른 표기를 통일
+const SYN: [RegExp, string][] = [
+  [/\bm\/m\b|\bmom\b|month[- ]over[- ]month/gi, " mom "], [/\by\/y\b|\byoy\b|year[- ]over[- ]year/gi, " yoy "],
+  [/\bq\/q\b|\bqoq\b/gi, " qoq "], [/non[- ]?manufacturing|services/gi, " services "], [/non[- ]?farm|nonfarm/gi, " nonfarm "],
+  [/unemployment claims|jobless claims|initial claims/gi, " jobless claims "], [/job openings|jolts/gi, " jolts openings "],
+  [/consumer price index/gi, " cpi "], [/producer price index/gi, " ppi "], [/purchasing managers'? index/gi, " pmi "],
+  [/gross domestic product/gi, " gdp "], [/\bprelim(inary)?\b|\bflash\b|\badvance\b/gi, " prelim "], [/\bfinal\b/gi, " final "],
+];
+const STOP = new Set(["the", "of", "and", "s&p", "global", "hcob", "au", "jibun", "bank", "change", "rate", "index", "sa", "nsa", "us", "ec", "eu"]);
+function tokens(x: string): Set<string> {
+  let t = ` ${x.toLowerCase()} `;
+  for (const [re, r] of SYN) t = t.replace(re, r);
+  return new Set(t.replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
+}
+const PERIOD = ["mom", "yoy", "qoq"];
+
+// 제목 유사도(0~1). 기간(전월비·전년비·전기비)이 서로 다르면 0
 export function titleOverlap(a: string, b: string): number {
-  const w = (x: string) => new Set(x.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(t => t.length > 1 && !["m/m","y/y","q/q","the","of"].includes(t)));
-  const A = w(a), B = w(b);
+  const A = tokens(a), B = tokens(b);
+  const pa = PERIOD.filter(p => A.has(p)), pb = PERIOD.filter(p => B.has(p));
+  if (pa.length && pb.length && !pa.some(p => pb.includes(p))) return 0;
   if (!A.size || !B.size) return 0;
   let n = 0; A.forEach(t => { if (B.has(t)) n++; });
   return n / Math.min(A.size, B.size);
+}
+
+// 결과값이 예상·이전 값과 같은 단위·비슷한 크기인지 (지수 수준 vs 변화율 같은 엉뚱한 매칭 차단)
+const unitOf = (v: string) => (/%\s*$/.test(v) ? "%" : (/[KMBT]\s*$/i.exec(v)?.[0] ?? "").toUpperCase() || "num");
+const numOf = (v: string) => parseFloat(v.replace(/[^0-9.\-]/g, ""));
+export function plausibleActual(actual: string, forecast: string | null, previous: string | null): boolean {
+  const ref = forecast || previous;
+  if (!ref) return true;
+  if (/\|/.test(ref)) return true;                     // 국채 입찰 '4.18|1.6' 같은 형식은 검사 생략
+  if (unitOf(actual) !== unitOf(ref)) return false;
+  const a = Math.abs(numOf(actual)), r = Math.abs(numOf(ref));
+  if (isNaN(a) || isNaN(r)) return true;
+  if (r < 1 && a < 5) return true;                       // 0.1% 같은 작은 변화율은 크기 비교 생략
+  return a <= Math.max(r, 1) * 6 && a >= r / 6;
 }
