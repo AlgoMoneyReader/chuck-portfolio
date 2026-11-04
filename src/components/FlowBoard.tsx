@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid,
 } from "recharts";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 
@@ -13,6 +14,7 @@ interface Board {
   daily: Record<Mk, (Core & { date: string })[]>;
   sectors: (Core & { code: string; name: string; date: string })[];
   intraday: Partial<Record<Mk, (Core & { hm: string })[]>>;
+  futures?: (Core & { foreignQty: number; institutionQty: number; individualQty: number }) | null;
   asOf: string;
   errors: string[];
 }
@@ -55,11 +57,61 @@ const tip = {
   formatter: (v: unknown, n: unknown) => [fmt(Number(v)), LABEL[String(n) as keyof typeof LABEL] ?? String(n)] as [string, string],
 };
 
+interface SE {
+  period: string | null; count: number; note?: string;
+  total?: { sales: number; op: number; salesYoY: number | null; opYoY: number | null; margin: number | null };
+  stocks: { code: string; name: string; pct: number; latest: { period: string; prelim?: boolean; sales: number | null; op: number | null; salesYoY: number | null; opYoY: number | null } | null }[];
+}
+// 실적 금액은 부호 없이 (적자만 -)
+const won = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v.toLocaleString("ko-KR")}억`);
+const pctTxt = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+
+// 업종을 누르면: 히트맵과 같은 업종 분류의 시총 상위 종목 최근 분기 실적(DART, 잠정 포함)
+function SectorEarnings({ sector }: { sector: string }) {
+  const [d, setD] = useState<SE | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/sector-earnings?market=KOSPI&sector=${encodeURIComponent(sector)}`, { cache: "no-store" })
+      .then(r => r.json()).then(setD).catch(() => setD(null)).finally(() => setLoading(false));
+  }, [sector]);
+  if (loading) return <div className="rounded-xl bg-navy-sub/50 p-3 text-xs text-gray-500 flex items-center gap-2"><span className="w-3 h-3 border border-gray-600 border-t-cyan-brand rounded-full animate-spin" />{sector} 실적 불러오는 중… (처음엔 10~20초)</div>;
+  if (!d || !d.stocks?.length) return <div className="rounded-xl bg-navy-sub/50 p-3 text-xs text-gray-500">{d?.note ?? "실적을 불러오지 못했습니다"}</div>;
+  return (
+    <div className="rounded-xl bg-navy-sub/50 border border-navy-border/60 p-3 space-y-2.5">
+      {d.total && d.period && (
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="text-xs font-semibold text-white">{d.period} 업종 합계 <span className="text-gray-500 font-normal">(상위 {d.count}종목)</span></span>
+          <span className="text-[11px] text-gray-400 num">매출 {won(d.total.sales)} <span className={tone(d.total.salesYoY ?? 0)}>{pctTxt(d.total.salesYoY)}</span></span>
+          <span className="text-[11px] text-gray-400 num">영업이익 {won(d.total.op)} <span className={tone(d.total.opYoY ?? 0)}>{pctTxt(d.total.opYoY)}</span></span>
+          {d.total.margin != null && <span className="text-[11px] text-gray-400 num">이익률 {d.total.margin}%</span>}
+        </div>
+      )}
+      <table className="w-full text-[11px]">
+        <thead><tr className="text-gray-500"><th className="text-left font-normal pb-1">종목</th><th className="text-right font-normal pb-1">분기</th><th className="text-right font-normal pb-1">매출</th><th className="text-right font-normal pb-1">영업이익</th><th className="text-right font-normal pb-1">YoY</th></tr></thead>
+        <tbody className="num">
+          {d.stocks.map(x => (
+            <tr key={x.code} className="border-t border-navy-border/40">
+              <td className="py-1.5"><Link href={`/stock/${x.code}`} className="text-white hover:text-cyan-brand">{x.name}</Link></td>
+              <td className="py-1.5 text-right text-gray-400">{x.latest ? `${x.latest.period.slice(2)}${x.latest.prelim ? "*" : ""}` : "—"}</td>
+              <td className="py-1.5 text-right text-gray-300">{x.latest?.sales != null ? won(x.latest.sales) : "—"}</td>
+              <td className={`py-1.5 text-right font-semibold ${tone(x.latest?.op ?? 0)}`}>{x.latest?.op != null ? won(x.latest.op) : "—"}</td>
+              <td className={`py-1.5 text-right ${tone(x.latest?.opYoY ?? 0)}`}>{pctTxt(x.latest?.opYoY)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-[10px] text-gray-600">* 잠정실적 · YoY는 영업이익 전년 동기 대비 · 출처 DART · 종목 이름을 누르면 상세로 이동</p>
+    </div>
+  );
+}
+
 export default function FlowBoard() {
   const [mk, setMk] = useState<Mk>("KOSPI");
   const [b, setB] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
   const [sectorSort, setSectorSort] = useState<"smart" | "foreign" | "institution" | "individual">("smart");
+  const [openSector, setOpenSector] = useState<string | null>(null);
 
   const load = useCallback(() => fetch("/api/flow-board", { cache: "no-store" })
     .then(r => r.json()).then(j => { if (j && !j.error) setB(j); }).catch(() => {}).finally(() => setLoading(false)), []);
@@ -119,6 +171,24 @@ export default function FlowBoard() {
         )}
       </Card>
 
+      {/* 코스피200 선물 */}
+      {b.futures && (
+        <Card title="코스피200 선물 투자자별" note="오늘 장중 · 억원 (계약)">
+          <div className="grid grid-cols-3 gap-3">
+            {KEYS.map(k => {
+              const v = b.futures![k], q = b.futures![`${k}Qty` as "foreignQty"];
+              return (
+                <div key={k} className="rounded-xl bg-navy-sub/60 p-3">
+                  <p className="text-[11px] text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
+                  <p className={`text-base font-bold num mt-1 ${tone(v)}`}>{fmt(v)}</p>
+                  <p className={`text-[11px] num ${tone(q)}`}>{q > 0 ? "+" : ""}{q.toLocaleString("ko-KR")}계약</p>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* ② 시간별 */}
       <Card title="시간별 누적 순매수 (오늘)" note={intra.length ? `${intra[0].hm} ~ ${intra[intra.length - 1].hm}` : undefined}>
         {intra.length >= 2 ? (
@@ -146,7 +216,7 @@ export default function FlowBoard() {
       </Card>
 
       {/* ③ 섹터별 */}
-      <Card title="업종별 순매수 (코스피)" note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
+      <Card title="업종별 순매수 (코스피) · 누르면 업종 실적" note={sectors[0] ? `${md(sectors[0].date)} 기준 · 억원` : undefined}>
         {!sectors.length ? <p className="text-xs text-gray-500">업종별 데이터를 불러오지 못했습니다</p> : (
           <>
             <div className="flex gap-1 overflow-x-auto scrollbar-none">
@@ -165,8 +235,11 @@ export default function FlowBoard() {
                 </thead>
                 <tbody className="divide-y divide-navy-border/60">
                   {sectors.map(s => (
-                    <tr key={s.code}>
-                      <td className="py-2 text-white whitespace-nowrap pr-2">{s.name}</td>
+                    <Fragment key={s.code}>
+                    <tr onClick={() => setOpenSector(openSector === s.name ? null : s.name)} className="cursor-pointer hover:bg-white/5">
+                      <td className="py-2 text-white whitespace-nowrap pr-2">
+                        <span className={`inline-block w-3 text-gray-500 transition-transform ${openSector === s.name ? "rotate-90" : ""}`}>›</span>{s.name}
+                      </td>
                       {KEYS.map(k => (
                         <td key={k} className="py-2 pl-2 w-[27%]">
                           <div className="flex flex-col items-end gap-1">
@@ -178,6 +251,10 @@ export default function FlowBoard() {
                         </td>
                       ))}
                     </tr>
+                    {openSector === s.name && (
+                      <tr><td colSpan={4} className="pb-3"><SectorEarnings sector={s.name} /></td></tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -193,15 +270,15 @@ export default function FlowBoard() {
             <Legend />
             <div className="h-52 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={daily.map(d => ({ ...d, d: md(d.date) }))} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+                <LineChart data={daily.map(d => ({ ...d, d: md(d.date) }))} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#1E2A4A" strokeDasharray="2 4" vertical={false} />
                   <XAxis dataKey="d" tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} width={44}
                     tickFormatter={(v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v}`)} />
                   <ReferenceLine y={0} stroke="#374151" />
-                  <Tooltip {...tip} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-                  {KEYS.map(k => <Bar key={k} dataKey={k} fill={C[k]} radius={[2, 2, 0, 0]} isAnimationActive={false} />)}
-                </BarChart>
+                  <Tooltip {...tip} />
+                  {KEYS.map(k => <Line key={k} type="monotone" dataKey={k} stroke={C[k]} strokeWidth={2.2} dot={{ r: 2.5, fill: C[k], strokeWidth: 0 }} activeDot={{ r: 4 }} isAnimationActive={false} />)}
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </>
