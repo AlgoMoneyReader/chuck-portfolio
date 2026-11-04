@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { logActivity } from "@/lib/activity";
@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const uidRef = useRef<string | null | undefined>(undefined); // 현재 로그인한 사용자 id
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (u: User | null) => {
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
     supabase.auth.getUser().then(async ({ data }) => {
+      uidRef.current = data.user?.id ?? null;
       setUser(data.user);
       await loadProfile(data.user);
       setLoading(false);
@@ -49,8 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 같은 브라우저 세션에서 중복 기록하지 않도록
         try { if (!sessionStorage.getItem("login-logged")) { sessionStorage.setItem("login-logged", "1"); logActivity("login", {}); } } catch { /* 무시 */ }
       }
-      setUser(session?.user ?? null);
-      loadProfile(session?.user ?? null);
+      // 탭 복귀·토큰 갱신 때도 이벤트가 오는데, 같은 사용자면 아무것도 바꾸지 않는다
+      const next = session?.user ?? null;
+      if ((uidRef.current ?? null) === (next?.id ?? null)) return;
+      uidRef.current = next?.id ?? null;
+      setUser(next);
+      loadProfile(next);
     });
     return () => sub.subscription.unsubscribe();
   }, [supabase, loadProfile]);
@@ -62,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase?.auth.signOut();
+    uidRef.current = null;
     setUser(null);
     setProfile(null);
     setIsAdmin(false);
