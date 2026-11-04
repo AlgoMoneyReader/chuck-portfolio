@@ -519,7 +519,7 @@ export default function StockPage({ params }: { params: { code: string } }) {
             )}
             {d?.nxt && d.session && d.session.key !== "regular" && (
               <p className="text-xs num">
-                <span className="text-purple-300 font-semibold">{d.session.key === "nxt-pre" || d.session.key === "auction-open" ? "NXT 프리마켓" : d.session.key === "nxt-after" ? "NXT 애프터마켓" : "NXT 종가"}</span>{" "}
+                <span className="text-purple-300 font-semibold">{d.session.key === "nxt-pre" || d.session.key === "auction-open" ? "NXT 프리마켓" : d.session.key === "nxt-after" ? "애프터마켓" : "애프터 종가"}</span>{" "}
                 <span key={d.nxt.price} className="text-white font-semibold rounded animate-tick">{won(d.nxt.price)}원</span>{" "}
                 <span className={tone(d.nxt.pct)}>{d.nxt.pct > 0 ? "+" : ""}{d.nxt.pct.toFixed(2)}%</span>
               </p>
