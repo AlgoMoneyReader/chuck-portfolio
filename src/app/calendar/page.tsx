@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { StockLink } from "@/components/StockModal";
 
 interface Ev {
   day: string; time: string; title: string; original: string;
@@ -452,7 +452,7 @@ function EventItem({ e }: { e: MarketEvent }) {
         <p className="text-sm font-semibold text-white mt-1">
           {name ? (
             <>
-              <Link href={`/stock/${e.code}`} className="relative z-10 hover:text-cyan-brand underline-offset-2 hover:underline">{name}</Link>
+              <StockLink  className="relative z-10 hover:text-cyan-brand underline-offset-2 hover:underline" code={e.code!}>{name}</StockLink>
               {e.title.slice(name.length)}
             </>
           ) : e.title}

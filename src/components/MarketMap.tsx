@@ -1,10 +1,9 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronLeft } from "react-icons/fi";
+import { useStockModal } from "./StockModal";
 
-const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
 
 interface Item { s: string; n: string; sec: string; ind: string; cap: number; pct: number; price: number }
 interface Data { index: string; source: string; asOf: string; total: number; items: Item[]; breadth: { up: number; down: number; flat: number }; error?: string }
@@ -119,9 +118,8 @@ export default function MarketMap({ fixedRegion }: { fixedRegion?: Region } = {}
   const [sector, setSector] = useState<string | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
-  const [usDetail, setUsDetail] = useState<Item | null>(null);
-  const router = useRouter();
-  const openDetail = (it: Item) => (region === "KR" ? router.push(`/stock/${it.s}`) : setUsDetail(it));
+  const stockModal = useStockModal();
+  const openDetail = (it: Item) => stockModal({ code: it.s, market: region === "KR" ? undefined : "US", name: it.n });
   const [ref, width] = useWidth();
 
   useEffect(() => {
@@ -225,12 +223,6 @@ export default function MarketMap({ fixedRegion }: { fixedRegion?: Region } = {}
           : !items.length ? <p className="absolute inset-0 flex flex-col items-center justify-center text-sm text-gray-500 px-4 text-center">히트맵 데이터를 불러올 수 없습니다{data?.error && <span className="text-[10px] text-gray-600 mt-1 break-all">{data.error}</span>}</p>
           : tiles}
       </div>
-
-      {usDetail && (
-        <Suspense fallback={null}>
-          <StockDetailDrawer code={usDetail.s} market="US" name={usDetail.n} onClose={() => setUsDetail(null)} />
-        </Suspense>
-      )}
 
       <div className="grid grid-cols-7 gap-1">
         {[-3, -2, -1, 0, 1, 2, 3].map(p => (

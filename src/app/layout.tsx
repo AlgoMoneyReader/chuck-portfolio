@@ -6,6 +6,7 @@ import BottomTabBar from "@/components/BottomTabBar";
 import MarketTicker from "@/components/MarketTicker";
 import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
+import { StockModalProvider } from "@/components/StockModal";
 import { ThemeProvider } from "@/lib/theme";
 import { THEME_INIT_SCRIPT } from "@/lib/themeScript";
 
@@ -41,12 +42,14 @@ export default function RootLayout({
         <PricePoller />
         <AuthProvider>
           <ThemeProvider>
+           <StockModalProvider>
             <StickyHeader>
               <Navbar />
               <MarketTicker />
             </StickyHeader>
             {children}
             <BottomTabBar />
+           </StockModalProvider>
           </ThemeProvider>
         </AuthProvider>
       </body>

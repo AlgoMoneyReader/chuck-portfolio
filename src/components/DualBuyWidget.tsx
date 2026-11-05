@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useStockModal } from "./StockModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ function fmtUk(n: number): string {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function DualBuyWidget() {
-  const router = useRouter();
+  const stockModal = useStockModal();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(false);
@@ -115,7 +115,7 @@ export default function DualBuyWidget() {
   }, [load]);
 
   function goAnalyze(stock: DualBuyItem) {
-    router.push(`/stock/${stock.code}`);
+    stockModal({ code: stock.code, name: stock.name });
   }
 
   const ts = data?.timestamp

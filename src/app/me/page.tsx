@@ -9,6 +9,7 @@ import { LoginButtons, NicknameForm } from "@/components/LoginPanel";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
 import { useTheme, type Theme } from "@/lib/theme";
+import { StockLink } from "@/components/StockModal";
 
 const MENU = [
   { href: "/portfolio", Icon: FiPieChart, title: "My 포트폴리오", desc: "보유 종목 손익 · 관심 종목", admin: false },
@@ -94,8 +95,8 @@ function MyActivity({ userId }: { userId: string }) {
           ) : (
             <div className="flex flex-wrap gap-2">
               {watch.map(w => (
-                <Link key={w.code} href={`/stock/${w.code}`}
-                  className="text-xs font-semibold text-cyan-brand bg-cyan-brand/10 px-2.5 py-1 rounded-lg">{w.name}</Link>
+                <StockLink key={w.code} 
+                  className="text-xs font-semibold text-cyan-brand bg-cyan-brand/10 px-2.5 py-1 rounded-lg" code={w.code}>{w.name}</StockLink>
               ))}
             </div>
           )}

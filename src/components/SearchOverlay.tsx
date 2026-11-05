@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
 import { FiSearch, FiX } from "react-icons/fi";
 import master from "@/data/stock_master.json";
 import { logActivity } from "@/lib/activity";
 import { US_POPULAR } from "@/data/usPopular";
+import { useStockModal } from "./StockModal";
 
 type S = { code: string; name: string; market: string; type?: string };
 const KR = (master as { stocks: S[] }).stocks.filter(s => s.type !== "spac");
@@ -20,7 +20,7 @@ function readRecent(): S[] {
 
 // 상단 돋보기: 종목명·코드로 찾아 종목 상세로 이동
 export default function SearchOverlay({ onClose }: { onClose: () => void }) {
-  const router = useRouter();
+  const stockModal = useStockModal();
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
   const [recent, setRecent] = useState<S[]>([]);
@@ -64,8 +64,8 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
     logActivity("search", { q: q.trim() || null, code: s.code, name: s.name, from: "상단 검색" });
     try { localStorage.setItem(RECENT_KEY, JSON.stringify([s, ...readRecent().filter(r => r.code !== s.code)].slice(0, 8))); } catch { /* 무시 */ }
     onClose();
-    // 국내는 종목 상세, 미국은 AI 레이더 분석(차트·시세) 화면
-    router.push(s.market === "US" ? `/analyze?ticker=${encodeURIComponent(s.code)}&name=${encodeURIComponent(s.name.replace(/ \(미국 티커 직접 입력\)$/, ""))}` : `/stock/${s.code}`);
+    // 국내·미국 모두 종목 팝업(현황·정보·뉴스·공시·레이더)
+    stockModal({ code: s.code, market: s.market === "US" ? "US" : undefined, name: s.name.replace(/ \(미국 티커 직접 입력\)$/, "") });
   };
 
   const list = q.trim() ? results : recent;

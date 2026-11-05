@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, lazy, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import { krSession } from "@/lib/krSession";
-const StockDetailDrawer = lazy(() => import("./StockDetailDrawer"));
+import { useStockModal } from "./StockModal";
 
 interface DrawerState { code: string; market: "KS" | "KQ" | "US"; name: string; }
 
@@ -428,7 +427,7 @@ const SECTOR_COLORS: Record<string, string> = {
 };
 
 function SectorHeatmap({ market }: { market: string }) {
-  const router = useRouter();
+  const stockModal = useStockModal();
   const [sectors, setSectors] = useState<SectorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalSector, setModalSector] = useState<SectorRow | null>(null);
@@ -592,10 +591,8 @@ function SectorHeatmap({ market }: { market: string }) {
                       <div
                         key={stock.code}
                         onClick={() => {
-                          router.push(
-                            `/analyze?ticker=${stock.code}.${stock.market}&name=${encodeURIComponent(stock.name)}`
-                          );
                           setModalSector(null);
+                          stockModal({ code: stock.code, market: stock.market as "KS" | "KQ", name: stock.name });
                         }}
                         className="flex items-center gap-2 px-5 py-2.5 cursor-pointer hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors group"
                       >
@@ -1288,13 +1285,11 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
   const market = krMarket ?? marketState;
   const [usIndex, setUsIndex]     = useState<USIndexType>("SP500");
   const [usContent, setUsContent] = useState<USContentTab>("cap");
-  const [drawer, setDrawer]   = useState<DrawerState | null>(null);
-  const navRouter = useRouter();
-  // 국내 종목은 종목 상세 페이지로, 미국 종목은 지금처럼 팝업
+  const stockModal = useStockModal();
+  // 종목을 누르면 팝업(현황·수급·정보·뉴스·공시·레이더) — 바깥을 누르면 목록으로 돌아온다
   const openStock = useCallback((d: DrawerState) => {
-    if (d.market === "US") setDrawer(d);
-    else navRouter.push(`/stock/${d.code.replace(/\.(KS|KQ)$/, "")}`);
-  }, [navRouter]);
+    stockModal({ code: d.market === "US" ? d.code : d.code.replace(/\.(KS|KQ)$/, ""), market: d.market, name: d.name });
+  }, [stockModal]);
 
   return (
     <section className="card">
@@ -1353,22 +1348,11 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
         </div>
 
         {usContent !== "sector" && (
-          <USStockList type={usContent} index={usIndex} onSelect={setDrawer} />
+          <USStockList type={usContent} index={usIndex} onSelect={openStock} />
         )}
         {usContent === "sector" && <USSectorHeatmap />}
       </>)}
 
-      {/* 종목 디테일 드로어 */}
-      {drawer && (
-        <Suspense fallback={null}>
-          <StockDetailDrawer
-            code={drawer.code}
-            market={drawer.market}
-            name={drawer.name}
-            onClose={() => setDrawer(null)}
-          />
-        </Suspense>
-      )}
     </section>
   );
 }
