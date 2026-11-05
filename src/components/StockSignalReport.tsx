@@ -109,7 +109,7 @@ function fmtUk(n: number): string {
   if (n === 0) return "0억";
   const abs = Math.abs(n);
   const sign = n > 0 ? "+" : "−";
-  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(1)}조`;
+  if (abs >= 10000) return `${sign}${(abs / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조`;
   return `${sign}${abs.toLocaleString("ko-KR")}억`;
 }
 

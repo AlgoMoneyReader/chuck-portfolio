@@ -49,7 +49,7 @@ const PLAIN: Record<string, string> = {
 const eok = (v: number | null | undefined) => {
   if (v == null || !isFinite(v)) return "—";
   const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "-" : "";
-  if (a >= 10000) return `${s}${(a / 10000).toFixed(2)}조`;
+  if (a >= 10000) return `${s}${(a / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}조`;
   if (a > 0 && a < 1) return `${s}${Math.round(a * 10000).toLocaleString("ko-KR")}만`;
   return `${s}${(a >= 100 ? Math.round(a) : Math.round(a * 10) / 10).toLocaleString("ko-KR")}억`;
 };

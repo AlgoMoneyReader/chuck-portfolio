@@ -276,15 +276,15 @@ function GainersLosersPanel({ market, onSelect }: { market: string; onSelect: (d
 // ─── 거래대금 TOP 20 ──────────────────────────────────────────────────────────
 
 function fmtTradeAmt(n: number): string {
-  if (n >= 1e12) return `${(n / 1e12).toFixed(1)}조`;
-  if (n >= 1e8)  return `${Math.round(n / 1e8)}억`;
+  if (n >= 1e12) return `${(n / 1e12).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조`;
+  if (n >= 1e8)  return `${Math.round(n / 1e8).toLocaleString("ko-KR")}억`;
   if (n >= 1e4)  return `${Math.round(n / 1e4)}만`;
   return n.toLocaleString("ko-KR");
 }
 
 // 08:00~20:00 (정규장 + NXT 프리 + KRX·NXT 애프터)
 const liveHours = () => krSession().key !== "closed";
-const fmtCap = (eok?: number) => (!eok ? "—" : eok >= 10000 ? `${(eok / 10000).toFixed(eok >= 1e5 ? 0 : 1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`);
+const fmtCap = (eok?: number) => (!eok ? "—" : eok >= 10000 ? `${(eok / 10000).toLocaleString("ko-KR", { minimumFractionDigits: eok >= 1e5 ? 0 : 1, maximumFractionDigits: eok >= 1e5 ? 0 : 1 })}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`);
 
 function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string; onSelect: (d: DrawerState) => void; kind?: "amount" | "cap" }) {
   const [rows, setRows]       = useState<StockRow[]>([]);

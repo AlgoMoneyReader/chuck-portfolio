@@ -45,7 +45,7 @@ interface MarketEvent {
 }
 
 // 억원 → '3.2조' / '1,234억'
-const eokTxt = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v.toLocaleString("ko-KR")}억`);
+const eokTxt = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조` : `${v.toLocaleString("ko-KR")}억`);
 const yoyTxt = (v: number | null | undefined) => (v == null ? "" : ` (YoY ${v > 0 ? "+" : ""}${v}%)`);
 const toneOf = (v: number | null | undefined) => (v == null ? "text-gray-300" : v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-300");
 

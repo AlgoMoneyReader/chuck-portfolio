@@ -7,6 +7,9 @@ import { extendedOne, dayMarketOne, inDaySession, type ExtFields } from "@/lib/u
 
 export const preferredRegion = "icn1";
 
+// 여러 사람이 같은 종목 팝업을 열어도 KIS 호출은 2초에 한 번
+const hot = new Map<string, { at: number; body: object }>();
+
 // 국내: KIS 현재가(실시간) — Yahoo 국내 시세는 지연·누락이 잦다
 async function krFromKis(code: string, market: string) {
   if (!process.env.KIS_APP_KEY) return null;
@@ -54,8 +57,10 @@ export async function GET(request: Request) {
   const fmt = (n: number) => isUS ? parseFloat(n.toFixed(2)) : Math.round(n);
 
   if (!isUS) {
+    const h = hot.get(code);
+    if (h && Date.now() - h.at < 2_000) return NextResponse.json(h.body, { headers: { "Cache-Control": "no-store" } });
     const k = await krFromKis(code, market);
-    if (k) return NextResponse.json(k, { headers: { "Cache-Control": "no-store" } });
+    if (k) { hot.set(code, { at: Date.now(), body: k }); return NextResponse.json(k, { headers: { "Cache-Control": "no-store" } }); }
   }
 
   try {

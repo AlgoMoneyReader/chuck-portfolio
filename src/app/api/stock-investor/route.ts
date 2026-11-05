@@ -113,7 +113,7 @@ function gradeComment(grade: string, foreign: number, institution: number): stri
 // ─── 억원 포맷 ───────────────────────────────────────────────────────────────
 function fmtUk(n: number): string {
   const abs = Math.abs(n);
-  if (abs >= 10000) return `${(n / 10000).toFixed(1)}조`;
+  if (abs >= 10000) return `${(n / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조`;
   return `${n.toLocaleString("ko-KR")}억`;
 }
 

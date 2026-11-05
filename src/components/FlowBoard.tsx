@@ -27,7 +27,7 @@ const KEYS = ["foreign", "institution", "individual"] as const;
 
 const fmt = (v: number) => {
   const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "-" : "";
-  if (a >= 10000) return `${s}${(a / 10000).toFixed(2)}조`;
+  if (a >= 10000) return `${s}${(a / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}조`;
   if (a > 0 && a < 1) return `${s}${Math.round(a * 10000).toLocaleString("ko-KR")}만`;
   return `${s}${(a >= 100 ? Math.round(a) : Math.round(a * 10) / 10).toLocaleString("ko-KR")}억`;
 };
@@ -66,7 +66,7 @@ interface SE {
   stocks: { code: string; name: string; pct: number; latest: { period: string; prelim?: boolean; sales: number | null; op: number | null; salesYoY: number | null; opYoY: number | null } | null }[];
 }
 // 실적 금액은 부호 없이 (적자만 -)
-const won = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v.toLocaleString("ko-KR")}억`);
+const won = (v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조` : `${v.toLocaleString("ko-KR")}억`);
 const pctTxt = (v: number | null | undefined) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
 
 // 업종을 누르면: 히트맵과 같은 업종 분류의 시총 상위 종목 최근 분기 실적(DART, 잠정 포함)
@@ -317,7 +317,7 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
                   <CartesianGrid stroke="#1E2A4A" strokeDasharray="2 4" vertical={false} />
                   <XAxis dataKey="d" tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fill: "#6B7280", fontSize: 10 }} tickLine={false} axisLine={false} width={44}
-                    tickFormatter={(v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toFixed(1)}조` : `${v}`)} />
+                    tickFormatter={(v: number) => (Math.abs(v) >= 10000 ? `${(v / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조` : `${v}`)} />
                   <ReferenceLine y={0} stroke="#374151" />
                   <Tooltip {...tip} />
                   {KEYS.map(k => <Line key={k} type="monotone" dataKey={k} stroke={C[k]} strokeWidth={2.2} dot={{ r: 2.5, fill: C[k], strokeWidth: 0 }} activeDot={{ r: 4 }} isAnimationActive={false} />)}
