@@ -58,6 +58,8 @@ export default function AdminConsole() {
   useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
 
   const nick = useMemo(() => Object.fromEntries(profiles.map(p => [p.id, p.nickname])), [profiles]);
+  // 카카오 로그인은 했지만 닉네임을 아직 정하지 않은(가입 미완료) 사용자 — 활동 기록엔 있지만 회원 목록엔 없다
+  const nameOf = (id: string) => nick[id] ?? `가입 미완료 · ${id.slice(0, 4)}`;
   const rows = useMemo(() => profiles.map(p => {
     const mine = ai.filter(x => x.user_id === p.id), my = acts.filter(x => x.user_id === p.id);
     return {
@@ -177,7 +179,7 @@ export default function AdminConsole() {
       {tab === "feed" && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1 text-[11px]">
-            {sel && <button onClick={() => setSel(null)} className="px-2 py-1 rounded-lg bg-gold/15 text-gold">{nick[sel] ?? "회원"} ✕</button>}
+            {sel && <button onClick={() => setSel(null)} className="px-2 py-1 rounded-lg bg-gold/15 text-gold">{nameOf(sel)} ✕</button>}
             {["all", ...Object.keys(KIND)].map(k => (
               <button key={k} onClick={() => setKind(k)} className={`px-2 py-1 rounded-lg ${kind === k ? "bg-cyan-brand/20 text-cyan-brand" : "text-gray-500"}`}>{k === "all" ? "전체" : KIND[k]}</button>
             ))}
@@ -194,7 +196,7 @@ export default function AdminConsole() {
             {feed.length === 0 ? <li className="py-4 text-gray-500 text-center">기록이 없습니다</li> : feed.map(a => (
               <li key={a.id} className="py-2 flex gap-2 items-baseline">
                 <span className="text-gray-500 w-24 shrink-0 num">{t(a.created_at)}</span>
-                <button onClick={() => setSel(a.user_id)} className="text-white font-semibold shrink-0 hover:text-cyan-brand">{nick[a.user_id] ?? "?"}</button>
+                <button onClick={() => setSel(a.user_id)} className={`font-semibold shrink-0 hover:text-cyan-brand ${nick[a.user_id] ? "text-white" : "text-gray-500 italic"}`} title={nick[a.user_id] ? undefined : "카카오 로그인 후 닉네임을 정하지 않아 프로필이 없는 사용자"}>{nameOf(a.user_id)}</button>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy-sub text-gray-400 shrink-0">{KIND[a.kind] ?? a.kind}</span>
                 <span className="text-gray-300 truncate">
                   {typeof a.detail?.code === "string" ? <Link href={`/stock/${a.detail.code}`} className="hover:text-cyan-brand">{actText(a)}</Link> : actText(a)}
