@@ -214,122 +214,144 @@ async function kisCapRank(isc: string, suffix: string): Promise<TopGainerRow[] |
   } catch { return null; }
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const market = searchParams.get("market") ?? "KOSPI";
-  // 정규장 밖 시세(NXT·애프터)를 붙일 목록: 보고 있는 목록만 붙여 KIS 호출을 줄인다
-  const nxList = (searchParams.get("nx") ?? "all") as "gainers" | "losers" | "amount" | "cap" | "all";
-  const cacheKey = `${market}:${nxList}`;
+// ── 실시간 시세 덧입히기: 순위(누가 몇 위인지)는 20초마다, 가격·등락·거래량·거래대금은 요청마다(종목별 3초 보관) ──
+// 네이버 실시간 폴링 API 는 여러 종목을 한 번에 준다 (페이지가 쓰는 것과 같은 출처)
+interface Live { price: number; change: number; changePct: number; volume: number; tradeAmount: number }
+const liveCache = new Map<string, { at: number; v: Live }>();
+async function naverRealtime(codes: string[]): Promise<Record<string, Live>> {
+  const now = Date.now(), out: Record<string, Live> = {};
+  const need = codes.filter(c => { const h = liveCache.get(c); if (h && now - h.at < 3_000) { out[c] = h.v; return false; } return true; });
+  const chunks: string[][] = [];
+  for (let i = 0; i < need.length; i += 50) chunks.push(need.slice(i, i + 50));
+  await Promise.all(chunks.map(async c => {
+    try {
+      const r = await fetch(`https://polling.finance.naver.com/api/realtime/domestic/stock/${c.join(",")}`, {
+        headers: { "User-Agent": "Mozilla/5.0", Referer: "https://m.stock.naver.com/" }, signal: AbortSignal.timeout(4000), cache: "no-store",
+      });
+      if (!r.ok) return;
+      const j = await r.json() as { datas?: Record<string, unknown>[] };
+      for (const d of j.datas ?? []) {
+        const code = String(d.itemCode ?? "");
+        const price = nNum(d.closePriceRaw ?? d.closePrice), pct = nNum(d.fluctuationsRatioRaw ?? d.fluctuationsRatio);
+        if (!code || !price) continue;
+        const ch = Math.abs(nNum(d.compareToPreviousClosePriceRaw ?? d.compareToPreviousClosePrice));
+        // 거래대금: Raw 는 원, 표시값은 '백만' 단위
+        const tvRaw = nNum(d.accumulatedTradingValueRaw), tvTxt = String(d.accumulatedTradingValue ?? "");
+        const tradeAmount = tvRaw > 1e7 ? tvRaw : nNum(tvTxt) * (tvTxt.includes("억") ? 1e8 : 1e6);
+        const v: Live = { price, change: pct < 0 ? -ch : ch, changePct: pct, volume: nNum(d.accumulatedTradingVolumeRaw ?? d.accumulatedTradingVolume), tradeAmount };
+        liveCache.set(code, { at: now, v }); out[code] = v;
+      }
+    } catch { /* 이번엔 순위 값 그대로 */ }
+  }));
+  return out;
+}
+const withLive = (live: Record<string, Live>) => (r: TopGainerRow): TopGainerRow => {
+  const l = live[r.code];
+  if (!l) return r;
+  return { ...r, ...l, volume: l.volume || r.volume, tradeAmount: l.tradeAmount || r.tradeAmount, capEok: r.capEok && r.price ? Math.round(r.capEok * (l.price / r.price)) : r.capEok };
+};
 
-  // 서버사이드 캐시 HIT
-  const cached = serverCache[cacheKey];
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-    return NextResponse.json(cached.data, {
-      headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "HIT" },
-    });
-  }
-
-  try {
-    const codes = market === "KOSDAQ" ? KOSDAQ_CODES : KOSPI_CODES;
-    const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
-    const isc = market === "KOSDAQ" ? "1001" : "0001";
-
-    const [kAmount, kUp0, kDown0, kCap0, nUp, nDown, nCap] = await Promise.all([
-      kisAmountRank(isc, mktSuffix),
-      kisFluctuation(isc, mktSuffix, "0000"),
-      kisFluctuation(isc, mktSuffix, "0001"),
-      kisCapRank(isc, mktSuffix),
-      naverRank("up", market, TOP_N, mktSuffix),
-      naverRank("down", market, TOP_N, mktSuffix),
-      naverRank("marketValue", market, 400, mktSuffix),
-    ]);
-    // 상승은 0보다 큰 종목만, 하락은 0보다 작은 종목만 (시장 전체 기준)
-    const upOnly = (rows: TopGainerRow[] | null) => (rows ? rows.filter(r => r.changePct > 0).sort((a, b) => b.changePct - a.changePct) : null);
-    const downOnly = (rows: TopGainerRow[] | null) => (rows ? rows.filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct) : null);
-    const nU = upOnly(nUp), nD = downOnly(nDown);
-    const kUp = nU?.length ? reRank(nU) : kUp0;
-    const kDown = nD?.length ? reRank(nD) : kDown0;
-    const kCap = nCap?.length ? reRank(nCap) : kCap0;
-    // 거래대금: KIS 시장 전체 30위 + 시총 상위 400 종목의 거래대금으로 100위까지 채움
-    const amountPool = new Map<string, TopGainerRow>();
-    for (const r of [...(kAmount ?? []), ...(nCap ?? [])]) if (!amountPool.has(r.code)) amountPool.set(r.code, r);
-    const kAmountAll = amountPool.size ? reRank(Array.from(amountPool.values()).sort((a, b) => b.tradeAmount - a.tradeAmount)) : null;
-
+// 순위 목록(시장 전체 순위 + 대체용 고정 목록) — 20초 보관
+const rankCache: Record<string, { at: number; v: Awaited<ReturnType<typeof loadRanks>> }> = {};
+async function loadRanks(market: string) {
+  const codes = market === "KOSDAQ" ? KOSDAQ_CODES : KOSPI_CODES;
+  const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
+  const isc = market === "KOSDAQ" ? "1001" : "0001";
+  const [kAmount, kUp0, kDown0, kCap0, nUp, nDown, nCap] = await Promise.all([
+    kisAmountRank(isc, mktSuffix),
+    kisFluctuation(isc, mktSuffix, "0000"),
+    kisFluctuation(isc, mktSuffix, "0001"),
+    kisCapRank(isc, mktSuffix),
+    naverRank("up", market, TOP_N, mktSuffix),
+    naverRank("down", market, TOP_N, mktSuffix),
+    naverRank("marketValue", market, 400, mktSuffix),
+  ]);
+  // 시장 전체 순위를 하나도 못 받았을 때만 고정 목록을 하나씩 조회 (느림)
+  const valid: TopGainerRow[] = [];
+  if (!(nUp?.length || kUp0?.length) || !(nCap?.length || kCap0?.length)) {
     const dataMap = await fetchAllCodes(codes);
-
-    const valid: Omit<TopGainerRow, "rank">[] = [];
     for (const code of codes) {
       const d = dataMap.get(code);
       if (!d) continue;
-
-      valid.push({
-        symbol:      code + mktSuffix,
-        code,
-        name:        KR_NAMES[code] ?? code,
-        price:       Math.round(d.now),
-        change:      Math.round(d.diff),
-        changePct:   parseFloat(d.rate.toFixed(2)),
-        volume:      d.quant,
-        tradeAmount: Math.round(d.now) * d.quant, // price × 거래량 (원)
-      });
+      valid.push({ rank: 0, symbol: code + mktSuffix, code, name: KR_NAMES[code] ?? code, price: Math.round(d.now), change: Math.round(d.diff),
+        changePct: parseFloat(d.rate.toFixed(2)), volume: d.quant, tradeAmount: Math.round(d.now) * d.quant });
     }
+  }
+  return { kAmount, kUp0, kDown0, kCap0, nUp, nDown, nCap, valid };
+}
 
-    const topGainers: TopGainerRow[] = [...valid].filter(v => v.changePct > 0)
-      .sort((a, b) => b.changePct - a.changePct)
-      .slice(0, 30)
-      .map((r, i) => ({ rank: i + 1, ...r }));
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const market = searchParams.get("market") ?? "KOSPI";
+  // 정규장 밖 시세(NXT·애프터)를 붙일 목록: 보고 있는 목록만
+  const nxList = (searchParams.get("nx") ?? "all") as "gainers" | "losers" | "amount" | "cap" | "all";
+  const cacheKey = `${market}:${nxList}`;
 
-    const topLosers: TopGainerRow[] = [...valid].filter(v => v.changePct < 0)
-      .sort((a, b) => a.changePct - b.changePct)
-      .slice(0, 30)
-      .map((r, i) => ({ rank: i + 1, ...r }));
+  const cached = serverCache[cacheKey];
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data, { headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "HIT" } });
+  }
 
-    const topByAmount: TopGainerRow[] = [...valid]
-      .sort((a, b) => b.tradeAmount - a.tradeAmount)
-      .slice(0, 30)
-      .map((r, i) => ({ rank: i + 1, ...r }));
+  try {
+    const rk = rankCache[market] && Date.now() - rankCache[market].at < 20_000 ? rankCache[market].v : await loadRanks(market);
+    rankCache[market] = rankCache[market] && Date.now() - rankCache[market].at < 20_000 ? rankCache[market] : { at: Date.now(), v: rk };
+    const { kAmount, kUp0, kDown0, kCap0, nUp, nDown, nCap, valid } = rk;
+
+    const upOnly = (rows: TopGainerRow[]) => rows.filter(r => r.changePct > 0).sort((a, b) => b.changePct - a.changePct);
+    const downOnly = (rows: TopGainerRow[]) => rows.filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct);
+    const byAmount = (rows: TopGainerRow[]) => [...rows].sort((a, b) => b.tradeAmount - a.tradeAmount);
+    const amountPool = new Map<string, TopGainerRow>();
+    for (const r of [...(kAmount ?? []), ...(nCap ?? [])]) if (!amountPool.has(r.code)) amountPool.set(r.code, r);
+
+    let gainers: TopGainerRow[] = (nUp?.length ? nUp : kUp0 ?? upOnly(valid)).slice(0, TOP_N);
+    let losers: TopGainerRow[] = (nDown?.length ? nDown : kDown0 ?? downOnly(valid)).slice(0, TOP_N);
+    let amount: TopGainerRow[] = (amountPool.size ? byAmount(Array.from(amountPool.values())) : byAmount(valid)).slice(0, TOP_N);
+    let cap: TopGainerRow[] = (nCap?.length ? nCap : kCap0 ?? []).slice(0, TOP_N);
+
+    // 실시간 시세 덧입히기 (보고 있는 목록, 'all' 이면 네 목록 모두)
+    const want = nxList === "all" ? [...gainers, ...losers, ...amount, ...cap] : { gainers, losers, amount, cap }[nxList] ?? gainers;
+    const live = await naverRealtime(Array.from(new Set(want.map(r => r.code))));
+    const L = withLive(live);
+    gainers = reRank(upOnly(gainers.map(L)));
+    losers = reRank(downOnly(losers.map(L)));
+    amount = reRank(byAmount(amount.map(L)));
+    cap = reRank(cap.map(L));
 
     // ── 정규장 밖(프리·애프터·장 종료): 넥스트레이드 시세를 붙인다 ──
     const sess = krSession();
-    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmountAll ?? topByAmount, cap = kCap ?? [];
     let basis = sess.key === "regular" || sess.key === "auction-close" ? "KRX 정규장" : "KRX 직전 정규장 종가 기준";
-    const allZero = valid.length > 0 && valid.every(v => v.changePct === 0);
+    const base = cap.length ? cap : valid;
+    const allZero = base.length > 0 && base.every(v => v.changePct === 0);
     if (sess.key !== "regular") {
-      // 보고 있는 목록 전체(최대 100)에 장외 시세를 붙인다 — 'all'(여러 목록을 한꺼번에)일 때만 앞부분으로 제한
       const pickFor = { gainers, losers, amount, cap, all: [...gainers.slice(0, 20), ...losers.slice(0, 20), ...amount.slice(0, 20), ...cap.slice(0, 20)] }[nxList] ?? gainers;
-      const codes = Array.from(new Set([...pickFor, ...(allZero && !kUp && (nxList === "gainers" || nxList === "losers" || nxList === "all") ? valid : [])].map(r => r.code)));
+      const preRows = allZero && (nxList === "gainers" || nxList === "losers" || nxList === "all") ? base : [];
+      const codes = Array.from(new Set([...pickFor, ...preRows].map(r => r.code)));
       const nx = await nxtQuotes(codes);
       const withNx = <T extends Omit<TopGainerRow, "rank">>(r: T): T => {
         const q = nx[r.code];
         return q ? { ...r, nxtPrice: q.price, nxtPct: parseFloat(q.pct.toFixed(2)) } : r;
       };
       gainers = gainers.map(withNx); losers = losers.map(withNx); amount = amount.map(withNx); cap = cap.map(withNx);
-      // 개장 전엔 KRX 순위가 0% 로 초기화됨 → 주요 종목을 NXT 등락률로 순위
-      if (allZero && !kUp) {
-        const nxRows = valid.map(withNx).filter(r => r.nxtPct != null);
+      // 개장 전엔 KRX 등락률이 0% → 주요 종목을 NXT 등락률로 순위
+      if (allZero) {
+        const nxRows = base.map(withNx).filter(r => r.nxtPct != null);
         if (nxRows.length) {
-          gainers = [...nxRows].filter(r => (r.nxtPct ?? 0) > 0).sort((a, b) => (b.nxtPct ?? 0) - (a.nxtPct ?? 0)).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
-          losers = [...nxRows].filter(r => (r.nxtPct ?? 0) < 0).sort((a, b) => (a.nxtPct ?? 0) - (b.nxtPct ?? 0)).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
-          basis = "NXT 시세 기준 (주요 종목, KRX 개장 전)";
+          gainers = reRank([...nxRows].filter(r => (r.nxtPct ?? 0) > 0).sort((a, b) => (b.nxtPct ?? 0) - (a.nxtPct ?? 0)));
+          losers = reRank([...nxRows].filter(r => (r.nxtPct ?? 0) < 0).sort((a, b) => (a.nxtPct ?? 0) - (b.nxtPct ?? 0)));
+          basis = "NXT 시세 기준 (시총 상위 종목, KRX 개장 전)";
         }
       }
     }
 
     const payload = {
-      market,
-      session: sess, basis,
-      topGainers: gainers,
-      topLosers: losers,
-      topByAmount: amount,
-      topByCap: cap,
-      source: { amount: kAmountAll ? "시장 전체" : "주요 종목 목록", gainers: nU?.length ? "네이버 시장 전체" : kUp0 ? "KIS 시장 전체" : "주요 종목 목록", losers: nD?.length ? "네이버 시장 전체" : kDown0 ? "KIS 시장 전체" : "주요 종목 목록", cap: nCap?.length ? "네이버" : "KIS" },
+      market, session: sess, basis,
+      topGainers: gainers, topLosers: losers, topByAmount: amount, topByCap: cap,
+      live: Object.keys(live).length,
+      source: { gainers: nUp?.length ? "네이버 시장 전체" : kUp0 ? "KIS 시장 전체" : "주요 종목 목록", losers: nDown?.length ? "네이버 시장 전체" : kDown0 ? "KIS 시장 전체" : "주요 종목 목록", cap: nCap?.length ? "네이버" : "KIS", amount: amountPool.size ? "시장 전체" : "주요 종목 목록" },
       timestamp: new Date().toISOString(),
     };
     serverCache[cacheKey] = { data: payload, ts: Date.now() };
-
-    return NextResponse.json(payload, {
-      headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "MISS" },
-    });
+    return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-cache", "X-Cache": "MISS" } });
   } catch {
     return NextResponse.json({ error: "데이터를 불러올 수 없습니다" }, { status: 500 });
   }
