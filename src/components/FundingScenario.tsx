@@ -390,7 +390,7 @@ export default function FundingScenario({ holdings }: Props) {
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-[11px] text-gray-600">
+          <p className="text-xs text-gray-600">
             {holdings.length}개 종목의 ADX · MFI · CMF · VWAP 등 기술 지표 수집 중
           </p>
         </div>
@@ -405,7 +405,7 @@ export default function FundingScenario({ holdings }: Props) {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white">{payment.label}</span>
                 <span className="text-xs text-gray-400">{payment.dueDate.replace(/-/g, ".")}</span>
-                <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold
+                <span className={`text-sm px-1.5 py-0.5 rounded font-bold
                   ${days <= 60 ? "bg-signal-red/20 text-signal-red" :
                     days <= 180 ? "bg-gold/20 text-gold" :
                     "bg-navy-border/40 text-gray-400"}`}>
@@ -421,9 +421,9 @@ export default function FundingScenario({ holdings }: Props) {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-gray-500">포트폴리오</p>
+              <p className="text-xs text-gray-500">포트폴리오</p>
               <p className="text-sm font-bold text-white num">{fmtW(totalPortfolioKRW)}</p>
-              <p className="text-[10px] text-gray-500 num">총 가용 {fmtW(totalPortfolioKRW + cashWon)}</p>
+              <p className="text-xs text-gray-500 num">총 가용 {fmtW(totalPortfolioKRW + cashWon)}</p>
             </div>
           </div>
 
@@ -436,7 +436,7 @@ export default function FundingScenario({ holdings }: Props) {
 
           {/* 비교 요약표 */}
           <div className="overflow-x-auto rounded-xl border border-navy-border/40">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-navy-border bg-navy-sub/30 text-gray-500">
                   <th className="text-left px-4 py-2.5">안</th>
@@ -491,7 +491,7 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
             <span className="text-base font-black" style={{ color: sc.accent }}>안 {sc.id}</span>
             <span className="text-sm font-bold text-white">{sc.name}</span>
           </div>
-          <p className="text-[11px] text-gray-500">{sc.tagline}</p>
+          <p className="text-xs text-gray-500">{sc.tagline}</p>
         </div>
         <span className={`text-xs font-bold shrink-0 ${sc.sufficient ? "text-signal-green" : "text-signal-red"}`}>
           {sc.sufficient ? "✅ 납부 가능" : "⚠️ 부족"}
@@ -500,7 +500,7 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
 
       {/* 진행바 */}
       <div>
-        <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
           <span>조달 <span className="text-white num font-semibold">{fmtW(sc.totalRaised)}</span></span>
           <span className="num">{fillPct.toFixed(0)}%</span>
         </div>
@@ -509,7 +509,7 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
             style={{ width: `${fillPct}%` }} />
         </div>
         {!sc.sufficient && (
-          <p className="text-[10px] text-signal-red mt-1 num">부족 {fmtW(sc.shortfall)}</p>
+          <p className="text-xs text-signal-red mt-1 num">부족 {fmtW(sc.shortfall)}</p>
         )}
       </div>
 
@@ -521,15 +521,15 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
           { label: "잔여 포트",  value: fmtW(sc.remainingPortfolio), cls: "text-gray-300"   },
         ].map(({ label, value, cls }) => (
           <div key={label} className="bg-navy-sub/60 rounded-lg py-2">
-            <p className="text-[9px] text-gray-500 mb-0.5">{label}</p>
-            <p className={`text-[11px] font-bold num ${cls}`}>{value}</p>
+            <p className="text-[11px] text-gray-500 mb-0.5">{label}</p>
+            <p className={`text-sm font-bold num ${cls}`}>{value}</p>
           </div>
         ))}
       </div>
 
       {/* ── 매도 추천 종목 ─────────────────────────────────────────────────── */}
       <div>
-        <p className="text-[10px] text-gray-500 font-semibold mb-1.5 uppercase tracking-wide">
+        <p className="text-xs text-gray-500 font-semibold mb-1.5 uppercase tracking-wide">
           매도 추천 ({sc.sellItems.length}종목)
         </p>
         <div className="space-y-1.5">
@@ -542,23 +542,23 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
                 {/* 1행: 종목명 + 등급 + P&L */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-white text-[12px] font-semibold truncate max-w-[100px]">
+                    <span className="text-white text-sm font-semibold truncate max-w-[100px]">
                       {item.name}
                     </span>
                     {item.currency === "USD" && (
-                      <span className="text-[9px] px-1 py-0.5 bg-gold/20 text-gold rounded shrink-0">$</span>
+                      <span className="text-[11px] px-1 py-0.5 bg-gold/20 text-gold rounded shrink-0">$</span>
                     )}
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${grCls}`}>
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold shrink-0 ${grCls}`}>
                       {item.techGrade ?? "?"}
                     </span>
-                    <span className={`text-[10px] shrink-0 ${plPos ? "text-signal-green" : "text-signal-red"}`}>
+                    <span className={`text-xs shrink-0 ${plPos ? "text-signal-green" : "text-signal-red"}`}>
                       {plPos ? "+" : ""}{item.profitLossPct.toFixed(1)}%
                     </span>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="text-[12px] text-gray-200 num font-semibold">{fmtW(item.sellKRW)}</span>
+                    <span className="text-sm text-gray-200 num font-semibold">{fmtW(item.sellKRW)}</span>
                     {item.isPartial && (
-                      <span className="text-gray-500 text-[10px] ml-1">
+                      <span className="text-gray-500 text-xs ml-1">
                         ({(item.fraction * 100).toFixed(0)}%)
                       </span>
                     )}
@@ -569,12 +569,12 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
                   <div className="flex gap-1 flex-wrap">
                     {item.sellReasons.map(r => (
                       <span key={r}
-                        className="text-[9px] px-1.5 py-0.5 bg-signal-red/10 text-signal-red/80 rounded">
+                        className="text-[11px] px-1.5 py-0.5 bg-signal-red/10 text-signal-red/80 rounded">
                         {r}
                       </span>
                     ))}
                     {item.techScore !== null && (
-                      <span className="text-[9px] px-1.5 py-0.5 bg-navy-border/50 text-gray-500 rounded num">
+                      <span className="text-[11px] px-1.5 py-0.5 bg-navy-border/50 text-gray-500 rounded num">
                         신호 {item.techScore}점
                       </span>
                     )}
@@ -591,9 +591,9 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
         <div>
           <button
             onClick={() => setShowHold(v => !v)}
-            className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-200 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-200 transition-colors"
           >
-            <span className="text-[9px]">{showHold ? "▲" : "▶"}</span>
+            <span className="text-[11px]">{showHold ? "▲" : "▶"}</span>
             보유 유지 추천 {sc.holdItems.length}종목 {showHold ? "접기" : "보기"}
           </button>
           {showHold && (
@@ -604,16 +604,16 @@ function ScenarioCard({ sc, target }: { sc: ScenarioResult; target: number }) {
                   <div key={item.ticker}
                     className="flex items-center justify-between bg-navy-sub/30 rounded-lg px-3 py-1.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-white font-medium">{item.name}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${grCls}`}>
+                      <span className="text-sm text-white font-medium">{item.name}</span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${grCls}`}>
                         {item.techGrade ?? "?"}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {item.techScore !== null && (
-                        <span className="text-[9px] text-gray-500 num">{item.techScore}점</span>
+                        <span className="text-[11px] text-gray-500 num">{item.techScore}점</span>
                       )}
-                      <span className="text-[9px] text-signal-green/70">{item.reason}</span>
+                      <span className="text-[11px] text-signal-green/70">{item.reason}</span>
                     </div>
                   </div>
                 );
