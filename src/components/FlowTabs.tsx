@@ -33,7 +33,7 @@ export default function FlowTabs() {
         </>
       ) : m === "us" ? (
         <>
-          <Pills value={ui} onChange={setUi} items={US_INDEX_TABS.map(t => [t.id, t.label] as [USIndexType, string])} />
+          <Pills fill value={ui} onChange={setUi} items={US_INDEX_TABS.map(t => [t.id, t.label] as [USIndexType, string])} />
           <MarketSummary key={`us-${ui}`} region="US" usIndex={ui} />
         </>
       ) : (

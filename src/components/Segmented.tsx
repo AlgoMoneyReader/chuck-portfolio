@@ -29,12 +29,13 @@ export function RegionTabs<T extends string>({ value, onChange, items }: { value
 }
 
 // 작은 알약 토글
-export function Pills<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: [T, string][] }) {
+// fill: 휴대폰에서도 한 줄에 다 들어가게 칸을 똑같이 나누고 글자·여백을 줄인다 (항목이 많을 때)
+export function Pills<T extends string>({ value, onChange, items, fill = false }: { value: T; onChange: (v: T) => void; items: [T, string][]; fill?: boolean }) {
   return (
-    <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+    <div className={`flex ${fill ? "gap-1" : "gap-1.5 overflow-x-auto scrollbar-none"}`}>
       {items.map(([k, l]) => (
         <button key={k} onClick={() => onChange(k)}
-          className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold ${value === k ? "bg-white text-navy" : "bg-navy-card text-gray-400 border border-navy-border"}`}>{l}</button>
+          className={`${fill ? "flex-1 min-w-0 px-1 py-1.5 text-xs sm:text-sm sm:flex-none sm:px-4 whitespace-nowrap" : "shrink-0 px-4 py-1.5 text-sm"} rounded-full font-semibold ${value === k ? "bg-white text-navy" : "bg-navy-card text-gray-400 border border-navy-border"}`}>{l}</button>
       ))}
     </div>
   );
