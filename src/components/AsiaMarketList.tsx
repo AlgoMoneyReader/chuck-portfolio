@@ -98,7 +98,7 @@ export default function AsiaMarketList() {
           <p className="text-sm text-gray-500 py-6 text-center">{t === "gainers" ? "오르는 종목이 없습니다" : t === "losers" ? "내리는 종목이 없습니다" : "데이터를 불러올 수 없습니다"}</p>
         ) : (
           <div className="overflow-x-auto scrollbar-none md:overflow-visible">
-          <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[116px_100px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+          <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_100px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
             <span className="sticky left-0 z-10 bg-navy-card md:static md:bg-transparent flex gap-2"><span className="w-5 text-center">#</span>종목</span>
             <span className="text-right">현재가</span>
             <span className="text-right">등락률</span>
