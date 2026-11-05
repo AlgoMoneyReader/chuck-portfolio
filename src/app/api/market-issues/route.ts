@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { isOfftopic } from "@/lib/newsFilter";
 import { gemini, CHEAP } from "@/lib/gemini";
 
@@ -18,7 +19,7 @@ interface IssueCache { issues: MarketIssue[]; fetchedAt: string; sourceCount: nu
 // ── 모듈 캐시 (15분) ──────────────────────────────────────────────────────────
 let issueCache: IssueCache | null = null;
 let issueCacheTime = 0;
-const CACHE_TTL = 15 * 60 * 1000;
+const CACHE_TTL = 30 * 60 * 1000;
 
 // ── 증권·경제 전용 RSS 피드 ────────────────────────────────────────────────────
 const RSS_FEEDS = [
@@ -170,7 +171,9 @@ ${finItems.map((h, i) => `${i + 1}. ${h.title}`).join("\n")}
 direction: 호재→"up", 악재→"down", 혼재→"mixed"
 sectors 최대 3개, relatedStocks 최대 4개`;
 
-    const raw = await callGemini(prompt);
+    // 30분 단위로 서버 전체가 한 번만 AI 를 부른다 (새로고침·여러 사용자·여러 서버 인스턴스가 같은 결과 공유)
+    const bucket = Math.floor(Date.now() / (30 * 60_000));
+    const raw = await unstable_cache(() => callGemini(prompt), ["market-issues-ai-v2", String(bucket)], { revalidate: 1800 })();
     const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
