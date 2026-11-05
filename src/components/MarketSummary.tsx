@@ -26,8 +26,8 @@ interface StockRow {
 // 표: PC 는 열 간격이 고른 그리드, 휴대폰은 종목 열·머리글을 고정하고 나머지 열을 손가락으로 좌우로 밀어 본다
 // (Tailwind 가 읽을 수 있게 클래스는 문자열 그대로 둔다)
 const krGrid = (cap?: boolean) => (cap
-  ? "grid items-center gap-x-3 w-max min-w-full grid-cols-[116px_100px_64px_80px_76px_84px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(6,minmax(0,1fr))]"
-  : "grid items-center gap-x-3 w-max min-w-full grid-cols-[116px_100px_64px_76px_84px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))]");
+  ? "grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_100px_64px_80px_76px_84px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(6,minmax(0,1fr))]"
+  : "grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_100px_64px_76px_84px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))]");
 // 고정 열(순위+종목명): 밀어도 남아 있도록 배경을 깔아 둔다
 export const STICKY = "sticky left-0 z-10 bg-navy-card md:static md:bg-transparent";
 /** 표 바깥 틀: 휴대폰에서 가로 스크롤 */
@@ -1037,7 +1037,7 @@ function USStockList({
         <p className="text-xs text-gray-500 py-6 text-center">데이터를 불러올 수 없습니다</p>
       ) : (
         <ScrollTable>
-        <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[116px_104px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+        <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_104px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
           <span className={`${STICKY} flex gap-2`}><span className="w-5 text-center">#</span>종목</span>
           <span className="text-right">현재가</span>
           <span className="text-right">등락률</span>
