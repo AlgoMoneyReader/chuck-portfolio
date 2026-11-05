@@ -48,7 +48,7 @@ function Card({ title, note, children }: { title: string; note?: React.ReactNode
 
 function Legend() {
   return (
-    <div className="flex gap-3 text-[11px] text-gray-400">
+    <div className="flex gap-3 text-xs text-gray-400">
       {KEYS.map(k => <span key={k} className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: C[k] }} />{LABEL[k]}</span>)}
     </div>
   );
@@ -84,13 +84,13 @@ function SectorEarnings({ sector, market }: { sector: string; market: Mk }) {
     <div className="space-y-2.5">
       {d.total && d.period && (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <span className="text-xs font-semibold text-white">{d.period} 업종 합계 <span className="text-gray-500 font-normal">(상위 {d.count}종목)</span></span>
-          <span className="text-[11px] text-gray-400 num">매출 {won(d.total.sales)} <span className={tone(d.total.salesYoY ?? 0)}>{pctTxt(d.total.salesYoY)}</span></span>
-          <span className="text-[11px] text-gray-400 num">영업이익 {won(d.total.op)} <span className={tone(d.total.opYoY ?? 0)}>{pctTxt(d.total.opYoY)}</span></span>
-          {d.total.margin != null && <span className="text-[11px] text-gray-400 num">이익률 {d.total.margin}%</span>}
+          <span className="text-sm font-semibold text-white">{d.period} 업종 합계 <span className="text-gray-500 font-normal">(상위 {d.count}종목)</span></span>
+          <span className="text-sm text-gray-400 num">매출 {won(d.total.sales)} <span className={tone(d.total.salesYoY ?? 0)}>{pctTxt(d.total.salesYoY)}</span></span>
+          <span className="text-sm text-gray-400 num">영업이익 {won(d.total.op)} <span className={tone(d.total.opYoY ?? 0)}>{pctTxt(d.total.opYoY)}</span></span>
+          {d.total.margin != null && <span className="text-sm text-gray-400 num">이익률 {d.total.margin}%</span>}
         </div>
       )}
-      <table className="w-full text-[11px]">
+      <table className="w-full text-sm">
         <thead><tr className="text-gray-500"><th className="text-left font-normal pb-1">종목</th><th className="text-right font-normal pb-1">분기</th><th className="text-right font-normal pb-1">매출</th><th className="text-right font-normal pb-1">영업이익</th><th className="text-right font-normal pb-1">YoY</th></tr></thead>
         <tbody className="num">
           {d.stocks.map(x => (
@@ -129,14 +129,14 @@ function SectorFlow({ sector, market }: { sector: string; market: Mk }) {
   return (
     <div className="space-y-2">
       {d.total && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-400 num">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400 num">
           {d.total.pct != null && <span>업종(시총가중) <span className={`font-semibold ${tone(d.total.pct)}`}>{d.total.pct > 0 ? "+" : ""}{d.total.pct}%</span></span>}
           <span>상승 <span className="text-signal-green">{d.total.up}</span> · 하락 <span className="text-signal-red">{d.total.down}</span></span>
           <span>외국인 합 <span className={tone(d.total.foreign)}>{fmt(d.total.foreign)}</span></span>
           <span>기관 합 <span className={tone(d.total.institution)}>{fmt(d.total.institution)}</span></span>
         </div>
       )}
-      <table className="w-full text-[11px]">
+      <table className="w-full text-sm">
         <thead><tr className="text-gray-500">
           <th className="text-left font-normal pb-1">종목</th><th className="text-right font-normal pb-1">현재가</th><th className="text-right font-normal pb-1">등락</th>
           <th className="text-right font-normal pb-1" style={{ color: C.foreign }}>외국인</th><th className="text-right font-normal pb-1" style={{ color: C.institution }}>기관</th>
@@ -164,8 +164,8 @@ function SectorDetail({ sector, market }: { sector: string; market: Mk }) {
   return (
     <div className="rounded-xl bg-navy-sub/50 border border-navy-border/60 p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-white">{sector}</span>
-        <div className="flex rounded-lg border border-navy-border overflow-hidden text-[11px]">
+        <span className="text-sm font-semibold text-white">{sector}</span>
+        <div className="flex rounded-lg border border-navy-border overflow-hidden text-xs">
           {([["flow", "동향"], ["earn", "실적"]] as const).map(([k, l]) => (
             <button key={k} onClick={e => { e.stopPropagation(); setView(k); }}
               className={`px-3 py-1 ${view === k ? "bg-cyan-brand/20 text-cyan-brand font-semibold" : "text-gray-500"}`}>{l}</button>
@@ -212,9 +212,9 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
                 const v = b.futures![k], q = b.futures![`${k}Qty` as "foreignQty"];
                 return (
                   <div key={k} className="rounded-xl bg-navy-sub/60 p-3">
-                    <p className="text-[11px] text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
+                    <p className="text-xs text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
                     <p className={`text-base font-bold num mt-1 ${tone(v)}`}>{fmt(v)}</p>
-                    <p className={`text-[11px] num ${tone(q)}`}>{q > 0 ? "+" : ""}{q.toLocaleString("ko-KR")}계약</p>
+                    <p className={`text-xs num ${tone(q)}`}>{q > 0 ? "+" : ""}{q.toLocaleString("ko-KR")}계약</p>
                   </div>
                 );
               })}
@@ -233,7 +233,7 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
             <div className="grid grid-cols-3 gap-3">
               {KEYS.map(k => (
                 <div key={k} className="rounded-xl bg-navy-sub/60 p-3">
-                  <p className="text-[11px] text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
+                  <p className="text-xs text-gray-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: C[k] }} />{LABEL[k]}</p>
                   <p className={`text-base sm:text-lg font-bold num mt-1 ${tone(inv[k])}`}>{fmt(inv[k])}</p>
                   <div className="h-1.5 bg-navy-border rounded-full overflow-hidden mt-2">
                     <div className={`h-full ${inv[k] >= 0 ? "bg-signal-green" : "bg-signal-red"}`} style={{ width: `${(Math.abs(inv[k]) / max) * 100}%` }} />
@@ -243,12 +243,12 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
             </div>
             {inv.detail.length > 0 && (
               <div>
-                <p className="text-[11px] text-gray-500 mb-1.5">기관·기타 세부</p>
+                <p className="text-xs text-gray-500 mb-1.5">기관·기타 세부</p>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {inv.detail.map(d => (
                     <div key={d.label} className="rounded-lg bg-navy-sub/40 px-2 py-1.5">
-                      <p className="text-[10px] text-gray-500">{d.label}</p>
-                      <p className={`text-xs font-semibold num ${tone(d.value)}`}>{fmt(d.value)}</p>
+                      <p className="text-xs text-gray-500">{d.label}</p>
+                      <p className={`text-sm font-semibold num ${tone(d.value)}`}>{fmt(d.value)}</p>
                     </div>
                   ))}
                 </div>
@@ -265,13 +265,13 @@ export default function FlowBoard({ market = "KOSPI" }: { market?: Mk | "K200" }
             <div className="flex gap-1 overflow-x-auto scrollbar-none">
               {([["smart", "외국인+기관"], ["foreign", "외국인"], ["institution", "기관"], ["individual", "개인"]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setSectorSort(k)}
-                  className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] ${sectorSort === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l} 순</button>
+                  className={`shrink-0 px-2.5 py-1 rounded-lg text-xs ${sectorSort === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l} 순</button>
               ))}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[340px]">
+              <table className="w-full text-sm min-w-[340px]">
                 <thead>
-                  <tr className="text-[11px] text-gray-500">
+                  <tr className="text-xs text-gray-500">
                     <th className="text-left font-normal py-1.5">업종</th>
                     {KEYS.map(k => <th key={k} className="text-right font-normal py-1.5" style={{ color: C[k] }}>{LABEL[k]}</th>)}
                   </tr>

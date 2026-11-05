@@ -784,7 +784,7 @@ function fmtAmount(n: number): string {
 
 // 투자자 종류별 단일 리스트 (모바일 탭뷰 + 데스크탑 컬럼뷰 공용)
 function InvestorRankCol({
-  items, mode, onSelect, compact = false,
+  items, mode, onSelect,
 }: {
   items: RankItem[]; mode: "buy" | "sell";
   onSelect: (d: DrawerState) => void;
@@ -805,11 +805,11 @@ function InvestorRankCol({
           {/* 종목명 + 가격/등락률 */}
           <div className="flex-1 min-w-0">
             <p className={`font-medium truncate group-hover:text-cyan-brand transition-colors ${
-              compact ? "text-xs" : "text-sm"
+              "text-sm"
             } text-white`}>
               {item.name}
             </p>
-            <p className="text-[11px] text-gray-500 num leading-tight">
+            <p className="text-xs text-gray-500 num leading-tight">
               {item.price.toLocaleString("ko-KR")}원
               <span className={`ml-1 ${item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {item.changePct >= 0 ? "▲" : "▼"}{Math.abs(item.changePct).toFixed(2)}%
@@ -818,7 +818,7 @@ function InvestorRankCol({
           </div>
 
           {/* 순매수/순매도 금액 */}
-          <span className={`text-xs font-bold num shrink-0 ${isPos ? "text-signal-green" : "text-signal-red"}`}>
+          <span className={`text-sm font-bold num shrink-0 ${isPos ? "text-signal-green" : "text-signal-red"}`}>
             {fmtAmount(item.netBuyAmount)}
           </span>
         </button>
@@ -860,7 +860,7 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
       <div className="flex items-center gap-2 flex-wrap">
         {(["buy", "sell"] as const).map(m => (
           <button key={m} onClick={() => setMode(m)}
-            className={`px-4 py-1.5 text-xs rounded-full font-semibold transition-all ${
+            className={`px-4 py-1.5 text-sm rounded-full font-semibold transition-all ${
               mode === m
                 ? m === "buy"
                   ? "bg-signal-green/20 text-signal-green border border-signal-green/40"
@@ -898,7 +898,7 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
         <div className="flex sm:hidden gap-1 bg-navy-sub/40 rounded-lg p-1">
           {INVESTOR_TABS.map(t => (
             <button key={t.key} onClick={() => setInvestor(t.key)}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+              className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-all ${
                 investor === t.key
                   ? "bg-navy-card text-white shadow"
                   : "text-gray-500 hover:text-gray-300"
@@ -921,7 +921,7 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
         <div className="hidden sm:grid grid-cols-3 gap-1 divide-x divide-navy-border/30">
           {INVESTOR_TABS.map((t, idx) => (
             <div key={t.key} className={idx > 0 ? "pl-3" : ""}>
-              <p className="text-xs font-semibold text-gray-400 mb-2 px-1">{t.label}</p>
+              <p className="text-sm font-semibold text-gray-400 mb-2 px-1">{t.label}</p>
               <InvestorRankCol
                 items={cols[t.key]}
                 mode={mode}
