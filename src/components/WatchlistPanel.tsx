@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { FiHeart, FiTrash2 } from "react-icons/fi";
 import { useAuth } from "./AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { useMarketPoll } from "@/lib/useMarketPoll";
+import { StockLink } from "./StockModal";
 
 interface W { code: string; name: string; market: string; price?: number; changePct?: number }
 
@@ -60,10 +60,10 @@ export default function WatchlistPanel() {
     <ul className="card !p-0 divide-y divide-navy-border">
       {list.map(w => (
         <li key={w.code} className="flex items-center gap-3 px-4 py-3">
-          <Link href={`/stock/${w.code}`} className="flex-1 min-w-0">
+          <StockLink  className="flex-1 min-w-0" code={w.code}>
             <p className="text-sm font-semibold text-white truncate">{w.name}</p>
             <p className="text-[11px] text-gray-500 num">{w.code} · {w.market === "KQ" ? "코스닥" : "코스피"}</p>
-          </Link>
+          </StockLink>
           <div className="text-right num">
             <p className="text-sm text-white">{w.price != null ? `${w.price.toLocaleString("ko-KR")}원` : "—"}</p>
             {w.changePct != null && (

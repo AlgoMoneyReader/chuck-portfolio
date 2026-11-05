@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { krSession } from "@/lib/krSession";
+import { StockLink } from "./StockModal";
 
 interface KrItem { code: string; name: string; regularPrice: number; extPrice: number | null; extChangePct: number | null; changePct: number }
 interface UsItem {
@@ -49,8 +50,8 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
           ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-[72px] bg-navy-card border border-navy-border rounded-xl animate-pulse" />)
           : region === "KR"
           ? kr.map(s => (
-              <Link key={s.code} href={`/stock/${s.code.split(".")[0]}`}
-                className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors">
+              <StockLink key={s.code} 
+                className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors" code={s.code.split(".")[0]} name={s.name}>
                 <p className="text-xs font-semibold text-white truncate">{s.name}</p>
                 <p className={`text-base font-bold num mt-0.5 ${tone(s.changePct)}`}>{s.regularPrice.toLocaleString("ko-KR")}</p>
                 <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""} {Math.abs(s.changePct).toFixed(2)}%</p>
@@ -65,14 +66,14 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                     </p>
                   );
                 })()}
-              </Link>
+              </StockLink>
             ))
           : us.map(s => {
               const day = s.dayMarketPrice != null, pre = !day && s.preMarketPrice != null && s.marketState === "PRE", post = !day && !pre && s.postMarketPrice != null;
               const ep = day ? s.dayMarketPrice : pre ? s.preMarketPrice : post ? s.postMarketPrice : null;
               const ec = day ? s.dayMarketChangePct : pre ? s.preMarketChangePct : post ? s.postMarketChangePct : null;
               return (
-                <Link key={s.code} href={`/analyze?ticker=${encodeURIComponent(s.code)}&name=${encodeURIComponent(s.name)}`}
+                <StockLink key={s.code} code={s.code} market="US" name={s.name}
                   className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors">
                   <p className="text-xs font-semibold text-white truncate">{s.name} <span className="text-gray-500 font-normal">{s.code}</span></p>
                   <p className={`text-base font-bold num mt-0.5 ${tone(s.changePct)}`}>${s.price.toFixed(2)}</p>
@@ -83,7 +84,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                       <span className="text-gray-300">${ep.toFixed(2)}</span> <span className={tone(ec)}>{ec > 0 ? "+" : ""}{ec.toFixed(2)}%</span>
                     </p>
                   )}
-                </Link>
+                </StockLink>
               );
             })}
       </div>

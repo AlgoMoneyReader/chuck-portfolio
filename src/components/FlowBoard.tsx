@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine, CartesianGrid,
 } from "recharts";
 import { useMarketPoll } from "@/lib/useMarketPoll";
+import { StockLink } from "./StockModal";
 
 type Mk = "KOSPI" | "KOSDAQ";
 interface Core { foreign: number; institution: number; individual: number }
@@ -95,7 +95,7 @@ function SectorEarnings({ sector, market }: { sector: string; market: Mk }) {
         <tbody className="num">
           {d.stocks.map(x => (
             <tr key={x.code} className="border-t border-navy-border/40">
-              <td className="py-1.5"><Link href={`/stock/${x.code}`} className="text-white hover:text-cyan-brand">{x.name}</Link></td>
+              <td className="py-1.5"><StockLink  className="text-white hover:text-cyan-brand" code={x.code}>{x.name}</StockLink></td>
               <td className="py-1.5 text-right text-gray-400">{x.latest ? `${x.latest.period.slice(2)}${x.latest.prelim ? "*" : ""}` : "—"}</td>
               <td className="py-1.5 text-right text-gray-300">{x.latest?.sales != null ? won(x.latest.sales) : "—"}</td>
               <td className={`py-1.5 text-right font-semibold ${tone(x.latest?.op ?? 0)}`}>{x.latest?.op != null ? won(x.latest.op) : "—"}</td>
@@ -144,7 +144,7 @@ function SectorFlow({ sector, market }: { sector: string; market: Mk }) {
         <tbody className="num">
           {d.stocks.map(x => (
             <tr key={x.code} className="border-t border-navy-border/40">
-              <td className="py-1.5"><Link href={`/stock/${x.code}`} className="text-white hover:text-cyan-brand">{x.name}</Link></td>
+              <td className="py-1.5"><StockLink  className="text-white hover:text-cyan-brand" code={x.code}>{x.name}</StockLink></td>
               <td className="py-1.5 text-right text-gray-300">{x.price.toLocaleString("ko-KR")}</td>
               <td className={`py-1.5 text-right font-semibold ${tone(x.pct)}`}>{x.pct > 0 ? "+" : ""}{x.pct.toFixed(2)}%</td>
               <td className={`py-1.5 text-right ${x.foreign == null ? "text-gray-600" : tone(x.foreign)}`}>{x.foreign == null ? "—" : fmt(x.foreign)}</td>
