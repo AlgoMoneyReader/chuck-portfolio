@@ -8,6 +8,7 @@ import { FiPieChart, FiLogOut, FiSearch } from "react-icons/fi";
 import { useCallback, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "./AuthProvider";
+import { MarketClockButton } from "./MarketClock";
 
 // 종목 목록(약 190KB)은 검색을 열 때만 불러온다
 const SearchOverlay = dynamic(() => import("./SearchOverlay"), { ssr: false });
@@ -83,6 +84,7 @@ export default function Navbar() {
         <div className="flex items-center gap-0.5 min-w-0">
           <GatedIcon href="/analyze" label="AI 레이더 분석"><TbRadar2 size={20} /></GatedIcon>
           <SearchButton />
+          <MarketClockButton />
           <GatedIcon href="/portfolio" label="My 포트폴리오"><FiPieChart size={18} /></GatedIcon>
           <Account />
         </div>
