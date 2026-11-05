@@ -14,6 +14,7 @@ const GEMMA = "gemma-3-27b-it";
 const cooldown = new Map<string, number>(); // model → 다시 시도해도 되는 시각
 
 export interface GeminiOpts {
+  cheapFirst?: boolean; // true: 무료 Gemini 먼저(실패 시에만 Claude)
   prompt: string;
   system?: string;
   search?: boolean;          // 구글 검색 그라운딩
@@ -40,16 +41,22 @@ async function generate(o: GeminiOpts): Promise<{ text: string; model: string; u
   const key = process.env.GEMINI_API_KEY;
   const errors: string[] = [];
   let allQuota = true;
-  if (claudeAvailable()) {
+  const tryClaude = async () => {
     try {
       const r = await claudeGenerate({
         prompt: o.json ? `${o.prompt}\n\nJSON 만 반환하세요.` : o.prompt, system: o.system, search: o.search,
         maxTokens: o.maxTokens ? Math.max(o.maxTokens, 1024) : 8000, timeoutMs: o.timeoutMs, effort: o.effort,
       });
       return { text: r.text, model: CLAUDE_MODEL, usage: r.usage };
-    } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; }
+    } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; return null; }
+  };
+  // 가벼운 작업(CHEAP: 뉴스 이슈 묶기 등)은 무료 Gemini 먼저, 다 실패할 때만 Claude — 비용 절감
+  const cheapFirst = o.cheapFirst ?? o.models === CHEAP;
+  if (!cheapFirst && claudeAvailable()) { const r = await tryClaude(); if (r) return r; }
+  if (!key) {
+    if (cheapFirst && claudeAvailable()) { const r = await tryClaude(); if (r) return r; }
+    throw new GeminiError(`AI 호출 실패 (${errors.join(" | ") || "API 키 없음"})`, false);
   }
-  if (!key) throw new GeminiError(`AI 호출 실패 (${errors.join(" | ") || "API 키 없음"})`, false);
   const chain = [...(o.models ?? QUALITY), GEMMA];
   for (const model of chain) {
     if ((cooldown.get(model) ?? 0) > Date.now()) { errors.push(`${model}: 한도 대기`); continue; }
@@ -95,6 +102,7 @@ async function generate(o: GeminiOpts): Promise<{ text: string; model: string; u
       errors.push(`${model}: ${String(e).slice(0, 80)}`);
     }
   }
+  if (cheapFirst && claudeAvailable()) { const r = await tryClaude(); if (r) return r; }
   throw new GeminiError(
     allQuota ? "AI 무료 사용 한도를 모두 썼습니다. 한국시간 오후 4~5시에 초기화됩니다." : `AI 호출 실패 (${errors.join(" | ")})`,
     allQuota,
