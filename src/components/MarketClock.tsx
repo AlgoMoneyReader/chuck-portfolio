@@ -72,36 +72,60 @@ const tone = (c: ClockState) => (c.regular ? "text-signal-green" : c.open ? "tex
 /** 증시 탭 맨 위 한 줄: 국기·도시·현지 시각·상태. 휴대폰은 옆으로 밀어서 */
 export function MarketClockStrip() {
   const clocks = useClocks();
+  const [sel, setSel] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  // 국기를 누르면 설명 팝업, 다른 곳을 누르면 닫힘
+  useEffect(() => {
+    if (!sel) return;
+    const close = (e: Event) => { if (box.current && !box.current.contains(e.target as Node)) setSel(null); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [sel]);
   if (!clocks.length) return <div className="h-[52px]" />;
+  const c0 = clocks.find(c => c.def.key === sel);
   return (
-    <>
+    <div ref={box} className="relative">
     {/* 휴대폰: 8칸 한 줄, 한국시간 기준 — 장중(초록)은 마감까지 남은 시간, 장 밖은 다음 개장 시각 */}
     <div className="md:hidden grid grid-cols-8 gap-1 rounded-xl border border-navy-border bg-navy-card px-1.5 py-2">
       {clocks.map(c => (
-        <div key={c.def.key} title={`${c.def.name} ${c.status} · ${c.next}`} className="flex flex-col items-center leading-none">
+        <button key={c.def.key} onClick={() => setSel(k => (k === c.def.key ? null : c.def.key))}
+          className={`flex flex-col items-center leading-none rounded-lg py-0.5 ${sel === c.def.key ? "bg-navy-sub" : ""}`}>
           <span className="relative text-base">
             {c.def.flag}
             <span className={`absolute -top-0.5 -right-1 w-1.5 h-1.5 rounded-full ring-1 ring-navy-card ${dot(c)}`} />
           </span>
           <span className={`mt-1 text-[10px] font-semibold num whitespace-nowrap ${c.regular ? "text-signal-green" : "text-gray-400"}`}>{c.regular ? c.short.replace("마감 ", "") : c.short.replace(" 개장", "").replace(/^[일월화수목금토] /, "")}</span>
-        </div>
+        </button>
       ))}
     </div>
     {/* PC: 8칸 한 줄 — 위: 국기·나라·상태 점 / 아래: 한국시간 기준 문구 */}
     <div className="hidden md:grid grid-cols-8 gap-1.5">
       {clocks.map(c => (
-        <div key={c.def.key} title={`${c.def.name} ${c.status}${c.holiday ? ` · ${c.holiday}` : ""} · ${c.next}`}
-          className="min-w-0 rounded-xl border border-navy-border bg-navy-card px-2.5 py-1.5">
+        <button key={c.def.key} onClick={() => setSel(k => (k === c.def.key ? null : c.def.key))}
+          className={`min-w-0 text-left rounded-xl border bg-navy-card px-2.5 py-1.5 ${sel === c.def.key ? "border-cyan-brand/60" : "border-navy-border"}`}>
           <p className="flex items-center gap-1.5 text-xs text-gray-400 leading-tight">
             <span className="text-sm leading-none">{c.def.flag}</span>
             <span className="truncate">{c.def.name}</span>
             <span className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${dot(c)} ${c.regular ? "animate-pulse" : ""}`} />
           </p>
           <p className={`mt-0.5 text-sm font-bold num truncate ${c.regular ? "text-white" : "text-gray-400"}`}>{c.short}</p>
-        </div>
+        </button>
       ))}
     </div>
-    </>
+    {/* 설명 팝업 */}
+    {c0 && (
+      <div className="absolute left-0 right-0 md:left-auto md:w-[360px] top-full mt-1.5 z-40 rounded-xl border border-navy-border bg-navy-card shadow-2xl p-3 text-sm animate-fade-in">
+        <p className="flex items-center gap-2 font-semibold text-white">
+          <span className="text-lg leading-none">{c0.def.flag}</span>{c0.def.name} 증시
+          <span className={`ml-auto flex items-center gap-1 text-xs ${tone(c0)}`}><span className={`w-1.5 h-1.5 rounded-full ${dot(c0)}`} />{c0.status}</span>
+        </p>
+        <p className="mt-1.5 text-gray-200">{c0.regular ? `지금 정규장 거래 중 · ${c0.short.replace("마감", "마감까지")}` : `다음 정규장 개장: ${c0.short.replace(" 개장", "")}`}</p>
+        {c0.holiday && <p className="mt-1 text-xs text-signal-red">오늘 {c0.holiday}</p>}
+        <p className="mt-1 text-xs text-gray-500">정규장(한국시간): {c0.barsKst.map(([a, b]) => `${String(Math.floor((a % 1440) / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}~${String(Math.floor((b % 1440) / 60)).padStart(2, "0")}:${String(b % 60).padStart(2, "0")}`).join(", ")}</p>
+        <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">시각은 모두 <b className="text-gray-300">한국시간</b> 기준입니다. 초록 숫자 = 마감까지 남은 시간, 회색 숫자 = 다음 개장 시각. 점: 초록 장중 · 노랑 장외거래 · 회색 휴장</p>
+      </div>
+    )}
+    </div>
   );
 }
 
