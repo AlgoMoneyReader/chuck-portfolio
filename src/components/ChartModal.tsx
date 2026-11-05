@@ -243,7 +243,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
                     </>
                   ) : changePct != null && (
                     <span className="text-sm font-semibold num" style={{ color }}>
-                      {isPos ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
+                      {isPos ? "▲" : "▼"} {chartData.previousClose && chartData.currentPrice != null ? Math.abs(chartData.currentPrice - chartData.previousClose).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""} ({isPos ? "+" : "-"}{Math.abs(changePct).toFixed(2)}%)
                     </span>
                   )}
                 </div>

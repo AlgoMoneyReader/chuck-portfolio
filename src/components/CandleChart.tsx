@@ -104,7 +104,14 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
   const last = liveBar ?? state?.candles[state.candles.length - 1];
   const shown = hover ?? last;
   const idx = shown ? state!.candles.findIndex(c => String(c.time) === String(shown.time)) : -1;
-  const base = intraday ? state?.prevClose ?? null : idx > 0 ? state!.candles[idx - 1].close : null;
+  const dayOf = (t: number | string) => (typeof t === "number" ? new Date(t * 1000).toISOString().slice(0, 10) : String(t).slice(0, 10));
+  const prevDayClose = (() => {
+    if (!intraday || !shown || !state) return null;
+    const d = dayOf(shown.time as number);
+    for (let i = state.candles.length - 1; i >= 0; i--) if (dayOf(state.candles[i].time) < d) return state.candles[i].close;
+    return null;
+  })();
+  const base = intraday ? prevDayClose ?? state?.prevClose ?? null : idx > 0 ? state!.candles[idx - 1].close : null;
   const chg = shown && base ? ((shown.close - base) / base) * 100 : null;
   const f = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
