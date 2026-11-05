@@ -23,15 +23,24 @@ interface StockRow {
 }
 
 // 국내 종목 한 줄 — 미국 목록과 같은 배치: 종목 | 현재가·등락률(아래 줄에 프리/애프터) | 끝 열(시총·거래대금)
-// PC(md 이상) 넓은 표의 추가 열 — 머리글과 행이 같은 정의를 쓴다
-export const WIDE_COLS = "hidden md:block text-right text-sm num whitespace-nowrap";
-function KrWideHead({ cap }: { cap?: boolean }) {
+// PC(md 이상)는 열 간격이 고른 표(그리드), 모바일은 한 줄 요약 배치
+// (Tailwind 가 읽을 수 있게 클래스는 문자열 그대로 둔다)
+const krGrid = (cap?: boolean) => (cap
+  ? "hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(6,minmax(0,1fr))]"
+  : "hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(5,minmax(0,1fr))]");
+
+function KrGridHead({ cap }: { cap?: boolean }) {
   return (
-    <>
-      <span className="hidden md:block w-24 text-right">거래량</span>
-      <span className="hidden md:block w-24 text-right">거래대금</span>
-      {cap && <span className="hidden md:block w-24 text-right">시가총액</span>}
-    </>
+    <div className={`${krGrid(cap)} py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40`}>
+      <span className="text-center">#</span>
+      <span>종목</span>
+      <span className="text-right">현재가</span>
+      <span className="text-right">전일대비</span>
+      <span className="text-right">등락률</span>
+      <span className="text-right">거래량</span>
+      <span className="text-right">거래대금</span>
+      {cap && <span className="text-right">시가총액</span>}
+    </div>
   );
 }
 
@@ -43,36 +52,53 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
   const v = r.changePct;
   const tone = (x: number) => (x > 0 ? "text-signal-green" : x < 0 ? "text-signal-red" : "text-gray-400");
   const val = compact ? "text-xs" : "text-sm";
+  const arrow = v > 0 ? "▲" : v < 0 ? "▼" : "";
+  const nxt = r.nxtPrice != null && r.nxtPct != null ? (
+    <span className={`${compact ? "text-[10px]" : "text-[11px]"} num whitespace-nowrap mt-0.5`}>
+      <span className={`font-bold mr-1 ${tag === "NXT 프리" ? "text-amber-300" : "text-purple-300"}`}>{tag}</span>
+      <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded px-0.5 animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>
+      <span className={`ml-1 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
+    </span>
+  ) : null;
   return (
-    <div className={`flex items-center ${compact ? "gap-2 py-1.5" : "gap-3 py-2"} hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`} onClick={onClick}>
-      {rankCls ? <span className={`w-5 text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <RankBadge rank={r.rank} />}
-      <div className="flex-1 min-w-0">
-        <p className={`${val} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
-        <p className={`${compact ? "text-[10px]" : "text-xs"} text-gray-600 truncate`}>{r.code}{badge && <span className="text-gold/70"> · {badge}</span>}</p>
-      </div>
-      <div className="flex flex-col items-end shrink-0">
-        <div className="flex items-baseline gap-2">
-          <span key={`${r.code}-${r.price}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{r.price.toLocaleString("ko-KR")}{compact ? "" : "원"}</span>
-          {!compact && r.change != null && <span className={`hidden md:inline text-sm num whitespace-nowrap ${tone(v)}`}>{v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(r.change).toLocaleString("ko-KR")}</span>}
-          <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(v)}`}>{v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(v).toFixed(2)}%</span>
+    <>
+      {/* 모바일(또는 2열 좁은 패널): 종목 | 현재가·등락률(아래 NXT) | 끝 열 */}
+      <div className={`${compact ? "flex" : "flex md:hidden"} items-center ${compact ? "gap-2 py-1.5" : "gap-3 py-2"} hover:bg-navy-card/30 rounded cursor-pointer transition-colors group`} onClick={onClick}>
+        {rankCls ? <span className={`w-5 text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <RankBadge rank={r.rank} />}
+        <div className="flex-1 min-w-0">
+          <p className={`${val} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
+          <p className={`${compact ? "text-[10px]" : "text-xs"} text-gray-600 truncate`}>{r.code}{badge && <span className="text-gold/70"> · {badge}</span>}</p>
         </div>
-        {r.nxtPrice != null && r.nxtPct != null && (
-          <span className={`${compact ? "text-[10px]" : "text-[11px]"} num whitespace-nowrap mt-0.5`}>
-            <span className={`font-bold mr-1 ${tag === "NXT 프리" ? "text-amber-300" : "text-purple-300"}`}>{tag}</span>
-            <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded px-0.5 animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>
-            <span className={`ml-1 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
-          </span>
-        )}
+        <div className="flex flex-col items-end shrink-0">
+          <div className="flex items-baseline gap-2">
+            <span key={`${r.code}-${r.price}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{r.price.toLocaleString("ko-KR")}{compact ? "" : "원"}</span>
+            <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(v)}`}>{arrow}{Math.abs(v).toFixed(2)}%</span>
+          </div>
+          {nxt}
+        </div>
+        {last != null && <span className="w-14 text-right text-xs text-gray-300 num whitespace-nowrap">{last}</span>}
       </div>
-      {last != null && <span className={`w-14 text-right text-xs text-gray-300 num whitespace-nowrap ${compact ? "" : "md:hidden"}`}>{last}</span>}
+
+      {/* PC: 열 간격이 고른 표 */}
       {!compact && (
-        <>
-          <span className={`${WIDE_COLS} w-24 text-gray-300`}>{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
-          <span className={`${WIDE_COLS} w-24 text-gray-300`}>{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span>
-          {wideCap && <span className={`${WIDE_COLS} w-24 text-gray-200 font-semibold`}>{fmtCap(r.capEok)}</span>}
-        </>
+        <div className={`${krGrid(wideCap)} py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group text-sm num`} onClick={onClick}>
+          {rankCls ? <span className={`text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <span className="flex justify-center"><RankBadge rank={r.rank} /></span>}
+          <div className="min-w-0">
+            <p className="text-white font-medium truncate group-hover:text-cyan-brand transition-colors">{r.name}</p>
+            <p className="text-xs text-gray-600 truncate">{r.code}{badge && <span className="text-gold/70"> · {badge}</span>}</p>
+          </div>
+          <div className="flex flex-col items-end">
+            <span key={`${r.code}-${r.price}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">{r.price.toLocaleString("ko-KR")}원</span>
+            {nxt}
+          </div>
+          <span className={`text-right whitespace-nowrap ${tone(v)}`}>{r.change != null ? `${arrow}${Math.abs(r.change).toLocaleString("ko-KR")}` : "—"}</span>
+          <span className={`text-right font-semibold whitespace-nowrap ${tone(v)}`}>{v > 0 ? "+" : v < 0 ? "-" : ""}{Math.abs(v).toFixed(2)}%</span>
+          <span className="text-right text-gray-300 whitespace-nowrap">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
+          <span className="text-right text-gray-300 whitespace-nowrap">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span>
+          {wideCap && <span className="text-right text-gray-200 font-semibold whitespace-nowrap">{fmtCap(r.capEok)}</span>}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 interface SpikeRow {
@@ -245,12 +271,12 @@ function TopMoversHalf({
       </div>
 
       {/* 헤더 */}
-      <div className={`flex gap-3 py-1.5 ${T.head} text-gray-600 font-medium border-b border-navy-border/40`}>
+      <div className={`flex gap-3 py-1.5 ${T.head} text-gray-600 font-medium border-b border-navy-border/40 ${large ? "md:hidden" : ""}`}>
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
-        {large && <KrWideHead />}
       </div>
+      {large && <KrGridHead />}
 
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/20">
@@ -345,13 +371,13 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
         <span className="text-gray-500">{market === "KOSDAQ" ? "코스닥" : "코스피"} {kind === "cap" ? "시가총액" : "당일 거래대금"} 상위 30종목</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+      <div className="flex md:hidden gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
-        <span className="w-14 text-right md:hidden">{kind === "cap" ? "시가총액" : "거래대금"}</span>
-        <KrWideHead cap={kind === "cap"} />
+        <span className="w-14 text-right">{kind === "cap" ? "시가총액" : "거래대금"}</span>
       </div>
+      <KrGridHead cap={kind === "cap"} />
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
