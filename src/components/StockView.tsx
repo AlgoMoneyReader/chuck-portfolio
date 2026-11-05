@@ -9,6 +9,11 @@ import { logActivity } from "@/lib/activity";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart, FiX, FiExternalLink } from "react-icons/fi";
 import { US_POPULAR } from "@/data/usPopular";
+import { ASIA_MARKETS, ASIA_STOCKS, type AsiaMkt } from "@/data/asiaStocks";
+
+// 아시아 종목(일본 .T · 대만 .TW · 홍콩 .HK · 중국 .SS/.SZ)
+const ASIA_RE = /\.(T|TW|TWO|HK|SS|SZ)$/i;
+const asiaMktOf = (c: string): AsiaMkt | null => { const m = ASIA_RE.exec(c)?.[1]?.toUpperCase(); return m === "T" ? "JP" : m === "TW" || m === "TWO" ? "TW" : m === "HK" ? "HK" : m === "SS" || m === "SZ" ? "CN" : null; };
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
 import { useAuth } from "@/components/AuthProvider";
@@ -491,8 +496,8 @@ function extOf(x: Detail, isUS: boolean) {
   return null;
 }
 
-function QuoteTab({ x, isUS, symbol }: { x: Detail | null; isUS: boolean; symbol: string }) {
-  const money = (v: number) => (v > 0 ? (isUS ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${v.toLocaleString("ko-KR")}원`) : "—");
+function QuoteTab({ x, isUS, symbol, cur = "$" }: { x: Detail | null; isUS: boolean; symbol: string; cur?: string }) {
+  const money = (v: number) => (v > 0 ? (isUS ? `${cur}${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${v.toLocaleString("ko-KR")}원`) : "—");
   const ext = x ? extOf(x, isUS) : null;
   const pos52 = x && x.week52High > x.week52Low ? Math.max(0, Math.min(100, ((x.price - x.week52Low) / (x.week52High - x.week52Low)) * 100)) : null;
   return (
@@ -509,7 +514,7 @@ function QuoteTab({ x, isUS, symbol }: { x: Detail | null; isUS: boolean; symbol
               <p key={x.price} className="text-3xl font-bold text-white num rounded animate-tick inline-block">{money(x.price)}</p>
               <p className={`text-sm font-semibold num mt-1 ${tone(x.changePct)}`}>
                 {x.changePct > 0 ? "▲" : x.changePct < 0 ? "▼" : ""} {Math.abs(x.changePct).toFixed(2)}%
-                {" "}({x.change > 0 ? "+" : x.change < 0 ? "-" : ""}{isUS ? `$${Math.abs(x.change).toFixed(2)}` : `${Math.abs(x.change).toLocaleString("ko-KR")}원`})
+                {" "}({x.change > 0 ? "+" : x.change < 0 ? "-" : ""}{isUS ? `${cur}${Math.abs(x.change).toFixed(2)}` : `${Math.abs(x.change).toLocaleString("ko-KR")}원`})
               </p>
               {ext && ext.pct != null && (
                 <div className="mt-2 inline-flex items-baseline gap-2 rounded-lg bg-navy-sub/60 px-3 py-1.5 num">
@@ -714,9 +719,13 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const [fav, setFav] = useState(false);
 
   const usItem = isUS ? US_POPULAR.find(u => u.code === code) : undefined;
-  const name = isUS ? (nameProp || usItem?.name || code) : (d?.name ?? nameProp ?? code);
+  const asia = isUS ? asiaMktOf(code) : null;
+  const asiaInfo = asia ? ASIA_MARKETS.find(m => m.key === asia)! : null;
+  const asiaName = asia ? ASIA_STOCKS[asia].find(a => a.s === code)?.ko : undefined;
+  const cur = asiaInfo ? asiaInfo.currency : "$";
+  const name = isUS ? (nameProp || asiaName || usItem?.name || code) : (d?.name ?? nameProp ?? code);
   const mk = isUS ? "US" : (d?.marketCode ?? (marketProp === "KQ" ? "KQ" : marketProp === "KS" ? "KS" : null));
-  const tabs: Tab[] = isUS ? ["현황", "정보", "뉴스", "공시", "레이더"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더"];
+  const tabs: Tab[] = asia ? ["현황", "뉴스"] : isUS ? ["현황", "정보", "뉴스", "공시", "레이더"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더"];
 
   useEffect(() => { setTab("현황"); setX(null); setD(null); }, [code]);
 
@@ -752,7 +761,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
     if (!sb || (!d && !isUS)) return;
     const { error } = fav
       ? await sb.from("watchlist").delete().eq("user_id", user.id).eq("code", code)
-      : await sb.from("watchlist").insert({ user_id: user.id, code, name, market: isUS ? "US" : d!.marketCode });
+      : await sb.from("watchlist").insert({ user_id: user.id, code, name, market: asia ? `ASIA-${asia}` : isUS ? "US" : d!.marketCode });
     if (!error) { setFav(!fav); logActivity("watch", { code, name, on: !fav }); }
   };
 
@@ -761,7 +770,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const headPct = x ? x.changePct : q?.changePct ?? null;
   const headChg = x ? x.change : q?.change ?? null;
   const usExt = x ? extOf(x, isUS) : null;
-  const newsName = isUS ? (usItem?.ko.split(" ")[0] || name.replace(/,?\s*(Inc\.?|Corp(oration)?\.?|Holdings,?|Ltd\.?|Co\.?|plc|N\.V\.|Class [A-C])\b.*$/i, "").trim() || code) : (d?.name ?? name);
+  const newsName = asia ? (asiaName ?? name) : isUS ? (usItem?.ko.split(" ")[0] || name.replace(/,?\s*(Inc\.?|Corp(oration)?\.?|Holdings,?|Ltd\.?|Co\.?|plc|N\.V\.|Class [A-C])\b.*$/i, "").trim() || code) : (d?.name ?? name);
 
   return (
     <div className={modal ? "" : "max-w-3xl mx-auto animate-fade-in"}>
@@ -769,11 +778,11 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
         <div className="flex items-center gap-2">
           {!modal && <button onClick={() => router.back()} aria-label="뒤로" className="-ml-1 p-1 text-gray-300"><FiChevronLeft size={22} /></button>}
           <div className="min-w-0 flex-1">
-            <p className="text-base font-bold text-white truncate">{name} <span className="text-xs font-normal text-gray-500">{code}{isUS && usItem ? ` · ${usItem.ko.split(" ")[0]}` : ""}</span></p>
+            <p className="text-base font-bold text-white truncate">{name} <span className="text-xs font-normal text-gray-500">{code}{isUS && usItem ? ` · ${usItem.ko.split(" ")[0]}` : ""}{asiaInfo ? ` · ${asiaInfo.flag} ${asiaInfo.label}` : ""}</span></p>
             {headPrice != null && (
               <p className="text-sm num">
-                <span key={headPrice} className="text-white font-semibold rounded animate-tick">{isUS ? `$${headPrice.toFixed(2)}` : `${won(headPrice)}원`}</span>{" "}
-                <span className={tone(headPct)}>{headPct != null && headPct > 0 ? "▲" : headPct != null && headPct < 0 ? "▼" : ""} {isUS ? `$${Math.abs(headChg ?? 0).toFixed(2)}` : won(Math.abs(headChg ?? 0))} ({pct(headPct, 2)})</span>
+                <span key={headPrice} className="text-white font-semibold rounded animate-tick">{isUS ? `${cur}${headPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${won(headPrice)}원`}</span>{" "}
+                <span className={tone(headPct)}>{headPct != null && headPct > 0 ? "▲" : headPct != null && headPct < 0 ? "▼" : ""} {isUS ? `${cur}${Math.abs(headChg ?? 0).toFixed(2)}` : won(Math.abs(headChg ?? 0))} ({pct(headPct, 2)})</span>
                 {!isUS && <span className="ml-1.5 text-[10px] text-gray-500">{krSession().key === "regular" ? "KRX 정규장 · 실시간" : "KRX 종가"}</span>}
               </p>
             )}
@@ -810,7 +819,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
           <div className="space-y-3">{[0, 1, 2].map(i => <div key={i} className="card h-40 animate-pulse" />)}</div>
         ) : !isUS && !d ? (
           <div className="card text-center text-sm text-gray-500 py-10">종목 정보를 불러올 수 없습니다</div>
-        ) : tab === "현황" ? <QuoteTab x={x} isUS={isUS} symbol={isUS ? code : `${code}.${mk}`} />
+        ) : tab === "현황" ? <QuoteTab x={x} isUS={isUS} cur={cur} symbol={isUS ? code : `${code}.${mk}`} />
           : tab === "정보" ? (isUS ? <UsInfoTab ticker={code} price={x?.price ?? null} /> : <OverviewTab d={d!} />)
           : tab === "수급" && !isUS ? <FlowTab code={code} market={d!.marketCode} />
           : tab === "레이더" ? <RadarReport code={code} name={name} market={isUS ? "US" : d!.marketCode} />
