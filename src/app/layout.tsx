@@ -8,7 +8,6 @@ import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
 import { StockModalProvider } from "@/components/StockModal";
 import { ThemeProvider } from "@/lib/theme";
-import { FontSync } from "@/lib/fontPref";
 import { THEME_INIT_SCRIPT, FONT_INIT_SCRIPT } from "@/lib/themeScript";
 
 export const metadata: Metadata = {
@@ -45,7 +44,6 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider>
            <StockModalProvider>
-            <FontSync />
             <StickyHeader>
               <Navbar />
               <MarketTicker />

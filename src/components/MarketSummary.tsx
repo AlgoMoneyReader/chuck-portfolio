@@ -67,7 +67,8 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
         {rankCls ? <span className={`w-5 text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <RankBadge rank={r.rank} />}
         <div className="flex-1 min-w-0">
           <p className={`${val} text-white font-medium truncate group-hover:text-cyan-brand transition-colors`}>{r.name}</p>
-          <p className={`${compact ? "text-[10px]" : "text-xs"} text-gray-600 truncate`}>{r.code}{badge && <span className="text-gold/70"> · {badge}</span>}</p>
+          {/* 좁은 화면: 종목코드 대신 오늘의 사유(기관 매물 출회 등)를 보여 잘리지 않게 */}
+          <p className={`${compact ? "text-[10px]" : "text-xs"} truncate`}>{badge ? <span className="text-gold/80">{badge}</span> : <span className="text-gray-600">{r.code}</span>}</p>
         </div>
         <div className="flex flex-col items-end shrink-0">
           <div className="flex items-baseline gap-2">

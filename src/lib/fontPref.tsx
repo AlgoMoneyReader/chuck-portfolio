@@ -1,11 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/AuthProvider";
-import { getBrowserSupabase } from "@/lib/supabase/client";
+import { useCallback, useEffect, useState } from "react";
 import { FONTS, FONT_KEY, FONT_SCALE_KEY } from "@/lib/themeScript";
 
-// 글꼴·글자 크기: 이 기기(localStorage)에 저장하고, 로그인하면 계정(user_metadata)에도 저장해 다른 기기와 맞춘다
+// 글꼴·글자 크기: 기기마다 따로 저장(localStorage). 첫 화면 적용은 layout 의 FONT_INIT_SCRIPT 가 한다
 /** 글꼴 목록을 열면 미리보기용으로 CSS 만 불러온다 (글자는 쓰인 만큼만 내려받음) */
 export function loadFontCss(key: string) {
   const f = FONTS.find(x => x.key === key);
@@ -37,37 +35,15 @@ const readFont = () => { try { return localStorage.getItem(FONT_KEY) || "pretend
 const readScale = () => { try { const s = parseFloat(localStorage.getItem(FONT_SCALE_KEY) || ""); return s > 0.5 && s < 2 ? s : null; } catch { return null; } };
 
 export function useFontPref() {
-  const { user } = useAuth();
+  // 글꼴·글자 크기는 기기마다 따로 (PC는 표준, 휴대폰은 작게 등) — 이 기기(localStorage)에만 저장
   const [font, setFontState] = useState("pretendard");
   const [scale, setScaleState] = useState<number | null>(null);
-  const synced = useRef<string | null>(null);
 
   useEffect(() => { setFontState(readFont()); setScaleState(readScale()); }, []);
 
-  // 계정에 저장된 값이 있으면 적용 (로그인 직후 한 번)
-  const meta = user?.user_metadata as { font?: string; fontScale?: number | null } | undefined;
-  useEffect(() => {
-    if (!user || !meta) return;
-    const key = `${user.id}:${meta.font}:${meta.fontScale}`;
-    if (synced.current === key) return;
-    synced.current = key;
-    if (meta.font && FONTS.some(f => f.key === meta.font)) { applyFont(meta.font); setFontState(meta.font); }
-    if (meta.fontScale !== undefined) { applyScale(meta.fontScale ?? null); setScaleState(meta.fontScale ?? null); }
-  }, [user, meta]);
-
-  const save = useCallback((patch: { font?: string; fontScale?: number | null }) => {
-    if (!user) return;
-    synced.current = `${user.id}:${patch.font ?? meta?.font}:${patch.fontScale !== undefined ? patch.fontScale : meta?.fontScale}`;
-    getBrowserSupabase()?.auth.updateUser({ data: patch }).catch(() => { /* 로컬 설정은 유지 */ });
-  }, [user, meta]);
-
-  const setFont = useCallback((k: string) => { applyFont(k); setFontState(k); save({ font: k }); }, [save]);
-  // 미리보기(드래그 중)는 적용만, 손을 떼면 저장
+  const setFont = useCallback((k: string) => { applyFont(k); setFontState(k); }, []);
   const previewScale = useCallback((s: number | null) => { applyScale(s); setScaleState(s); }, []);
-  const commitScale = useCallback((s: number | null) => { applyScale(s); setScaleState(s); save({ fontScale: s }); }, [save]);
+  const commitScale = previewScale;
 
   return { font, scale, setFont, previewScale, commitScale };
 }
-
-/** 레이아웃에 한 번: 로그인하면 계정에 저장된 글꼴·크기를 어느 화면에서든 적용 */
-export function FontSync() { useFontPref(); return null; }
