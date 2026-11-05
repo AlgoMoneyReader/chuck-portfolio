@@ -3,17 +3,18 @@
 import StockSearchPanel from "./StockSearchPanel";
 import MarketSummary from "./MarketSummary";
 import DualBuyWidget from "./DualBuyWidget";
+import AsiaMarketList from "./AsiaMarketList";
 import { Pills, RegionTabs, useQueryTab } from "./Segmented";
 
 // 매매동향 탭: AI 레이더 분석(맨 위) → 국내(코스피/코스닥/섹터 흐름) / 미국
 export default function FlowTabs() {
-  const [m, setM] = useQueryTab("m", ["kr", "us"] as const, "kr");
+  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, "kr");
   const [k, setK] = useQueryTab("k", ["kospi", "kosdaq", "hot"] as const, "kospi");
   const [h, setH] = useQueryTab("h", ["sector", "dual"] as const, "sector");
 
   return (
     <div className="space-y-5">
-      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"]]} />
+      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} />
       <StockSearchPanel />
       {m === "kr" ? (
         <>
@@ -27,8 +28,10 @@ export default function FlowTabs() {
             <MarketSummary key={k} region="KR" krMarket={k === "kosdaq" ? "KOSDAQ" : "KOSPI"} />
           )}
         </>
-      ) : (
+      ) : m === "us" ? (
         <MarketSummary key="us" region="US" />
+      ) : (
+        <AsiaMarketList />
       )}
     </div>
   );

@@ -108,7 +108,7 @@ export async function GET(request: Request) {
         }
       }
     }
-    if (isUS) {
+    if (isUS && !symbol.includes(".")) { // 아시아 종목(.T/.TW/.HK 등)은 미국 프리·애프터 없음
       let e: ExtFields = await extendedOne<ExtFields>({ code: symbol, price });
       if (inDaySession() && process.env.KIS_APP_KEY) e = await dayMarketOne(e);
       preMarketPrice = e.preMarketPrice ?? preMarketPrice;
