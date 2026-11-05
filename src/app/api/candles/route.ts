@@ -16,9 +16,10 @@ const YAHOO: Record<string, string> = {
 };
 const KIS_INDEX: Record<string, string> = { KOSPI: "0001", KOSDAQ: "1001" };
 const KIS_SEC: Partial<Record<Tf, string>> = { "1m": "60", "2m": "120", "5m": "300", "30m": "1800", "60m": "3600" };
+// 차트를 왼쪽으로 끌거나 줄였을 때 과거가 비지 않도록 넉넉히 받는다 (Yahoo 한도: 1분 7일, 2·5·30분 60일, 1시간 2년)
 const Y_INT: Record<Tf, [string, string]> = {
-  "1m": ["1m", "1d"], "2m": ["2m", "1d"], "5m": ["5m", "5d"], "30m": ["30m", "1mo"], "60m": ["60m", "1mo"],
-  D: ["1d", "1y"], W: ["1wk", "5y"], M: ["1mo", "10y"],
+  "1m": ["1m", "5d"], "2m": ["2m", "1mo"], "5m": ["5m", "1mo"], "30m": ["30m", "60d"], "60m": ["60m", "6mo"],
+  D: ["1d", "5y"], W: ["1wk", "max"], M: ["1mo", "max"],
 };
 
 // lightweight-charts 는 UTC 로 그리므로 한국 시간 벽시계 그대로 UTC 초로 바꿔 넣는다
@@ -115,14 +116,13 @@ export async function GET(request: Request) {
         candles = intraday(tf) ? await kisIndexMinute(isc, tf) : await kisIndexDaily(isc, tf);
         source = "한국투자 (실시간)";
         // KIS 분봉은 최근 100개 안팎만 준다 → 그 앞 시간은 Yahoo 로 채움
-        if (intraday(tf) && candles.length) {
-          const first = candles[0].time as number;
+        if (candles.length) {
           const y = await yahoo(sym, tf).catch(() => null);
           if (y) {
-            prevClose = y.prevClose;
-            const firstDay = new Date(first * 1000).toISOString().slice(0, 10);
-            const earlier = y.candles.filter(c => (c.time as number) < first && new Date((c.time as number) * 1000).toISOString().slice(0, 10) === firstDay);
-            if (earlier.length) { candles = [...earlier, ...candles]; source = "한국투자 + Yahoo(앞부분)"; }
+            if (intraday(tf)) prevClose = y.prevClose;
+            const first = String(candles[0].time);
+            const earlier = y.candles.filter(c => (intraday(tf) ? (c.time as number) < (candles[0].time as number) : String(c.time) < first));
+            if (earlier.length) { candles = [...earlier, ...candles]; source = "한국투자 + Yahoo(과거 구간)"; }
           }
         }
       } catch { candles = []; }

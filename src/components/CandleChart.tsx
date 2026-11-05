@@ -75,7 +75,11 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
       if (intraday && state.prevClose) {
         series.createPriceLine({ price: state.prevClose, color: cc.refLine, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "전일" });
       }
-      chart.timeScale().fitContent();
+      // 처음 화면: 최근 구간만 (과거는 왼쪽으로 끌거나 줄이면 이어서 보인다)
+      const SHOW: Record<string, number> = { "1m": 390, "2m": 200, "5m": 160, "30m": 130, "60m": 120, D: 130, W: 110, M: 120 };
+      const n = state.candles.length, k = SHOW[tf] ?? 150;
+      if (n > k) chart.timeScale().setVisibleLogicalRange({ from: n - k, to: n + 2 });
+      else chart.timeScale().fitContent();
       chart.subscribeCrosshairMove(p => {
         const d = p.seriesData.get(series) as Candle | undefined;
         setHover(d && "open" in d ? { ...d, time: p.time as number | string } : null);
@@ -84,7 +88,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
       ro.observe(box.current);
     });
     return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; };
-  }, [state, height, intraday, digits, cc]);
+  }, [state, height, intraday, digits, cc, tf]);
 
   useEffect(() => {
     const c = state?.candles[state.candles.length - 1];
