@@ -95,7 +95,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
   );
 }
 
-// ── 증시 탭 · 아시아: 나라별 주요 종목(대표 대형주 상위 12) ──
+// ── 증시 탭 · 아시아: 나라별 주요 종목(대표 대형주 상위 10) ──
 interface AsiaRow { code: string; name: string; price: number; change?: number; changePct: number }
 export function AsiaTopWidget() {
   const [mkt, setMkt] = useState<AsiaMkt>("JP");
@@ -104,7 +104,7 @@ export function AsiaTopWidget() {
   const open = useStockModal();
   const info = ASIA_MARKETS.find(m => m.key === mkt)!;
   const load = useCallback(() => fetch(`/api/market-asia?mkt=${mkt}&type=cap`, { cache: "no-store" }).then(r => r.json())
-    .then(j => setRows((j.stocks ?? []).slice(0, 12))).catch(() => {}).finally(() => setLoading(false)), [mkt]);
+    .then(j => setRows((j.stocks ?? []).slice(0, 10))).catch(() => {}).finally(() => setLoading(false)), [mkt]);
   useEffect(() => {
     setLoading(true); load();
     const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
@@ -115,7 +115,7 @@ export function AsiaTopWidget() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">아시아 주요 종목 TOP12</h2>
+        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">아시아 주요 종목 TOP10</h2>
         <Link href={`/flow?m=asia&a=${mkt}`} className="text-xs text-gray-400 hover:text-cyan-brand">더보기 ›</Link>
       </div>
       <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
@@ -124,9 +124,9 @@ export function AsiaTopWidget() {
             className={`shrink-0 px-3.5 py-1.5 text-sm rounded-lg border whitespace-nowrap ${mkt === m.key ? "bg-white text-navy border-white font-bold" : "border-navy-border text-gray-400 hover:text-white"}`}>{m.flag} {m.label}</button>
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {loading && !rows.length
-          ? Array.from({ length: 12 }).map((_, i) => <div key={i} className="h-[72px] bg-navy-card border border-navy-border rounded-xl animate-pulse" />)
+          ? Array.from({ length: 10 }).map((_, i) => <div key={i} className="h-[72px] bg-navy-card border border-navy-border rounded-xl animate-pulse" />)
           : rows.map(r => {
               const ch = r.change != null ? Math.abs(r.change) : Math.abs(r.price - r.price / (1 + r.changePct / 100));
               return (
