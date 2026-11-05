@@ -564,7 +564,7 @@ function SectorHeatmap({ market }: { market: string }) {
 
   useEffect(() => {
     setLoading(true); setModalSector(null); load();
-    const i = setInterval(load, 120_000);
+    const i = setInterval(() => { if (document.visibilityState === "visible") load(); }, 30_000);
     return () => clearInterval(i);
   }, [load]);
 
@@ -778,7 +778,7 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 300_000 : 3_600_000);
+    const i = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 300_000);
     return () => clearInterval(i);
   }, [load]);
 
@@ -816,13 +816,13 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
               <div className="flex flex-col items-end">
-                <span className="text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
-                <span className={`md:hidden text-[11px] num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+                <span key={`${r.code}-p-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{fmtPrice(r.price)}</span>
+                <span key={`${r.code}-m-${r.changePct}`} className={`md:hidden text-[11px] num rounded animate-tick ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
               </div>
-              <span className={`hidden md:block text-right text-sm font-semibold num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+              <span key={`${r.code}-c-${r.changePct}`} className={`hidden md:block text-right text-sm font-semibold num rounded animate-tick ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
               <span className="hidden md:block text-right text-sm text-gray-300 num whitespace-nowrap">{fmtPrice(r.week52High)}</span>
               {/* 돌파 = 오늘 52주 고가를 새로 씀, 근접 = 고가까지 남은 하락폭 */}
-              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.isNewHigh ? "text-gold" : "text-gray-300"}`}>
+              <span key={`${r.code}-d-${r.distFromHigh}-${r.isNewHigh}`} className={`text-right text-sm font-semibold num whitespace-nowrap rounded animate-tick ${r.isNewHigh ? "text-gold" : "text-gray-300"}`}>
                 {r.isNewHigh ? "신고가" : `${r.distFromHigh.toFixed(1)}%`}
               </span>
             </div>
@@ -881,8 +881,8 @@ function InvestorRankCol({
               {item.name}
             </p>
             <p className="text-xs text-gray-500 num leading-tight">
-              {item.price.toLocaleString("ko-KR")}원
-              <span className={`ml-1 ${item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+              <span key={`${item.code}-p-${item.price}`} className="rounded px-0.5 animate-tick">{item.price.toLocaleString("ko-KR")}원</span>
+              <span key={`${item.code}-c-${item.changePct}`} className={`ml-1 rounded px-0.5 animate-tick ${item.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {item.changePct >= 0 ? "▲" : "▼"}{Math.abs(item.changePct).toFixed(2)}%
               </span>
             </p>
@@ -918,7 +918,8 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
       .then(j => { if (j && !j.error) setData(j as RankData); })
       .finally(() => setLoading(false));
     load();
-    const iv = setInterval(() => { if (document.visibilityState === "visible" && isMarketOpen()) load(); }, 30_000);
+    // 순위는 서버가 60초 보관, 가격·등락률은 5초마다 실시간
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 60_000);
     return () => clearInterval(iv);
   }, [market]);
 
@@ -1129,13 +1130,13 @@ function USStockList({
                   )}
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className={`font-semibold whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "+" : "-"}{Math.abs(r.changePct).toFixed(2)}%</span>
+                  <span key={`${r.code}-c-${r.changePct}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "+" : "-"}{Math.abs(r.changePct).toFixed(2)}%</span>
                   {extPrice != null && extPct != null && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>}
                 </div>
                 <span className="text-right text-gray-300 whitespace-nowrap">
                   {isCap ? (r.capUsd ? (r.capUsd >= 1e12 ? `$${(r.capUsd / 1e12).toFixed(2)}T` : `$${(r.capUsd / 1e9).toFixed(0)}B`) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
-                <span className={`text-right whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>{r.change != null ? `${isPos ? "▲" : "▼"}$${Math.abs(r.change).toFixed(2)}` : "—"}</span>
+                <span className="text-right"><span key={`${r.code}-d-${r.change}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${isPos ? "text-signal-green" : "text-signal-red"}`}>{r.change != null ? `${isPos ? "▲" : "▼"}$${Math.abs(r.change).toFixed(2)}` : "—"}</span></span>
               </div>
               </Fragment>
             );
@@ -1175,7 +1176,7 @@ function USSectorHeatmap() {
 
   useEffect(() => {
     setLoading(true); load();
-    const iv = setInterval(load, 120_000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 30_000);
     return () => clearInterval(iv);
   }, [load]);
 

@@ -350,7 +350,7 @@ export async function GET(request: Request) {
     const sorted = quotes
       .map(q => ({ ...q, name: `${POPULAR_ETFS[q.code] ?? q.name}` }))
       .sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0))
-      .slice(0, 30)
+      .slice(0, TOP_N)
       .map((q, i) => ({ ...q, rank: i + 1 }));
     const body = { stocks: await withExtended(sorted), timestamp: ts, basis: "dollarVolume" };
     resCache.set(ck, { at: Date.now(), body });
