@@ -87,18 +87,17 @@ export function MarketClockStrip() {
         </div>
       ))}
     </div>
-    <div className="hidden md:flex gap-1.5 flex-wrap">
+    {/* PC: 8칸 한 줄 — 위: 국기·나라·상태 점 / 아래: 한국시간 기준 문구 */}
+    <div className="hidden md:grid grid-cols-8 gap-1.5">
       {clocks.map(c => (
-        <div key={c.def.key} title={c.next}
-          className="shrink-0 flex items-center gap-2 rounded-xl border border-navy-border bg-navy-card px-3 py-1.5">
-          <span className="text-base leading-none">{c.def.flag}</span>
-          <div className="leading-tight">
-            <p className="text-[11px] text-gray-500">{c.def.name}</p>
-            <p className={`text-sm font-bold num whitespace-nowrap ${c.regular ? "text-white" : "text-gray-400"}`}>{c.short}</p>
-          </div>
-          <span className={`flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap ${tone(c)}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${dot(c)} ${c.regular ? "animate-pulse" : ""}`} />{c.status}
-          </span>
+        <div key={c.def.key} title={`${c.def.name} ${c.status}${c.holiday ? ` · ${c.holiday}` : ""} · ${c.next}`}
+          className="min-w-0 rounded-xl border border-navy-border bg-navy-card px-2.5 py-1.5">
+          <p className="flex items-center gap-1.5 text-xs text-gray-400 leading-tight">
+            <span className="text-sm leading-none">{c.def.flag}</span>
+            <span className="truncate">{c.def.name}</span>
+            <span className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${dot(c)} ${c.regular ? "animate-pulse" : ""}`} />
+          </p>
+          <p className={`mt-0.5 text-sm font-bold num truncate ${c.regular ? "text-white" : "text-gray-400"}`}>{c.short}</p>
         </div>
       ))}
     </div>
