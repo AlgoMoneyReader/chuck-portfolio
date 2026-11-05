@@ -1,8 +1,45 @@
 import { NextResponse } from "next/server";
 import { koreanName } from "@/lib/stockList";
+import { kisGet, num } from "@/lib/kis";
 import { krSession } from "@/lib/krSession";
 import { nxtQuote } from "@/lib/nxtPrice";
 import { extendedOne, dayMarketOne, inDaySession, type ExtFields } from "@/lib/usExtended";
+
+export const preferredRegion = "icn1";
+
+// 국내: KIS 현재가(실시간) — Yahoo 국내 시세는 지연·누락이 잦다
+async function krFromKis(code: string, market: string) {
+  if (!process.env.KIS_APP_KEY) return null;
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code });
+    const o = (j.output ?? {}) as Record<string, string>;
+    const price = num(o.stck_prpr) ?? 0;
+    if (!price) return null;
+    const down = o.prdy_vrss_sign === "4" || o.prdy_vrss_sign === "5";
+    const sg = (v: number | null) => (v == null ? 0 : down ? -Math.abs(v) : Math.abs(v));
+    const change = sg(num(o.prdy_vrss)), changePct = sg(num(o.prdy_ctrt));
+    let preMarketPrice: number | null = null, postMarketPrice: number | null = null;
+    const s = krSession();
+    if (s.key !== "regular") {
+      const n = await nxtQuote(code);
+      if (n) { if (s.key === "nxt-pre" || s.key === "auction-open") preMarketPrice = n.price; else postMarketPrice = n.price; }
+    }
+    const pctVs = (x: number | null) => (x && price ? parseFloat((((x - price) / price) * 100).toFixed(2)) : null);
+    return {
+      symbol: `${code}.${market}`, code, market, currency: "KRW", isUS: false,
+      name: koreanName(`${code}.${market}`),
+      price, change, changePct,
+      dayHigh: num(o.stck_hgpr) ?? 0, dayLow: num(o.stck_lwpr) ?? 0, volume: num(o.acml_vol) ?? 0,
+      week52High: num(o.w52_hgpr) ?? 0, week52Low: num(o.w52_lwpr) ?? 0,
+      marketState: s.key === "regular" ? "REGULAR" : s.key === "closed" ? "CLOSED" : s.key === "nxt-pre" || s.key === "auction-open" ? "PRE" : "POST",
+      dayMarketPrice: null, dayMarketChangePct: null,
+      preMarketPrice, preMarketChangePct: pctVs(preMarketPrice),
+      postMarketPrice, postMarketChangePct: pctVs(postMarketPrice),
+      naverUrl: `https://finance.naver.com/item/main.naver?code=${code}`,
+      source: "kis",
+    };
+  } catch { return null; }
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,6 +52,11 @@ export async function GET(request: Request) {
 
   // 수치 포맷: 국내는 원 단위(정수), 미국은 달러(소수 2자리)
   const fmt = (n: number) => isUS ? parseFloat(n.toFixed(2)) : Math.round(n);
+
+  if (!isUS) {
+    const k = await krFromKis(code, market);
+    if (k) return NextResponse.json(k, { headers: { "Cache-Control": "no-store" } });
+  }
 
   try {
     // 1년 주봉으로 52주 범위 + 오늘 메타 동시 조회
