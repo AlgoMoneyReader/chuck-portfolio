@@ -197,3 +197,13 @@ html[data-theme="light"] .sig-track { stroke: rgb(var(--c-navy-border)); }
   .ticker { overflow-x: auto; }
   .ticker-track { animation: none; }
 }
+
+/* ── 글자 크기 설정(My > 설정): rem 은 html 글자 크기로 함께 커지고, px 로 고정한 작은 글씨도 같은 비율로 ── */
+.text-\[8px\] { font-size: calc(8px * var(--fs, 1)); }
+.text-\[17px\] { font-size: calc(17px * var(--fs, 1)); }
+.text-\[9px\] { font-size: calc(9px * var(--fs, 1)); }
+.text-\[10px\] { font-size: calc(10px * var(--fs, 1)); }
+.text-\[11px\] { font-size: calc(11px * var(--fs, 1)); }
+.text-\[12px\] { font-size: calc(12px * var(--fs, 1)); }
+.text-\[13px\] { font-size: calc(13px * var(--fs, 1)); }
+.text-\[15px\] { font-size: calc(15px * var(--fs, 1)); }
