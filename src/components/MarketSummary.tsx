@@ -465,6 +465,7 @@ function EtfList({ onSelect }: { onSelect: (d: DrawerState) => void }) {
 
 function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<SpikeRow[]>([]);
+  const [basis, setBasis] = useState("5일 평균 대비");
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
 
@@ -474,6 +475,7 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
       if (!res.ok) return;
       const json = await res.json();
       setRows(json.spikes ?? []);
+      setBasis(json.basis ?? "5일 평균 대비");
       setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market]);
@@ -495,14 +497,14 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
       <div className="flex justify-between mb-3 text-xs"><StatusBadge />
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <p className="text-xs text-gray-600 mb-3">5일 평균 대비 오늘 거래량 배율 기준 정렬</p>
+      <p className="text-xs text-gray-600 mb-3">{basis} 오늘 거래량 배율 순 · 1.5배 이상 · 최대 30종목</p>
       <div className="grid items-center gap-x-3 grid-cols-[20px_minmax(0,1fr)_64px_76px_44px] md:gap-x-4 md:grid-cols-[28px_minmax(160px,2fr)_repeat(4,minmax(0,1fr))] py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="text-center">#</span>
         <span>종목</span>
         <span className="hidden md:block text-right">현재가</span>
         <span className="text-right">등락률</span>
         <span className="text-right">오늘 거래량</span>
-        <span className="text-right">5일 평균 대비</span>
+        <span className="text-right">{basis}</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">데이터가 없습니다</p>
@@ -523,7 +525,7 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
               <span className="text-right text-sm text-gray-300 num whitespace-nowrap">{fmtVol(r.todayVolume)}</span>
-              <span className="text-right text-sm font-bold text-gold num">{r.ratio}x</span>
+              <span className="text-right text-sm font-bold text-gold num">{r.ratio.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}배</span>
             </div>
           ))}
         </div>
