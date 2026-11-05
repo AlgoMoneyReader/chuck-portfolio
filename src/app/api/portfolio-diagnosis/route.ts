@@ -116,10 +116,10 @@ interface HoldingInput {
 
 function extractCodeAndMarket(ticker: string): { code: string; market: string } | null {
   // Format: "005930.KS" or "005930.KQ"
-  const dotMatch = ticker.match(/^(\d{6})\.(KS|KQ)$/);
+  const dotMatch = ticker.match(/^([0-9][0-9A-Z]{5})\.(KS|KQ)$/);
   if (dotMatch) return { code: dotMatch[1], market: dotMatch[2] };
   // Format: raw 6-digit
-  if (/^\d{6}$/.test(ticker)) return { code: ticker, market: "KS" };
+  if (/^[0-9][0-9A-Z]{5}$/.test(ticker)) return { code: ticker, market: "KS" };
   return null;
 }
 

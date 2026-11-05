@@ -292,7 +292,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
     const hit = allStocks.find(x => x.code === code);
     if (hit) loadStock(hit);
     else if (/^[A-Z]/.test(code)) loadStock({ code, name: initialName || code, market: "US", type: "us" } as SearchResult);
-    else if (/^\d{6}$/.test(code)) loadStock({ code, name: initialName || code, market: (mk === "KQ" ? "KQ" : "KS"), type: "regular" } as SearchResult);
+    else if (/^[0-9][0-9A-Z]{5}$/.test(code)) loadStock({ code, name: initialName || code, market: (mk === "KQ" ? "KQ" : "KS"), type: "regular" } as SearchResult);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTicker]);
 

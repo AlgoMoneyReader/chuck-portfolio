@@ -79,7 +79,7 @@ async function fetchMarket(
     .map((r) => {
       const code = (r.ISU_SRT_CD ?? "").trim();
       const name = (r.ISU_ABBRV ?? r.ISU_NM ?? "").trim();
-      if (!code || !name || !/^\d{6}$/.test(code)) return null;
+      if (!code || !name || !/^[0-9][0-9A-Z]{5}$/.test(code)) return null;
 
       const isEtf =
         (r.ISU_ETP_TP_NM ?? "").trim().toUpperCase() === "ETF" ||

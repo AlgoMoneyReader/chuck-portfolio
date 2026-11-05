@@ -158,7 +158,7 @@ type KisRow = Record<string, string>;
 function toRow(r: KisRow, i: number, suffix: string): TopGainerRow | null {
   const code = (r.mksc_shrn_iscd ?? r.stck_shrn_iscd ?? "").trim();
   const price = num(r.stck_prpr) ?? 0;
-  if (!/^\d{6}$/.test(code) || !price) return null;
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code) || !price) return null;
   const sign = r.prdy_vrss_sign;
   const diff = Math.abs(num(r.prdy_vrss) ?? 0) * (sign === "4" || sign === "5" ? -1 : 1);
   const vol = num(r.acml_vol) ?? 0;

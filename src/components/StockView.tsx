@@ -724,7 +724,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const asiaName = asia ? ASIA_STOCKS[asia].find(a => a.s === code)?.ko : undefined;
   const cur = asiaInfo ? asiaInfo.currency : "$";
   const name = isUS ? (nameProp || asiaName || usItem?.name || code) : (d?.name ?? nameProp ?? code);
-  const mk = isUS ? "US" : (d?.marketCode ?? (marketProp === "KQ" ? "KQ" : marketProp === "KS" ? "KS" : null));
+  const mk = isUS ? "US" : (d?.marketCode ?? (marketProp === "KQ" ? "KQ" : marketProp === "KS" ? "KS" : loading ? null : "KS"));
   const tabs: Tab[] = asia ? ["현황", "뉴스"] : isUS ? ["현황", "정보", "뉴스", "공시", "레이더"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더"];
 
   useEffect(() => { setTab("현황"); setX(null); setD(null); }, [code]);
@@ -815,11 +815,13 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
       </div>
 
       <div className="px-4 py-4">
-        {!isUS && loading ? (
+        {/* 현황·뉴스·공시는 종목 개요(PER 등)가 없어도 보여준다 — 영문 섞인 신형 우선주 코드(18064K 등)처럼 개요 조회가 안 되는 종목 대비 */}
+        {!isUS && loading && tab !== "현황" ? (
           <div className="space-y-3">{[0, 1, 2].map(i => <div key={i} className="card h-40 animate-pulse" />)}</div>
-        ) : !isUS && !d ? (
-          <div className="card text-center text-sm text-gray-500 py-10">종목 정보를 불러올 수 없습니다</div>
-        ) : tab === "현황" ? <QuoteTab x={x} isUS={isUS} cur={cur} symbol={isUS ? code : `${code}.${mk}`} />
+        ) : tab === "현황" ? <QuoteTab x={x} isUS={isUS} cur={cur} symbol={isUS ? code : `${code}.${mk ?? "KS"}`} />
+          : !isUS && !d && (tab === "정보" || tab === "수급" || tab === "레이더") ? (
+          <div className="card text-center text-sm text-gray-500 py-10">이 종목은 {tab} 정보를 불러올 수 없습니다</div>
+        )
           : tab === "정보" ? (isUS ? <UsInfoTab ticker={code} price={x?.price ?? null} /> : <OverviewTab d={d!} />)
           : tab === "수급" && !isUS ? <FlowTab code={code} market={d!.marketCode} />
           : tab === "레이더" ? <RadarReport code={code} name={name} market={isUS ? "US" : d!.marketCode} />

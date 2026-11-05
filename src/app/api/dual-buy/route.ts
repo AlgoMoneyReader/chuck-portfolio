@@ -60,7 +60,7 @@ export async function GET() {
       try { rows = await rank(market, investor); } catch (e) { errors.push(`${market}/${investor}: ${String(e).slice(0, 80)}`); }
       for (const r of rows) {
         const code = (r.mksc_shrn_iscd ?? "").trim();
-        if (!/^\d{6}$/.test(code) || merged.has(code)) continue;
+        if (!/^[0-9][0-9A-Z]{5}$/.test(code) || merged.has(code)) continue;
         const foreign = Math.round((num(r.frgn_ntby_tr_pbmn) ?? 0) / 100);
         const institution = Math.round((num(r.orgn_ntby_tr_pbmn) ?? 0) / 100);
         const price = num(r.stck_prpr) ?? 0;

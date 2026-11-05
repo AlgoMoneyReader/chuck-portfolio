@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OPEN_CHART_EVENT } from "./MarketTicker";
 import { Pills, RegionTabs, useQueryTab } from "./Segmented";
+import { MarketClockStrip } from "./MarketClock";
 
 // 증시 탭: 국내/미국 → (국내) 증시/수급 → (수급) 코스피/코스닥/코스피200
 export default function HomeTabs() {
@@ -27,6 +28,7 @@ export default function HomeTabs() {
 
   return (
     <div className="space-y-5">
+      <MarketClockStrip />
       <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} />
       {m === "kr" && <Pills value={v} onChange={setV} items={[["market", "증시"], ["flow", "수급"]]} />}
 
