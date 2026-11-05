@@ -15,8 +15,35 @@ function useClocks(): ClockState[] {
   return now ? MARKETS.map(m => clockOf(m, now)) : [];
 }
 
-// 한 줄에 들어가게: '프리마켓까지 3시간 8분' → '프리 3시간8분'
-const shortNext = (t: string) => t.replace("마켓까지", "").replace("까지", "").replace(/시간 /, "시간").replace("일 ", "일");
+// 한국시간 하루(06시~다음날 06시) 위에 각 시장 정규장 막대, 세로선 = 지금
+function TimeBars({ clocks }: { clocks: ClockState[] }) {
+  const k = new Date(Date.now() + 9 * 3_600_000);
+  const nowM = ((k.getUTCHours() * 60 + k.getUTCMinutes()) - 360 + 1440) % 1440; // 06시 기준
+  return (
+    <div className="mt-2 px-1">
+      <div className="relative ml-7 h-3 text-[9px] text-gray-600 num">
+        {[6, 12, 18, 0].map(h => <span key={h} className="absolute -translate-x-1/2" style={{ left: `${(((h * 60 - 360) + 1440) % 1440) / 14.4}%` }}>{h}시</span>)}
+      </div>
+      <div className="relative space-y-1">
+        {clocks.map(c => (
+          <div key={c.def.key} className="flex items-center gap-1.5">
+            <span className="w-5 text-center text-xs leading-none">{c.def.flag}</span>
+            <div className="relative flex-1 h-2 rounded-full bg-navy-sub">
+              {c.barsKst.map(([a, b], i) => {
+                const s0 = (((a - 360) % 1440) + 1440) % 1440, len = b - a;
+                const parts: [number, number][] = s0 + len > 1440 ? [[s0, 1440 - s0], [0, s0 + len - 1440]] : [[s0, len]];
+                return parts.map(([x, w], j) => <span key={`${i}-${j}`} className={`absolute inset-y-0 rounded-full ${c.regular ? "bg-signal-green" : "bg-cyan-brand/50"}`} style={{ left: `${x / 14.4}%`, width: `${w / 14.4}%` }} />);
+              })}
+            </div>
+          </div>
+        ))}
+        <span className="absolute top-0 bottom-0 w-px bg-gold" style={{ left: `calc(1.75rem + (100% - 1.75rem) * ${nowM / 1440})` }} />
+      </div>
+      <p className="text-[10px] text-gray-600 mt-1">막대 = 정규장(한국시간) · 노란 선 = 지금</p>
+    </div>
+  );
+}
+
 const dot = (c: ClockState) => (c.regular ? "bg-signal-green" : c.open ? "bg-amber-400" : "bg-gray-600");
 const tone = (c: ClockState) => (c.regular ? "text-signal-green" : c.open ? "text-amber-400" : "text-gray-500");
 
@@ -26,7 +53,7 @@ export function MarketClockStrip() {
   if (!clocks.length) return <div className="h-[52px]" />;
   return (
     <>
-    {/* 휴대폰: 국기·시각만 8칸 한 줄 (점 = 장중 초록 / 장외거래 노랑 / 휴장 회색) */}
+    {/* 휴대폰: 8칸 한 줄, 한국시간 기준 — 장중(초록)은 마감까지 남은 시간, 장 밖은 다음 개장 시각 */}
     <div className="md:hidden grid grid-cols-8 gap-1 rounded-xl border border-navy-border bg-navy-card px-1.5 py-2">
       {clocks.map(c => (
         <div key={c.def.key} title={`${c.def.name} ${c.status} · ${c.next}`} className="flex flex-col items-center leading-none">
@@ -34,7 +61,7 @@ export function MarketClockStrip() {
             {c.def.flag}
             <span className={`absolute -top-0.5 -right-1 w-1.5 h-1.5 rounded-full ring-1 ring-navy-card ${dot(c)}`} />
           </span>
-          <span className={`mt-1 text-[11px] font-semibold num ${c.regular ? "text-white" : "text-gray-400"}`}>{c.time}</span>
+          <span className={`mt-1 text-[10px] font-semibold num whitespace-nowrap ${c.regular ? "text-signal-green" : "text-gray-400"}`}>{c.regular ? c.short.replace("마감 ", "") : c.short.replace(" 개장", "").replace(/^[일월화수목금토] /, "")}</span>
         </div>
       ))}
     </div>
@@ -44,8 +71,8 @@ export function MarketClockStrip() {
           className="shrink-0 flex items-center gap-2 rounded-xl border border-navy-border bg-navy-card px-3 py-1.5">
           <span className="text-base leading-none">{c.def.flag}</span>
           <div className="leading-tight">
-            <p className="text-[11px] text-gray-500">{c.def.city}</p>
-            <p className="text-sm font-bold text-white num">{c.time}</p>
+            <p className="text-[11px] text-gray-500">{c.def.name}</p>
+            <p className={`text-sm font-bold num whitespace-nowrap ${c.regular ? "text-white" : "text-gray-400"}`}>{c.short}</p>
           </div>
           <span className={`flex items-center gap-1 text-[11px] font-semibold whitespace-nowrap ${tone(c)}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${dot(c)} ${c.regular ? "animate-pulse" : ""}`} />{c.status}
@@ -80,18 +107,18 @@ export function MarketClockButton() {
       </button>
       {open && (
         <div className="fixed left-3 right-3 top-[calc(var(--hdr,115px)+6px)] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[380px] rounded-2xl border border-navy-border bg-navy-card shadow-2xl z-[90] px-3 py-2.5">
-          <p className="text-xs text-gray-500 px-1 mb-1">세계 증시 시간 · 현지 시각</p>
+          <p className="text-xs text-gray-500 px-1 mb-1">세계 증시 시간 · 모두 한국시간 기준</p>
           <ul className="divide-y divide-navy-border/50">
             {clocks.map(c => (
               <li key={c.def.key} className="flex items-center gap-2 py-1.5 px-1 text-sm">
                 <span className="text-base leading-none w-5 text-center">{c.def.flag}</span>
                 <span className="w-9 text-gray-300 whitespace-nowrap">{c.def.name}</span>
-                <span className="w-11 font-bold text-white num">{c.time}</span>
                 <span className={`w-[4.5rem] flex items-center gap-1 text-xs font-semibold whitespace-nowrap ${tone(c)}`}><span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot(c)}`} />{c.status}</span>
-                <span className="flex-1 min-w-0 text-right text-[11px] text-gray-500 truncate" title={c.next}>{shortNext(c.next)}</span>
+                <span className={`flex-1 min-w-0 text-right text-xs num truncate ${c.regular ? "text-white font-semibold" : "text-gray-400"}`}>{c.short}</span>
               </li>
             ))}
           </ul>
+          <TimeBars clocks={clocks} />
           <p className="text-[10px] text-gray-600 px-1 mt-1.5">서머타임 자동 반영 · 나라별 공휴일 휴장은 반영되지 않습니다</p>
         </div>
       )}

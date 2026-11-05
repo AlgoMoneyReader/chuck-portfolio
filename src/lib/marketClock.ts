@@ -52,7 +52,20 @@ function inSession(key: string, s: Session, wd: number, min: number): boolean {
 
 export interface ClockState {
   def: MarketDef; time: string; status: string; open: boolean; regular: boolean; next: string;
+  short: string;              // 한 줄용(한국시간 기준): 장중이면 '마감 38분', 아니면 '23:30 개장' / '월 09:00 개장'
+  barsKst: [number, number][]; // 오늘 정규장 구간(한국시간 분, 0~1440 넘으면 다음 날로 이어짐)
 }
+
+// 시간대의 UTC 대비 분 차이 (서머타임 반영)
+function offsetMin(tz: string, now: Date): number {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(now).map(x => [x.type, x.value]));
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+  return Math.round((asUtc - Math.floor(now.getTime() / 60000) * 60000) / 60000);
+}
+const KST_DAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const kstHHMM = (d: Date) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+const kstDay = (d: Date) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", weekday: "short" }).format(d);
 
 const fmtDur = (m: number) => (m >= 60 * 24 ? `${Math.floor(m / 1440)}일 ${Math.floor((m % 1440) / 60)}시간` : m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`);
 
@@ -70,10 +83,31 @@ export function clockOf(def: MarketDef, now = new Date()): ClockState {
   }
   const nextKind = step ? kindAt((wd + Math.floor((min + step) / 1440)) % 7, (min + step) % 1440) : "closed";
   const nextLabel = nowKind === "regular" ? "마감까지" : nextKind === "regular" ? "개장까지" : nextKind === "closed" ? "종료까지" : `${KIND_LABEL[nextKind as Session["kind"]]}까지`;
+  // 다음 정규장 시작까지(분) — 장 밖일 때만
+  let toOpen = 0;
+  if (nowKind !== "regular") {
+    for (let d = 5 - (min % 5); d <= 5 * 1440; d += 5) {
+      const tot = min + d;
+      if (kindAt((wd + Math.floor(tot / 1440)) % 7, tot % 1440) === "regular") { toOpen = d - (d === 5 - (min % 5) ? 0 : 0); break; }
+    }
+  }
+  const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m}분`);
+  let short = "";
+  if (nowKind === "regular") short = `마감 ${hm(step)}`;
+  else if (toOpen) {
+    const at = new Date(Math.ceil(now.getTime() / 60000) * 60000 + toOpen * 60000);
+    const sameDay = kstDay(at) === kstDay(now) || toOpen < 12 * 60;
+    short = `${sameDay ? "" : KST_DAYS[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(kstDay(at))] + " "}${kstHHMM(at)} 개장`;
+  }
+  // 정규장 구간을 한국시간 분으로 (점심시간은 빠짐)
+  const shift = offsetMin("Asia/Seoul", now) - offsetMin(def.tz, now);
+  const barsKst = def.sessions.filter(x => x.kind === "regular").map(x => [toMin(x.from) + shift, toMin(x.to) + shift] as [number, number]);
+
   return {
     def, time: hhmm,
     status: cur ? KIND_LABEL[cur.kind] : isWeekday(wd) ? (min < toMin(def.sessions[0].from) ? "개장 전" : "마감") : "주말 휴장",
     open: !!cur && cur.kind !== "lunch", regular: cur?.kind === "regular",
     next: step ? `${nextLabel} ${fmtDur(step)}` : "",
+    short, barsKst,
   };
 }
