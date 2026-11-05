@@ -47,8 +47,8 @@ export default function AsiaMarketList() {
 
   useEffect(() => {
     setLoading(true); setRows([]); load();
-    // 실시간 티커처럼 10초마다 (서버 20초 캐시)
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
+    // 실시간 티커처럼 5초마다 (서버 6초 캐시, 거래소 시세 자체가 지연될 수 있음)
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 5_000);
     return () => clearInterval(iv);
   }, [load]);
 
@@ -120,12 +120,12 @@ export default function AsiaMarketList() {
                     </div>
                   </div>
                   <span key={`${r.code}-d-${r.price}`} className="text-right text-white whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
-                  <span className={`text-right font-semibold whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "+" : r.changePct < 0 ? "-" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+                  <span className="text-right"><span key={`${r.code}-c-${r.changePct}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${tone(r.changePct)}`}>{r.changePct > 0 ? "+" : r.changePct < 0 ? "-" : ""}{Math.abs(r.changePct).toFixed(2)}%</span></span>
                   <span className={`text-right whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
                     {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
                   </span>
                   <span className={`text-right whitespace-nowrap ${tone(r.changePct)}`}>{r.change != null ? `${r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}${Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
-                  <span className="text-right text-gray-300 whitespace-nowrap">{r.volume ? r.volume.toLocaleString("ko-KR") : "—"}</span>
+                  <span className="text-right"><span key={`${r.code}-v-${r.volume}`} className="text-gray-300 whitespace-nowrap rounded px-0.5 animate-tick">{r.volume ? r.volume.toLocaleString("ko-KR") : "—"}</span></span>
                 </div>
               );
             })}

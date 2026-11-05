@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { naverRealtime } from "@/lib/krLive";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -63,13 +64,22 @@ export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
   const sort = sp.get("sort") ?? "cap", kind = sp.get("kind") ?? "all";
   try {
-    if (!cache || Date.now() - cache.at > 5_000) {
+    if (!cache || Date.now() - cache.at > 20_000) {
       const [etf, etn] = await Promise.all([naverList("etf").catch(() => [] as Row[]), naverList("etn").catch(() => [] as Row[])]);
       let rows = [...etf, ...etn], source = "네이버 금융";
       if (!rows.length) { rows = await mobileFallback(); source = "네이버 증권(시가총액 순위)"; }
       if (rows.length) cache = { at: Date.now(), rows, source };
     }
     let rows = cache?.rows ?? [];
+    // 실시간 덧입히기: 정렬 기준이 바뀔 수 있어 후보(현재 정렬 상위 150)를 먼저 고른 뒤 덧입히고 다시 정렬
+    const pre = sort === "up" ? [...rows].sort((a, b) => b.changePct - a.changePct)
+      : sort === "down" ? [...rows].sort((a, b) => a.changePct - b.changePct)
+      : sort === "amount" ? [...rows].sort((a, b) => b.tradeAmount - a.tradeAmount)
+      : [...rows].sort((a, b) => (b.capEok ?? 0) - (a.capEok ?? 0));
+    const cand = (kind === "all" ? pre : pre).slice(0, kind === "all" ? 150 : pre.length);
+    const live = await naverRealtime(cand.map(r => r.code)).catch(() => ({} as Awaited<ReturnType<typeof naverRealtime>>));
+    const liveMap = new Map(cand.map(r => [r.code, live[r.code] ? { ...r, ...live[r.code], volume: live[r.code].volume || r.volume, tradeAmount: live[r.code].tradeAmount || r.tradeAmount, capEok: r.capEok && r.price ? Math.round(r.capEok * (live[r.code].price / r.price)) : r.capEok } : r]));
+    rows = rows.map(r => liveMap.get(r.code) ?? r);
     if (kind === "lev") rows = rows.filter(r => LEV.test(r.name) && !INV.test(r.name));
     else if (kind === "inv") rows = rows.filter(r => INV.test(r.name));
     else if (kind === "etn") rows = rows.filter(r => r.type === "ETN");

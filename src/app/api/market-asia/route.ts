@@ -63,7 +63,7 @@ const twStockFlow = unstable_cache(async () => {
   return Object.fromEntries(j.data.map(d => [String(d[ci]).trim(), twNum(d[fi])]));
 }, ["tw-t86-v1"], { revalidate: 600 });
 
-const quotes = unstable_cache(async (mkt: AsiaMkt) => spark(ASIA_STOCKS[mkt].map(x => x.s)), ["asia-quotes-v1"], { revalidate: 20 });
+const quotes = unstable_cache(async (mkt: AsiaMkt) => spark(ASIA_STOCKS[mkt].map(x => x.s)), ["asia-quotes-v1"], { revalidate: 6 });
 
 export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;

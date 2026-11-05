@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { naverRealtime } from "@/lib/krLive";
 import { KOSPI_SYMBOLS, KOSDAQ_SYMBOLS, koreanName } from "@/lib/stockList";
 import { kisGet, num } from "@/lib/kis";
 
@@ -114,13 +115,27 @@ async function fromYahoo(market: string): Promise<Week52Result[]> {
 }
 
 const cache: Record<string, { at: number; body: object }> = {};
+
+// 현재가가 움직이면 등락률·고가 대비·신고가 여부도 같이 바뀐다 (장중에 고가를 넘으면 그 값이 새 52주 고가)
+async function live52(body: object): Promise<object> {
+  const b = body as { candidates: Week52Result[] };
+  const live = await naverRealtime(b.candidates.map(c => c.code)).catch(() => ({} as Awaited<ReturnType<typeof naverRealtime>>));
+  const candidates = b.candidates.map(c => {
+    const l = live[c.code];
+    if (!l) return c;
+    const high = Math.max(c.week52High, l.price);
+    const dist = ((l.price - high) / high) * 100;
+    return { ...c, price: l.price, changePct: l.changePct, week52High: high, distFromHigh: Math.round(dist * 10) / 10, isNewHigh: c.isNewHigh || l.price >= c.week52High };
+  });
+  return { ...body, candidates, priceAt: new Date().toISOString() };
+}
 const TTL = 5 * 60_000;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const market = searchParams.get("market") === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
   const hit = cache[market];
-  if (hit && Date.now() - hit.at < TTL) return NextResponse.json(hit.body);
+  if (hit && Date.now() - hit.at < TTL) return NextResponse.json(await live52(hit.body), { headers: { "Cache-Control": "no-store" } });
 
   try {
     const kis = await fromKis(market);
@@ -133,7 +148,7 @@ export async function GET(request: Request) {
       .map((r, i) => ({ ...r, rank: i + 1 }));
     const body = { market, candidates, source: kis ? "kis" : "yahoo", timestamp: new Date().toISOString() };
     if (candidates.length) cache[market] = { at: Date.now(), body };
-    return NextResponse.json(body);
+    return NextResponse.json(await live52(body), { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "데이터를 불러올 수 없습니다" }, { status: 500 });
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { naverRealtime } from "@/lib/krLive";
 import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
@@ -49,12 +50,22 @@ const toItems = (list: { p: Parsed; amt: number; qty: number }[]): RankItem[] =>
   list.slice(0, 30).map((x, i) => ({ rank: i + 1, code: x.p.code, name: x.p.name, price: x.p.price, changePct: x.p.changePct, netBuyAmount: x.amt, netBuyQty: x.qty }));
 
 const cache: Record<string, { at: number; body: object }> = {};
+
+// 순위 목록 안 종목들의 현재가·등락률만 실시간으로 바꿔 끼운다
+async function withLivePrices(body: object): Promise<object> {
+  const b = body as { buy: Record<string, RankItem[]>; sell: Record<string, RankItem[]> };
+  const all = [...Object.values(b.buy), ...Object.values(b.sell)].flat();
+  const live = await naverRealtime(Array.from(new Set(all.map(r => r.code)))).catch(() => ({} as Awaited<ReturnType<typeof naverRealtime>>));
+  const fix = (rows: RankItem[]) => rows.map(r => (live[r.code] ? { ...r, price: live[r.code].price, changePct: live[r.code].changePct } : r));
+  const map = (o: Record<string, RankItem[]>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, fix(v)]));
+  return { ...body, buy: map(b.buy), sell: map(b.sell), priceAt: new Date().toISOString() };
+}
 const TTL = 60_000;
 
 export async function GET(request: Request) {
   const market = new URL(request.url).searchParams.get("market") === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
   const hit = cache[market];
-  if (hit && Date.now() - hit.at < TTL) return NextResponse.json({ ...hit.body, cached: true });
+  if (hit && Date.now() - hit.at < TTL) return NextResponse.json(await withLivePrices(hit.body), { headers: { "Cache-Control": "no-store" } });
 
   const isc = market === "KOSDAQ" ? "1001" : "0001";
   try {
@@ -90,7 +101,7 @@ export async function GET(request: Request) {
       source: "KIS",
     };
     cache[market] = { at: Date.now(), body };
-    return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(await withLivePrices(body), { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return NextResponse.json({ error: String(err).slice(0, 200) }, { status: 500 });
   }
