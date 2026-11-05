@@ -72,9 +72,12 @@ async function kisSpikes(market: string): Promise<VolumeResult[] | null> {
     });
     const rows = ((j.output ?? []) as Record<string, string>[]).flatMap(r => {
       const code = (r.mksc_shrn_iscd ?? "").trim(), name = (r.hts_kor_isnm ?? "").trim();
-      const vol = num(r.acml_vol) ?? 0, avg = num(r.avrg_vol) ?? 0, price = num(r.stck_prpr) ?? 0;
-      if (!/^\d{6}$/.test(code) || !vol || !avg || !price || ETF_RE.test(name)) return [];
-      return [{ rank: 0, code, name, price, changePct: num(r.prdy_ctrt) ?? 0, todayVolume: vol, avgVolume: avg, ratio: Math.round((vol / avg) * 10) / 10 }];
+      // avrg_vol 은 오늘 거래량과 같게 와서(배율 1x) 쓰지 않는다 → 전일 거래량(prdy_vol) 대비, 없으면 거래증가율(vol_inrt %)
+      const vol = num(r.acml_vol) ?? 0, prev = num(r.prdy_vol) ?? 0, inrt = num(r.vol_inrt), price = num(r.stck_prpr) ?? 0;
+      if (!/^\d{6}$/.test(code) || !vol || !price || ETF_RE.test(name)) return [];
+      const ratio = prev > 0 ? vol / prev : inrt != null ? 1 + inrt / 100 : 0;
+      if (!ratio) return [];
+      return [{ rank: 0, code, name, price, changePct: num(r.prdy_ctrt) ?? 0, todayVolume: vol, avgVolume: prev, ratio: Math.round(ratio * 10) / 10 }];
     });
     return rows.length ? rows : null;
   } catch { return null; }
@@ -87,8 +90,8 @@ export async function GET(request: Request) {
 
   const k = await kisSpikes(market);
   if (k) {
-    const spikes = k.filter(r => r.ratio >= 1).sort((a, b) => b.ratio - a.ratio).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
-    if (spikes.length) return NextResponse.json({ market, spikes, source: "kis", timestamp: new Date().toISOString() });
+    const spikes = k.filter(r => r.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
+    if (spikes.length) return NextResponse.json({ market, spikes, source: "kis", basis: "전일 대비", timestamp: new Date().toISOString() });
   }
 
   try {
