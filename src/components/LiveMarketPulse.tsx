@@ -91,6 +91,8 @@ function IndexCard({
   };
 
   const hasChart = CHART_LABELS.has(label);
+  // 몇 포인트 움직였나: 응답에 없으면 현재가·등락률로 역산
+  const pts = Number.isFinite(data.change) && data.change !== 0 ? data.change : data.price - data.price / (1 + data.changePct / 100);
 
   return (
     <button
@@ -108,10 +110,10 @@ function IndexCard({
         )}
       </div>
       <p className="num text-lg font-bold text-white mt-0.5 leading-tight">
-        {fmt(data.price)}{unit && <span className="text-xs text-gray-500 ml-1">{unit}</span>}
+        <span key={`${label}-v-${data.price}`} className="rounded animate-tick">{fmt(data.price)}</span>{unit && <span className="text-xs text-gray-500 ml-1">{unit}</span>}
       </p>
-      <span className={`num text-xs font-semibold ${col}`}>
-        {arrow} {Math.abs(data.changePct).toFixed(2)}%
+      <span key={`${label}-${data.price}`} className={`num text-xs font-semibold rounded animate-tick ${col}`}>
+        {arrow} {Math.abs(pts).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="font-normal">({isPos ? "+" : "-"}{Math.abs(data.changePct).toFixed(2)}%)</span>
       </span>
       {line && line.length > 2 && <Sparkline values={line} up={isPos} />}
     </button>
@@ -160,7 +162,7 @@ function SmallRow({
           {fmtP(data.price)}{unit && <span className="text-gray-600 ml-0.5">{unit}</span>}
         </span>
         <span className={`num text-xs font-semibold whitespace-nowrap ${col}`}>
-          {arrow}{Math.abs(data.changePct).toFixed(2)}%
+          {arrow}{Math.abs(Number.isFinite(data.change) && data.change !== 0 ? data.change : data.price - data.price / (1 + data.changePct / 100)).toLocaleString("ko-KR", { maximumFractionDigits: 2 })} ({Math.abs(data.changePct).toFixed(2)}%)
         </span>
       </div>
     </button>
