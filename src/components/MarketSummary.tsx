@@ -108,13 +108,14 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
             )}
           </div>
           <div className="flex flex-col items-end">
-            <span className={`font-semibold whitespace-nowrap ${tone(v)}`}>{v > 0 ? "+" : v < 0 ? "-" : ""}{Math.abs(v).toFixed(2)}%</span>
+            <span key={`${r.code}-p-${v}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${tone(v)}`}>{v > 0 ? "+" : v < 0 ? "-" : ""}{Math.abs(v).toFixed(2)}%</span>
             {r.nxtPrice != null && r.nxtPct != null && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>}
           </div>
-          {wideCap && <span className="text-right text-gray-200 font-semibold whitespace-nowrap">{fmtCap(r.capEok)}</span>}
-          <span className="text-right text-gray-300 whitespace-nowrap">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span>
-          <span className={`text-right whitespace-nowrap ${tone(v)}`}>{r.change != null ? `${arrow}${Math.abs(r.change).toLocaleString("ko-KR")}` : "—"}</span>
-          <span className="text-right text-gray-300 whitespace-nowrap">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
+          {/* 값이 바뀐 칸은 잠깐 깜빡인다 (가격이 움직이면 등락률·시총·거래대금·전일대비·거래량도 함께) */}
+          {wideCap && <span className="text-right"><span key={`${r.code}-c-${fmtCap(r.capEok)}`} className="text-gray-200 font-semibold whitespace-nowrap rounded px-0.5 animate-tick">{fmtCap(r.capEok)}</span></span>}
+          <span className="text-right"><span key={`${r.code}-a-${r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}`} className="text-gray-300 whitespace-nowrap rounded px-0.5 animate-tick">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span></span>
+          <span className="text-right"><span key={`${r.code}-d-${r.change}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${tone(v)}`}>{r.change != null ? `${arrow}${Math.abs(r.change).toLocaleString("ko-KR")}` : "—"}</span></span>
+          <span className="text-right"><span key={`${r.code}-v-${r.volume}`} className="text-gray-300 whitespace-nowrap rounded px-0.5 animate-tick">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span></span>
         </div>
       )}
     </>
