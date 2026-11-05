@@ -98,7 +98,7 @@ export default function AsiaMarketList() {
           <p className="text-sm text-gray-500 py-6 text-center">{t === "gainers" ? "오르는 종목이 없습니다" : t === "losers" ? "내리는 종목이 없습니다" : "데이터를 불러올 수 없습니다"}</p>
         ) : (
           <div className="overflow-x-auto scrollbar-none md:overflow-visible">
-          <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_100px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+          <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[max(136px,calc(100vw_-_240px))_84px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
             <span className="sticky left-0 z-10 bg-navy-card md:static md:bg-transparent flex gap-2"><span className="w-5 text-center">#</span>종목</span>
             <span className="text-right">현재가</span>
             <span className="text-right">등락률</span>
@@ -111,11 +111,11 @@ export default function AsiaMarketList() {
               const showForeign = t === "foreign" || (mkt === "TW" && t === "cap");
               return (
                 <div key={r.code} onClick={() => open({ code: r.code, market: "US", name: r.name })}
-                  className="grid items-center gap-x-3 w-max min-w-full grid-cols-[124px_92px_68px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors group text-sm num">
+                  className="grid items-center gap-x-3 w-max min-w-full grid-cols-[max(136px,calc(100vw_-_240px))_84px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors group text-sm num">
                   <div className="sticky left-0 z-10 bg-navy-card md:static md:bg-transparent flex items-center gap-2 min-w-0 self-stretch">
                     <span className="w-5 shrink-0 flex justify-center"><RankBadge rank={r.rank} /></span>
                     <div className="min-w-0 py-0.5">
-                      <p className="text-white font-medium leading-snug [word-break:break-all] line-clamp-2 group-hover:text-cyan-brand">{r.name}</p>
+                      <p className="text-white font-medium leading-snug [overflow-wrap:anywhere] line-clamp-2 group-hover:text-cyan-brand">{r.name}</p>
                       <p className="text-xs text-gray-600">{r.code.replace(/\.(T|TW|HK|SS|SZ)$/, "")}</p>
                     </div>
                   </div>

@@ -94,7 +94,7 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
           <div className={`${STICKY} flex items-center gap-2 min-w-0 self-stretch`}>
             {rankCls ? <span className={`w-5 shrink-0 text-center text-xs font-bold ${rankCls}`}>{r.rank}</span> : <span className="w-5 shrink-0 flex justify-center"><RankBadge rank={r.rank} /></span>}
             <div className="min-w-0 py-0.5">
-              <p className="text-white font-medium leading-snug [word-break:break-all] line-clamp-2 group-hover:text-cyan-brand transition-colors">{r.name}</p>
+              <p className="text-white font-medium leading-snug [overflow-wrap:anywhere] line-clamp-2 group-hover:text-cyan-brand transition-colors">{r.name}</p>
               <p className="text-xs truncate"><span className={`text-gray-600 ${badge ? "hidden md:inline" : ""}`}>{r.code}</span>{badge && <span className="text-gold/80"><span className="hidden md:inline"> · </span>{badge}</span>}</p>
             </div>
           </div>
@@ -1096,7 +1096,7 @@ function USStockList({
         <p className="text-xs text-gray-500 py-6 text-center">데이터를 불러올 수 없습니다</p>
       ) : (
         <ScrollTable>
-        <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[136px_104px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+        <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[max(136px,calc(100vw_-_240px))_84px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
           <span className={`${STICKY} flex gap-2`}><span className="w-5 text-center">#</span>종목</span>
           <span className="text-right">현재가</span>
           <span className="text-right">등락률</span>
@@ -1116,12 +1116,12 @@ function USStockList({
             const isPos    = r.changePct >= 0;
             return (
               <Fragment key={r.code}>
-              <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[124px_100px_68px_80px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors text-sm num group"
+              <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[max(136px,calc(100vw_-_240px))_84px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors text-sm num group"
                 onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}>
                 <div className={`${STICKY} flex items-center gap-2 min-w-0 self-stretch`}>
                   <span className="w-5 shrink-0 flex justify-center"><RankBadge rank={r.rank} /></span>
                   <div className="min-w-0 py-0.5">
-                    <p className="text-white font-medium leading-snug [word-break:break-all] line-clamp-2 group-hover:text-cyan-brand">{r.name}</p>
+                    <p className="text-white font-medium leading-snug [overflow-wrap:anywhere] line-clamp-2 group-hover:text-cyan-brand">{r.name}</p>
                     <p className="text-xs text-gray-600">{r.code}</p>
                   </div>
                 </div>
