@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { yahooDaily } from "@/lib/yahooDaily";
 import { extendedOne, dayMarketOne, inDaySession } from "@/lib/usExtended";
 import { nasdaqQuotes, US_TICKERS } from "@/lib/usCaps";
@@ -281,9 +282,10 @@ const uniCache = new Map<string, { at: number; rows: Quote[] }>();
 async function indexUniverse(index: string): Promise<Quote[]> {
   const hit = uniCache.get(index);
   if (hit && Date.now() - hit.at < 8_000) return hit.rows;
-  const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : "SPY";
-  const members = Object.entries(US_TICKERS).filter(([, v]) => v.idx.includes(tag)).map(([sym]) => sym)
+  const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : index === "SOXX" ? "SOXX" : "SPY";
+  const members = index === "RUSSELL" ? [] : Object.entries(US_TICKERS).filter(([, v]) => v.idx.includes(tag)).map(([sym]) => sym)
     .filter((sym, _, all) => !(sym === "GOOG" && all.includes("GOOGL")));
+  if (index === "RUSSELL") return [];
   const dq = await yahooDaily(members);
   const rows: Quote[] = members.flatMap(sym => {
     const d = dq[sym];
@@ -299,6 +301,44 @@ async function indexUniverse(index: string): Promise<Quote[]> {
   return rows;
 }
 const TOP_N = 100;
+
+// 러셀2000 근사: 나스닥 스크리너(미국 전 종목) 시가총액 1001~3000위. 순위 후보는 스크리너 값(1분 보관), 보여줄 100개만 실시간 덧입힘
+interface Scr { sym: string; name: string; price: number; pct: number; cap: number; vol: number }
+const russellPool = unstable_cache(async (): Promise<Scr[]> => {
+  const r = await fetch("https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&download=true", {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!r.ok) return [];
+  const rows = ((await r.json())?.data?.rows ?? []) as Record<string, string>[];
+  const v = (x: string | undefined) => parseFloat(String(x ?? "").replace(/[$,%]/g, "")) || 0;
+  return rows.map(x => ({ sym: String(x.symbol ?? "").trim().replace("/", "-"), name: String(x.name ?? "").replace(/ (Common Stock|Class [A-C].*|Ordinary Shares.*|American Depositary.*)$/i, ""), price: v(x.lastsale), pct: v(x.pctchange), cap: v(x.marketCap), vol: v(x.volume) }))
+    .filter(x => x.sym && !/[\^ ]/.test(x.sym) && x.cap > 0 && x.price > 1)
+    .sort((a, b) => b.cap - a.cap).slice(1000, 3000);
+}, ["us-russell-pool-v1"], { revalidate: 60 });
+
+async function russellList(type: string): Promise<Quote[]> {
+  const pool = await russellPool().catch(() => [] as Scr[]);
+  if (!pool.length) return [];
+  const pre = type === "gainers" ? pool.filter(x => x.pct > 0).sort((a, b) => b.pct - a.pct)
+    : type === "losers" ? pool.filter(x => x.pct < 0).sort((a, b) => a.pct - b.pct)
+    : type === "actives" ? [...pool].sort((a, b) => b.price * b.vol - a.price * a.vol)
+    : pool;
+  const cand = pre.slice(0, 130);
+  const dq = await yahooDaily(cand.map(x => x.sym));
+  const rows: Quote[] = cand.map(x => {
+    const d = dq[x.sym];
+    const price = d?.price ?? x.price, pct = d ? d.changePct : x.pct, vol = d?.volume || x.vol;
+    return { rank: 0, code: x.sym, name: x.name.slice(0, 40), price: +price.toFixed(2), change: d ? +d.change.toFixed(2) : +(price - price / (1 + pct / 100)).toFixed(2),
+      changePct: +pct.toFixed(2), volume: vol, dollarVolume: price * vol, capUsd: x.cap, marketState: "REGULAR",
+      preMarketPrice: null, preMarketChangePct: null, postMarketPrice: null, postMarketChangePct: null } as Quote;
+  });
+  const sorted = type === "gainers" ? rows.filter(q => q.changePct > 0).sort((a, b) => b.changePct - a.changePct)
+    : type === "losers" ? rows.filter(q => q.changePct < 0).sort((a, b) => a.changePct - b.changePct)
+    : type === "actives" ? rows.sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0))
+    : rows;
+  return sorted.slice(0, TOP_N).map((q, i) => ({ ...q, rank: i + 1 }));
+}
 
 const resCache = new Map<string, { at: number; body: object }>();
 
@@ -317,8 +357,14 @@ export async function GET(request: Request) {
   };
 
   // ⓪-0 시가총액 TOP30 (지수 구성 종목 중, Nasdaq 시가총액 순)
+  // 러셀2000(근사): 시총·상승·하락·거래대금 모두 스크리너 후보 + 실시간 덧입힘
+  if (index === "RUSSELL" && ["cap", "gainers", "losers", "actives"].includes(type)) {
+    const list = await russellList(type);
+    return send({ stocks: await withExtended(list), timestamp: ts, basis: "russell-approx" });
+  }
+
   if (type === "cap") {
-    const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : "SPY";
+    const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : index === "SOXX" ? "SOXX" : "SPY";
     const members = Object.entries(US_TICKERS).filter(([, v]) => v.idx.includes(tag)).map(([s]) => s);
     const caps = await nasdaqQuotes().catch(() => null);
     const ranked = members

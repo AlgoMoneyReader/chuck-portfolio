@@ -1042,6 +1042,11 @@ function fmtVolUS(n: number): string {
   return n.toString();
 }
 
+const IDX_NAME: Record<string, string> = { SP500: "S&P 500", NASDAQ: "나스닥 100", DOW: "다우존스 30", RUSSELL: "러셀2000(시총 1001~3000위 근사)", SOXX: "필라델피아 반도체(SOXX)" };
+
+// 미국 시가총액: 러셀2000 같은 중소형주도 읽히게 ($4.98T / $56B / $3.2B / $820M)
+const fmtUsdCap = (c: number) => (c >= 1e12 ? `$${(c / 1e12).toFixed(2)}T` : c >= 1e10 ? `$${(c / 1e9).toFixed(0)}B` : c >= 1e9 ? `$${(c / 1e9).toFixed(1)}B` : `$${(c / 1e6).toFixed(0)}M`);
+
 function USStockList({
   type, index, onSelect,
 }: {
@@ -1073,12 +1078,12 @@ function USStockList({
   const isValue = type === "actives" || type === "etf";
   const isCap = type === "cap";
   const subLabel = isCap
-    ? `${index === "SP500" ? "S&P 500" : index === "NASDAQ" ? "나스닥 100" : "다우존스 30"} 구성 종목 · 시가총액 순`
+    ? `${IDX_NAME[index] ?? index} 구성 종목 · 시가총액 순`
     : type === "etf"
     ? "국내 투자자 인기 ETF·레버리지 · 거래대금 순 (지수 선택 무관)"
     : isValue
-    ? (index === "DOW" ? "다우존스 30 · 거래대금(가격×거래량) 순" : `${index === "NASDAQ" ? "나스닥 상장" : "미국"} 주요 대형주 + 당일 거래 급증 종목 · 거래대금 순`)
-    : `${index === "SP500" ? "S&P 500" : index === "NASDAQ" ? "나스닥 100" : "다우존스 30"} 구성 종목 전체 · ${type === "gainers" ? "상승률" : "하락률"} 순 (최대 100)`;
+    ? `${IDX_NAME[index] ?? index} 구성 종목 · 거래대금(가격×거래량) 순 (최대 100)`
+    : `${IDX_NAME[index] ?? index} 구성 종목 전체 · ${type === "gainers" ? "상승률" : "하락률"} 순 (최대 100)`;
 
   return (
     <div>
@@ -1134,7 +1139,7 @@ function USStockList({
                   {extPrice != null && extPct != null && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>}
                 </div>
                 <span className="text-right text-gray-300 whitespace-nowrap">
-                  {isCap ? (r.capUsd ? (r.capUsd >= 1e12 ? `$${(r.capUsd / 1e12).toFixed(2)}T` : `$${(r.capUsd / 1e9).toFixed(0)}B`) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
+                  {isCap ? (r.capUsd ? fmtUsdCap(r.capUsd) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
                 <span className="text-right"><span key={`${r.code}-d-${r.change}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${isPos ? "text-signal-green" : "text-signal-red"}`}>{r.change != null ? `${isPos ? "▲" : "▼"}$${Math.abs(r.change).toFixed(2)}` : "—"}</span></span>
               </div>
@@ -1342,7 +1347,7 @@ function USSectorHeatmap() {
 type RegionTabType = "KR" | "US";
 type MainTabType = "top10" | "cap" | "gainers" | "losers" | "amount" | "etf" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
-type USIndexType = "SP500" | "NASDAQ" | "DOW";
+export type USIndexType = "SP500" | "NASDAQ" | "DOW" | "RUSSELL" | "SOXX";
 type USContentTab = "cap" | "gainers" | "losers" | "actives" | "etf" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
@@ -1354,10 +1359,12 @@ const KR_TABS: { id: MainTabType; label: string }[] = [
   { id: "flow",   label: "투자자동향" },
 ];
 
-const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
-  { id: "SP500",  label: "S&P 500"  },
-  { id: "NASDAQ", label: "NASDAQ"   },
-  { id: "DOW",    label: "다우존스" },
+export const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
+  { id: "SP500",   label: "S&P 500"  },
+  { id: "NASDAQ",  label: "NASDAQ"   },
+  { id: "DOW",     label: "다우존스" },
+  { id: "RUSSELL", label: "러셀2000" },
+  { id: "SOXX",    label: "SOXX"     },
 ];
 
 const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
@@ -1403,15 +1410,17 @@ interface MarketSummaryProps {
   region?: RegionTabType;               // 주면 국내/미국 토글을 숨기고 고정
   krMarket?: MarketType;                // 국내 단일 시장(코스피/코스닥) 보기
   krSectorOnly?: boolean;               // 국내 섹터 흐름만
+  usIndex?: USIndexType;                // 미국 지수(바깥 알약에서 고름)
 }
 
-export default function MarketSummary({ region: fixedRegion, krMarket, krSectorOnly }: MarketSummaryProps = {}) {
+export default function MarketSummary({ region: fixedRegion, krMarket, krSectorOnly, usIndex: usIndexProp }: MarketSummaryProps = {}) {
   const [regionState, setRegion] = useState<RegionTabType>(fixedRegion ?? "KR");
   const region = fixedRegion ?? regionState;
   const [mainTab, setMainTab] = useState<MainTabType>(krMarket ? "cap" : krSectorOnly ? "sector" : "top10");
   const [marketState, setMarket] = useState<MarketType>(krMarket ?? "KOSPI");
   const market = krMarket ?? marketState;
-  const [usIndex, setUsIndex]     = useState<USIndexType>("SP500");
+  const [usIndexState, setUsIndex] = useState<USIndexType>("SP500");
+  const usIndex = usIndexProp ?? usIndexState;
   const [usContent, setUsContent] = useState<USContentTab>("cap");
   const stockModal = useStockModal();
   // 종목을 누르면 팝업(현황·수급·정보·뉴스·공시·레이더) — 바깥을 누르면 목록으로 돌아온다
@@ -1423,7 +1432,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
     <section className="card">
       {/* ── 국내 / 미국 Region 토글 ── */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{krSectorOnly ? "섹터 흐름" : krMarket ? `${krMarket === "KOSPI" ? "코스피" : "코스닥"} 시장 동향` : "시장 동향"}</h2>
+        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{krSectorOnly ? "섹터 흐름" : krMarket ? `${krMarket === "KOSPI" ? "코스피" : "코스닥"} 시장 동향` : region === "US" && usIndexProp ? `${US_INDEX_TABS.find(t => t.id === usIndexProp)?.label ?? ""} 시장 동향` : "시장 동향"}</h2>
         {!fixedRegion && <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5">
           {([["KR","🇰🇷 국내"],["US","🇺🇸 미국"]] as [RegionTabType, string][]).map(([r, label]) => (
             <button key={r} onClick={() => setRegion(r)}
@@ -1463,12 +1472,12 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
 
       {/* ── US 헤더 + 컨텐츠 ── */}
       {region === "US" && (<>
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-navy-border">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {!usIndexProp && <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-navy-border">
             {US_INDEX_TABS.map(t => (
               <MarketTab key={t.id} label={t.label} active={usIndex === t.id} onClick={() => setUsIndex(t.id)} />
             ))}
-          </div>
+          </div>}
           <div className="flex gap-1.5 flex-wrap">
             {US_CONTENT_TABS.map(t => (
               <MainTabBtn key={t.id} label={t.label} active={usContent === t.id} onClick={() => setUsContent(t.id)} />
