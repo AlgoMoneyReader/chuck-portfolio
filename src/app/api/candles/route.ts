@@ -29,8 +29,18 @@ const ymdStr = (d8: string) => `${d8.slice(0, 4)}-${d8.slice(4, 6)}-${d8.slice(6
 const kstEpoch = (d8: string, hms: string) =>
   Date.UTC(+d8.slice(0, 4), +d8.slice(4, 6) - 1, +d8.slice(6, 8), +hms.slice(0, 2), +hms.slice(2, 4)) / 1000;
 
+// 홍콩·중국 지수는 Yahoo 분봉이 비거나 시가(open)가 빠져 오는 경우가 있다 → 좁은 구간이 비면 넓혀서 다시
 async function yahoo(sym: string, tf: Tf): Promise<{ candles: Candle[]; prevClose: number | null }> {
-  const [interval, range] = Y_INT[tf];
+  const first = await yahooOnce(sym, tf, Y_INT[tf]);
+  if (first.candles.length || !intraday(tf)) return first;
+  for (const alt of [[Y_INT[tf][0], "5d"], ["5m", "5d"], ["15m", "5d"]] as [string, string][]) {
+    const r = await yahooOnce(sym, tf, alt).catch(() => null);
+    if (r?.candles.length) return { ...r, prevClose: first.prevClose ?? r.prevClose };
+  }
+  return first;
+}
+
+async function yahooOnce(sym: string, tf: Tf, [interval, range]: [string, string]): Promise<{ candles: Candle[]; prevClose: number | null }> {
   const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${range}`,
     { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`yahoo HTTP ${res.status}`);
@@ -38,9 +48,14 @@ async function yahoo(sym: string, tf: Tf): Promise<{ candles: Candle[]; prevClos
   const ts: number[] = r?.timestamp ?? [];
   const q = r?.indicators?.quote?.[0] ?? {};
   const candles: Candle[] = [];
+  let last: number | null = null;
   ts.forEach((t, i) => {
-    const o = q.open?.[i], h = q.high?.[i], l = q.low?.[i], c = q.close?.[i];
-    if ([o, h, l, c].some(v => v == null)) return;
+    const c = q.close?.[i];
+    if (c == null) return;
+    // 시가·고가·저가가 빠진 봉은 종가(또는 직전 종가)로 채운다
+    const o = q.open?.[i] ?? last ?? c;
+    const h = q.high?.[i] ?? Math.max(o, c), l = q.low?.[i] ?? Math.min(o, c);
+    last = c;
     const time = intraday(tf) ? t + KST : new Date((t + KST) * 1000).toISOString().slice(0, 10);
     candles.push({ time, open: o, high: h, low: l, close: c, volume: q.volume?.[i] ?? undefined });
   });
