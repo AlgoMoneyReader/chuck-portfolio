@@ -91,64 +91,45 @@ export default function AsiaMarketList() {
           <span className="text-gray-500">{t === "foreign" ? "외국인 순매수 금액 순 (직전 거래일)" : "대표 대형주 30 · 시총 상위권"}</span>
           {ts && <span className="text-gray-600">{ts} 기준</span>}
         </div>
-        <div className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
-          <span className="text-center">#</span>
-          <span>종목</span>
-          <span className="text-right">현재가</span>
-          <span className="text-right">전일대비</span>
-          <span className="text-right">등락률</span>
-          <span className="text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인 순매수" : "거래대금"}</span>
-          <span className="text-right">거래량</span>
-        </div>
-        <div className="flex md:hidden gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-          <span className="w-5 text-center">#</span>
-          <span className="flex-1">종목</span>
-          <span className="text-right">현재가 · 등락률</span>
-          <span className="w-16 text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인" : "거래대금"}</span>
-        </div>
+        <p className="md:hidden text-[11px] text-gray-600">← 표를 좌우로 밀면 거래대금·거래량 등이 더 보입니다</p>
         {loading ? (
           <div className="space-y-2 pt-1">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-9 bg-navy-border/40 rounded animate-pulse" />)}</div>
         ) : rows.length === 0 ? (
           <p className="text-sm text-gray-500 py-6 text-center">{t === "gainers" ? "오르는 종목이 없습니다" : t === "losers" ? "내리는 종목이 없습니다" : "데이터를 불러올 수 없습니다"}</p>
         ) : (
+          <div className="overflow-x-auto scrollbar-none md:overflow-visible">
+          <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[116px_100px_64px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+            <span className="sticky left-0 z-10 bg-navy-card md:static md:bg-transparent flex gap-2"><span className="w-5 text-center">#</span>종목</span>
+            <span className="text-right">현재가</span>
+            <span className="text-right">등락률</span>
+            <span className="text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인 순매수" : "거래대금"}</span>
+            <span className="text-right">전일대비</span>
+            <span className="text-right">거래량</span>
+          </div>
           <div className="divide-y divide-navy-border/30">
             {rows.map(r => {
               const showForeign = t === "foreign" || (mkt === "TW" && t === "cap");
               return (
-                <div key={r.code}>
-                <div onClick={() => open({ code: r.code, market: "US", name: r.name })}
-                  className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(5,minmax(0,1fr))] py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group text-sm num">
-                  <span className="flex justify-center"><RankBadge rank={r.rank} /></span>
-                  <div className="min-w-0">
-                    <p className="text-white font-medium truncate group-hover:text-cyan-brand">{r.name}</p>
-                    <p className="text-xs text-gray-600">{r.code.replace(/\.(T|TW|HK|SS|SZ)$/, "")}</p>
+                <div key={r.code} onClick={() => open({ code: r.code, market: "US", name: r.name })}
+                  className="grid items-center gap-x-3 w-max min-w-full grid-cols-[124px_92px_68px_84px_80px_104px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(5,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors group text-sm num">
+                  <div className="sticky left-0 z-10 bg-navy-card md:static md:bg-transparent flex items-center gap-2 min-w-0 self-stretch">
+                    <span className="w-5 shrink-0 flex justify-center"><RankBadge rank={r.rank} /></span>
+                    <div className="min-w-0 py-0.5">
+                      <p className="text-white font-medium leading-snug [word-break:break-all] line-clamp-2 group-hover:text-cyan-brand">{r.name}</p>
+                      <p className="text-xs text-gray-600">{r.code.replace(/\.(T|TW|HK|SS|SZ)$/, "")}</p>
+                    </div>
                   </div>
                   <span key={`${r.code}-d-${r.price}`} className="text-right text-white whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
-                  <span className={`text-right whitespace-nowrap ${tone(r.changePct)}`}>{r.change != null ? `${r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}${Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
                   <span className={`text-right font-semibold whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "+" : r.changePct < 0 ? "-" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
                   <span className={`text-right whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
                     {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
                   </span>
+                  <span className={`text-right whitespace-nowrap ${tone(r.changePct)}`}>{r.change != null ? `${r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}${Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
                   <span className="text-right text-gray-300 whitespace-nowrap">{r.volume ? r.volume.toLocaleString("ko-KR") : "—"}</span>
-                </div>
-                <div onClick={() => open({ code: r.code, market: "US", name: r.name })}
-                  className="flex md:hidden items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group">
-                  <RankBadge rank={r.rank} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white font-medium truncate group-hover:text-cyan-brand">{r.name}</p>
-                    <p className="text-xs text-gray-600">{r.code.replace(/\.(T|TW|HK|SS|SZ)$/, "")}</p>
-                  </div>
-                  <div className="flex items-baseline gap-2 shrink-0">
-                    <span key={`${r.code}-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
-                    <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
-                  </div>
-                  <span className={`w-16 text-right text-xs num whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
-                    {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
-                  </span>
-                </div>
                 </div>
               );
             })}
+          </div>
           </div>
         )}
         <p className="text-[11px] text-gray-600">금액은 현지 통화 기준 · 시세는 거래소에 따라 약 15분 지연될 수 있습니다{mkt === "TW" ? " · 외국인은 직전 거래일 확정 순매수" : ""}</p>
