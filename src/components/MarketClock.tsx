@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TbTimezone } from "react-icons/tb";
-import { MARKETS, clockOf, type ClockState } from "@/lib/marketClock";
+import { MARKETS, clockOf, upcomingHolidays, type ClockState } from "@/lib/marketClock";
 
 // 30초마다 다시 계산 (분 단위 표시라 충분)
 function useClocks(): ClockState[] {
@@ -40,6 +40,28 @@ function TimeBars({ clocks }: { clocks: ClockState[] }) {
         <span className="absolute top-0 bottom-0 w-px bg-gold" style={{ left: `calc(1.75rem + (100% - 1.75rem) * ${nowM / 1440})` }} />
       </div>
       <p className="text-[10px] text-gray-600 mt-1">막대 = 정규장(한국시간) · 노란 선 = 지금</p>
+    </div>
+  );
+}
+
+// 다가오는 3주 휴장일·조기폐장 (현지 날짜)
+function HolidayList() {
+  const list = upcomingHolidays(21);
+  return (
+    <div className="mt-2 px-1 border-t border-navy-border/50 pt-2">
+      <p className="text-[11px] text-gray-500 mb-1">다가오는 휴장일 (3주 · 현지 날짜)</p>
+      {list.length === 0 ? <p className="text-xs text-gray-600">예정된 휴장일이 없습니다</p> : (
+        <ul className="space-y-0.5">
+          {list.map(({ def, h, label }) => (
+            <li key={`${def.key}-${h.date}`} className="flex items-center gap-2 text-xs">
+              <span className="w-5 text-center leading-none">{def.flag}</span>
+              <span className="w-16 text-gray-400 num">{label}</span>
+              <span className="flex-1 min-w-0 truncate text-gray-200">{h.name}</span>
+              <span className={`shrink-0 font-semibold ${h.early ? "text-amber-400" : "text-signal-red"}`}>{h.early ? `${h.early}(현지)` : "휴장"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -114,12 +136,13 @@ export function MarketClockButton() {
                 <span className="text-base leading-none w-5 text-center">{c.def.flag}</span>
                 <span className="w-9 text-gray-300 whitespace-nowrap">{c.def.name}</span>
                 <span className={`w-[4.5rem] flex items-center gap-1 text-xs font-semibold whitespace-nowrap ${tone(c)}`}><span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot(c)}`} />{c.status}</span>
-                <span className={`flex-1 min-w-0 text-right text-xs num truncate ${c.regular ? "text-white font-semibold" : "text-gray-400"}`}>{c.short}</span>
+                <span className={`flex-1 min-w-0 text-right text-xs num truncate ${c.regular ? "text-white font-semibold" : "text-gray-400"}`}>{c.holiday ? <span className="text-signal-red mr-1">{c.holiday}</span> : null}{c.short}</span>
               </li>
             ))}
           </ul>
           <TimeBars clocks={clocks} />
-          <p className="text-[10px] text-gray-600 px-1 mt-1.5">서머타임 자동 반영 · 나라별 공휴일 휴장은 반영되지 않습니다</p>
+          <HolidayList />
+          <p className="text-[10px] text-gray-600 px-1 mt-1.5">서머타임·휴장일 반영 · 거래소 임시휴장은 다를 수 있습니다</p>
         </div>
       )}
     </div>

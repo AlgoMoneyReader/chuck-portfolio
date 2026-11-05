@@ -1,5 +1,7 @@
+import { holidayOn, HOLIDAYS, type Holiday } from "./marketHolidays";
+
 // 세계 증시 시계 — 각 거래소 현지 시각과 지금 상태(장중·점심·프리/애프터·휴장), 다음 개장/마감까지 남은 시간
-// 서머타임은 시간대(IANA) 계산으로 자동 반영. 나라별 공휴일 휴장은 아직 반영하지 않는다(주말·거래시간 기준)
+// 서머타임은 시간대(IANA) 계산으로 자동 반영. 나라별 휴장일은 marketHolidays.ts (조기폐장은 안내만)
 
 export interface Session { from: string; to: string; kind: "regular" | "pre" | "post" | "day" | "lunch" }
 export interface MarketDef { key: string; flag: string; name: string; city: string; tz: string; sessions: Session[]; weekendDays?: number[] }
@@ -31,14 +33,15 @@ const KIND_LABEL: Record<Session["kind"], string> = { regular: "장중", pre: "�
 
 // 현지 요일(0=일)·분(0~1439)·표시용 시각
 function local(tz: string, now: Date) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     .formatToParts(now).map(x => [x.type, x.value]));
   const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(p.weekday as string);
   const h = Number(p.hour) % 24, m = Number(p.minute);
-  return { wd, min: h * 60 + m, hhmm: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+  return { wd, ymd: `${p.year}-${p.month}-${p.day}`, min: h * 60 + m, hhmm: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
 }
 const toMin = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
 const isWeekday = (wd: number) => wd >= 1 && wd <= 5;
+const addDays = (ymd: string, n: number) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 // 세션 s 가 '요일 wd 의 분 min' 에 열려 있나 (자정 넘는 세션: 시작한 날 기준 요일)
 function inSession(key: string, s: Session, wd: number, min: number): boolean {
@@ -52,7 +55,8 @@ function inSession(key: string, s: Session, wd: number, min: number): boolean {
 
 export interface ClockState {
   def: MarketDef; time: string; status: string; open: boolean; regular: boolean; next: string;
-  short: string;              // 한 줄용(한국시간 기준): 장중이면 '마감 38분', 아니면 '23:30 개장' / '월 09:00 개장'
+  short: string;
+  holiday: string;            // 오늘이 휴장일·조기폐장일이면 그 이름              // 한 줄용(한국시간 기준): 장중이면 '마감 38분', 아니면 '23:30 개장' / '월 09:00 개장'
   barsKst: [number, number][]; // 오늘 정규장 구간(한국시간 분, 0~1440 넘으면 다음 날로 이어짐)
 }
 
@@ -70,25 +74,28 @@ const kstDay = (d: Date) => new Intl.DateTimeFormat("en-US", { timeZone: "Asia/S
 const fmtDur = (m: number) => (m >= 60 * 24 ? `${Math.floor(m / 1440)}일 ${Math.floor((m % 1440) / 60)}시간` : m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`);
 
 export function clockOf(def: MarketDef, now = new Date()): ClockState {
-  const { wd, min, hhmm } = local(def.tz, now);
-  const cur = def.sessions.find(s => inSession(def.key, s, wd, min));
+  const { wd, ymd, min, hhmm } = local(def.tz, now);
+  const todayHol = holidayOn(def.key, ymd);
+  const closedDay = (off: number) => { const h = holidayOn(def.key, addDays(ymd, off)); return !!h && !h.early; };
+  const cur = closedDay(0) ? undefined : def.sessions.find(s => inSession(def.key, s, wd, min));
   // 다음 변화 시각: 현지 요일·분을 직접 굴려 가며 상태가 바뀌는 지점을 찾는다 (경계가 모두 5분 단위라 5분씩, 최대 4일)
-  const kindAt = (w: number, m: number) => def.sessions.find(s => inSession(def.key, s, w, m))?.kind ?? "closed";
+  // off = 오늘부터 며칠 뒤(휴장일 확인용), w = 그날 요일, m = 그날 분
+  const kindAt = (w: number, m: number, off = 0) => (closedDay(off) ? "closed" : def.sessions.find(s => inSession(def.key, s, w, m))?.kind ?? "closed");
   const nowKind = cur?.kind ?? "closed";
   let step = 0;
   const first = 5 - (min % 5);
   for (let d = first; d <= 4 * 1440; d += 5) {
     const tot = min + d, w = (wd + Math.floor(tot / 1440)) % 7, m = tot % 1440;
-    if (kindAt(w, m) !== nowKind) { step = d; break; }
+    if (kindAt(w, m, Math.floor(tot / 1440)) !== nowKind) { step = d; break; }
   }
-  const nextKind = step ? kindAt((wd + Math.floor((min + step) / 1440)) % 7, (min + step) % 1440) : "closed";
+  const nextKind = step ? kindAt((wd + Math.floor((min + step) / 1440)) % 7, (min + step) % 1440, Math.floor((min + step) / 1440)) : "closed";
   const nextLabel = nowKind === "regular" ? "마감까지" : nextKind === "regular" ? "개장까지" : nextKind === "closed" ? "종료까지" : `${KIND_LABEL[nextKind as Session["kind"]]}까지`;
   // 다음 정규장 시작까지(분) — 장 밖일 때만
   let toOpen = 0;
   if (nowKind !== "regular") {
     for (let d = 5 - (min % 5); d <= 5 * 1440; d += 5) {
       const tot = min + d;
-      if (kindAt((wd + Math.floor(tot / 1440)) % 7, tot % 1440) === "regular") { toOpen = d - (d === 5 - (min % 5) ? 0 : 0); break; }
+      if (kindAt((wd + Math.floor(tot / 1440)) % 7, tot % 1440, Math.floor(tot / 1440)) === "regular") { toOpen = d - (d === 5 - (min % 5) ? 0 : 0); break; }
     }
   }
   const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m}분`);
@@ -105,9 +112,25 @@ export function clockOf(def: MarketDef, now = new Date()): ClockState {
 
   return {
     def, time: hhmm,
-    status: cur ? KIND_LABEL[cur.kind] : isWeekday(wd) ? (min < toMin(def.sessions[0].from) ? "개장 전" : "마감") : "주말 휴장",
+    status: cur ? KIND_LABEL[cur.kind] : closedDay(0) && isWeekday(wd) ? "휴장" : isWeekday(wd) ? (min < toMin(def.sessions[0].from) ? "개장 전" : "마감") : "주말 휴장",
+    holiday: todayHol ? `${todayHol.name}${todayHol.early ? ` · ${todayHol.early}` : " 휴장"}` : "",
     open: !!cur && cur.kind !== "lunch", regular: cur?.kind === "regular",
     next: step ? `${nextLabel} ${fmtDur(step)}` : "",
     short, barsKst,
   };
+}
+
+// 다가오는 휴장일·조기폐장 (오늘 포함 days 일 안, 현지 날짜 기준)
+export function upcomingHolidays(days = 21, now = new Date()): { def: MarketDef; h: Holiday; label: string }[] {
+  const out: { def: MarketDef; h: Holiday; label: string; key: string }[] = [];
+  for (const def of MARKETS) {
+    const { ymd } = local(def.tz, now);
+    const end = addDays(ymd, days);
+    for (const h of HOLIDAYS[def.key] ?? []) {
+      if (h.date < ymd || h.date > end) continue;
+      const d = new Date(`${h.date}T00:00:00Z`);
+      out.push({ def, h, key: h.date, label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${KST_DAYS[d.getUTCDay()]})` });
+    }
+  }
+  return out.sort((a, b) => a.key.localeCompare(b.key));
 }
