@@ -196,6 +196,11 @@ export async function fetchInvestingActuals(): Promise<GlobalActual[]> {
 
 // 지표 이름 정규화: m/m·MoM·(MoM) → mom 처럼 출처마다 다른 표기를 통일
 const SYN: [RegExp, string][] = [
+  // 기준금리: 'Official Bank Rate'(영국) = 'Interest Rate Decision' = 'Cash Rate'(호주) 등
+  [/official bank rate|interest rate decision|rate decision|policy rate|cash rate|main refinancing rate|refinancing rate|benchmark rate/gi, " policyrate "],
+  // 같은 지표의 다른 변형(4주 평균·계속 청구·근원·투표)은 따로 구분한다
+  [/4[- ]?week (moving )?average|4[- ]?week avg|four[- ]week average|\baverage\b|\bavg\b/gi, " avg4w "],
+  [/\bvotes?\b/gi, " votes "],
   [/\bm\/m\b|\bmom\b|month[- ]over[- ]month/gi, " mom "], [/\by\/y\b|\byoy\b|year[- ]over[- ]year/gi, " yoy "],
   [/\bq\/q\b|\bqoq\b/gi, " qoq "], [/non[- ]?manufacturing|services/gi, " services "], [/non[- ]?farm|nonfarm/gi, " nonfarm "],
   [/unemployment claims|jobless claims|initial claims/gi, " jobless claims "], [/job openings|jolts/gi, " jolts openings "],
@@ -209,12 +214,15 @@ function tokens(x: string): Set<string> {
   return new Set(t.replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
 }
 const PERIOD = ["mom", "yoy", "qoq"];
+// 한쪽에만 있으면 다른 지표 (예: 실업수당 청구 vs 4주 평균, 계속 청구, 근원 CPI, 금리 결정 vs 위원 투표)
+const QUALS = ["avg4w", "continuing", "core", "votes", "minutes", "speaks", "speech"];
 
 // 제목 유사도(0~1). 기간(전월비·전년비·전기비)이 서로 다르면 0
 export function titleOverlap(a: string, b: string): number {
   const A = tokens(a), B = tokens(b);
   const pa = PERIOD.filter(p => A.has(p)), pb = PERIOD.filter(p => B.has(p));
   if (pa.length && pb.length && !pa.some(p => pb.includes(p))) return 0;
+  if (QUALS.some(q => A.has(q) !== B.has(q))) return 0;
   if (!A.size || !B.size) return 0;
   let n = 0; A.forEach(t => { if (B.has(t)) n++; });
   return n / Math.min(A.size, B.size);
@@ -227,6 +235,8 @@ export function plausibleActual(actual: string, forecast: string | null, previou
   const ref = forecast || previous;
   if (!ref) return true;
   if (/\|/.test(ref)) return true;                     // 국채 입찰 '4.18|1.6' 같은 형식은 검사 생략
+  // 위원 투표 '7-0-2' 형식이면 결과도 같은 형식이어야 한다
+  if (/^\s*\d+-\d+-\d+\s*$/.test(ref)) return /^\s*\d+-\d+-\d+\s*$/.test(actual);
   if (unitOf(actual) !== unitOf(ref)) return false;
   const a = Math.abs(numOf(actual)), r = Math.abs(numOf(ref));
   if (isNaN(a) || isNaN(r)) return true;

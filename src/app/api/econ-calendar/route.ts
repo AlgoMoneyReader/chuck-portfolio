@@ -180,7 +180,7 @@ const loadActuals = unstable_cache(async (bucket: string, today: string): Promis
   };
   const [tv, nq, inv] = await Promise.all([run("tradingview", () => tradingviewActuals(today)), run("nasdaq", () => nasdaqActuals(today)), run("investing", fetchInvestingActuals)]);
   return { list: [...tv, ...nq, ...inv], stats };
-}, ["global-actuals-v4"], { revalidate: 600 });
+}, ["global-actuals-v5"], { revalidate: 600 });
 
 function fillActual<T extends { day: string; time: string; country: string; original: string; actual: string | null; at: string; forecast?: string | null; previous?: string | null }>(e: T, acts: GlobalActual[]): T {
   if (e.actual || Date.parse(e.at) > Date.now()) return e;
@@ -235,7 +235,7 @@ export async function GET() {
     return NextResponse.json({
       items: all, errors: kr.note ? [...errors, kr.note] : errors,
       coverage: { global: days.length ? { from: days[0], to: days[days.length - 1] } : null, krLive: kr.live },
-      actualSources: { version: "매칭 v2 (이름 표기 통일·단위 검사)", ...loaded.stats, matched: `${all.filter(e => e.actual).length}건` },
+      actualSources: { version: "매칭 v3 (4주평균·계속청구·투표 구분, 기준금리 이름 통일)", ...loaded.stats, matched: `${all.filter(e => e.actual).length}건` },
     });
   } catch (e) {
     // 해외 일정이 막혀도 한국 일정은 보여준다
