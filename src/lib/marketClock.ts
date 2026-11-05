@@ -102,7 +102,7 @@ export function clockOf(def: MarketDef, now = new Date()): ClockState {
   let short = "";
   if (nowKind === "regular") short = `마감 ${hm(step)}`;
   else if (toOpen) {
-    const at = new Date(Math.ceil(now.getTime() / 60000) * 60000 + toOpen * 60000);
+    const at = new Date(Math.floor(now.getTime() / 60000) * 60000 + toOpen * 60000);
     const sameDay = kstDay(at) === kstDay(now) || toOpen < 12 * 60;
     short = `${sameDay ? "" : KST_DAYS[["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(kstDay(at))] + " "}${kstHHMM(at)} 개장`;
   }
