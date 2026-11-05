@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
 import { isOfftopic } from "@/lib/newsFilter";
-import { gemini, CHEAP } from "@/lib/gemini";
+import { gemini, QUALITY } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +88,7 @@ async function fetchRSSItems(feedUrl: string, max = 15): Promise<RSSItem[]> {
 
 // ── Gemini 호출 ───────────────────────────────────────────────────────────────
 async function callGemini(prompt: string): Promise<string> {
-  return (await gemini({ prompt, models: CHEAP, maxTokens: 2400, temperature: 0.2, timeoutMs: 25000, log: { feature: "시장 이슈" } })).text;
+  return (await gemini({ prompt, models: QUALITY, cheapFirst: true, maxTokens: 2400, temperature: 0.2, timeoutMs: 25000, log: { feature: "시장 이슈" } })).text;
 }
 
 // ── 헤드라인 → issue 매칭 (URL 연결용) ────────────────────────────────────────

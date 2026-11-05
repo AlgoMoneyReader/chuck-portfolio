@@ -14,6 +14,7 @@ const GEMMA = "gemma-3-27b-it";
 const cooldown = new Map<string, number>(); // model → 다시 시도해도 되는 시각
 
 export interface GeminiOpts {
+  cheapFirst?: boolean; // true: 무료 Gemini 먼저(실패 시에만 Claude)
   prompt: string;
   system?: string;
   search?: boolean;          // 구글 검색 그라운딩
@@ -50,7 +51,7 @@ async function generate(o: GeminiOpts): Promise<{ text: string; model: string; u
     } catch (e) { errors.push(`claude: ${String(e).slice(0, 80)}`); allQuota = false; return null; }
   };
   // 가벼운 작업(CHEAP: 뉴스 이슈 묶기 등)은 무료 Gemini 먼저, 다 실패할 때만 Claude — 비용 절감
-  const cheapFirst = o.models === CHEAP;
+  const cheapFirst = o.cheapFirst ?? o.models === CHEAP;
   if (!cheapFirst && claudeAvailable()) { const r = await tryClaude(); if (r) return r; }
   if (!key) {
     if (cheapFirst && claudeAvailable()) { const r = await tryClaude(); if (r) return r; }
