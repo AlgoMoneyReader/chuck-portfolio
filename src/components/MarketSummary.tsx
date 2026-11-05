@@ -1360,7 +1360,7 @@ const KR_TABS: { id: MainTabType; label: string }[] = [
 ];
 
 export const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
-  { id: "SP500",   label: "S&P 500"  },
+  { id: "SP500",   label: "S&P500"   },
   { id: "NASDAQ",  label: "NASDAQ"   },
   { id: "DOW",     label: "다우존스" },
   { id: "RUSSELL", label: "러셀2000" },

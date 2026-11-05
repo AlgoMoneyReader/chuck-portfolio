@@ -18,3 +18,10 @@ export function krSession(now = Date.now()): KrSession {
   if (m >= 960 && m < 1200) return { key: "nxt-after", label: "애프터마켓 KRX·NXT (16:00~20:00)", short: "애프터", extended: true };
   return { key: "closed", label: m < 480 ? "장 시작 전" : "장 종료", short: "장 종료", extended: false };
 }
+
+/** 증시·매매동향 첫 화면 기본 탭: 한국시간 21:00~다음 날 07:00 은 미장 보는 시간이라 미국, 그 외는 국내 */
+export function defaultRegion(now = Date.now()): "kr" | "us" {
+  const k = new Date(now + 9 * 3_600_000);
+  const m = k.getUTCHours() * 60 + k.getUTCMinutes();
+  return m >= 21 * 60 || m < 7 * 60 ? "us" : "kr";
+}
