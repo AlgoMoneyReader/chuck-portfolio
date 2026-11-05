@@ -11,10 +11,10 @@ import { Pills, RegionTabs, useQueryTab } from "./Segmented";
 
 // 증시 탭: 국내/미국 → (국내) 증시/수급 → (수급) 코스피/코스닥/코스피200
 export default function HomeTabs() {
-  const [m, setM] = useQueryTab("m", ["kr", "us"] as const, "kr");
+  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, "kr");
   const [v, setV] = useQueryTab("v", ["market", "flow"] as const, "market");
   const [k, setK] = useQueryTab("k", ["kospi", "kosdaq", "k200"] as const, "kospi");
-  const view = m === "us" ? "market" : v;
+  const view = m !== "kr" ? "market" : v;
   const router = useRouter();
 
   // 수급 화면에서 상단 티커 지표를 누르면: 증시 화면으로 바꾸고 그 차트를 연다
@@ -27,14 +27,14 @@ export default function HomeTabs() {
 
   return (
     <div className="space-y-5">
-      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"]]} />
+      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} />
       {m === "kr" && <Pills value={v} onChange={setV} items={[["market", "증시"], ["flow", "수급"]]} />}
 
       {view === "market" ? (
         <>
-          <LiveMarketPulse key={m} region={m === "kr" ? "KR" : "US"} />
-          <MarketMap fixedRegion={m === "kr" ? "KR" : "US"} />
-          <AfterHoursWidget key={`top-${m}`} region={m === "kr" ? "KR" : "US"} />
+          <LiveMarketPulse key={m} region={m === "kr" ? "KR" : m === "us" ? "US" : "ASIA"} />
+          {m !== "asia" && <MarketMap fixedRegion={m === "kr" ? "KR" : "US"} />}
+          {m !== "asia" && <AfterHoursWidget key={`top-${m}`} region={m === "kr" ? "KR" : "US"} />}
         </>
       ) : (
         <>

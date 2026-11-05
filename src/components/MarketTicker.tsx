@@ -13,10 +13,11 @@ const GROUPS: { name: string; items: [string, string, number, string][] }[] = [
     ["kospi", "코스피", 2, "KOSPI"], ["kosdaq", "코스닥", 2, "KOSDAQ"], ["sp500", "S&P500", 2, "S&P 500"],
     ["nasdaq", "나스닥", 2, "NASDAQ"], ["dow", "다우", 2, "다우존스"], ["russell", "러셀2000", 2, "러셀 2000"],
     ["sox", "필라델피아반도체", 2, "필라델피아 반도체"],
+    ["nikkei", "닛케이", 2, "닛케이 225"], ["twii", "대만가권", 2, "대만 가권"], ["hsi", "항셍", 2, "항셍"], ["shanghai", "상해종합", 2, "상해종합"],
   ] },
-  { name: "선물", items: [["esFut", "S&P선물", 2, "S&P500 선물"], ["nqFut", "나스닥선물", 2, "나스닥 선물"], ["yjFut", "다우선물", 0, "다우 선물"]] },
+  { name: "선물", items: [["esFut", "S&P선물", 2, "S&P500 선물"], ["nqFut", "나스닥선물", 2, "나스닥 선물"], ["yjFut", "다우선물", 0, "다우 선물"], ["nikkeiFut", "닛케이선물", 0, "닛케이 선물"]] },
   { name: "원자재", items: [["gold", "금", 1, "금"], ["oil", "WTI", 2, "WTI 원유"]] },
-  { name: "환율", items: [["usdKrw", "원/달러", 2, "USD/KRW"]] },
+  { name: "환율", items: [["usdKrw", "원/달러", 2, "USD/KRW"], ["jpyKrw", "원/100엔", 2, "엔/원 (100엔)"]] },
 ];
 
 export const OPEN_CHART_EVENT = "alliknam:open-chart";

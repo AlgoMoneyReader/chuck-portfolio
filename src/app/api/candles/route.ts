@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ASIA_SYMBOLS } from "@/lib/asiaMarkets";
 import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ const TF = ["1m", "2m", "5m", "30m", "60m", "D", "W", "M"] as const;
 type Tf = typeof TF[number];
 
 const YAHOO: Record<string, string> = {
+  ...ASIA_SYMBOLS,
   KOSPI: "^KS11", KOSDAQ: "^KQ11", "S&P 500": "^GSPC", NASDAQ: "^IXIC", "다우존스": "^DJI", "러셀 2000": "^RUT", "필라델피아 반도체": "^SOX", VIX: "^VIX",
   "S&P500 선물": "ES=F", "나스닥 선물": "NQ=F", "다우 선물": "YM=F", "금": "GC=F", "WTI 원유": "CL=F", "USD/KRW": "KRW=X",
 };

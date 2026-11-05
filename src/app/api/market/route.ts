@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ASIA } from "@/lib/asiaMarkets";
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +81,15 @@ export async function GET() {
       fetchYahoo("^VIX"),    // 변동성 지수
     ]);
 
+  // 아시아 지수·선물·환율 (엔화는 100엔 기준으로)
+  const asiaVals = await Promise.all(ASIA.map(a => fetchYahoo(a.symbol)));
+  const asia = Object.fromEntries(ASIA.map((a, i) => {
+    const v = asiaVals[i];
+    return [a.key, v && a.scale ? { ...v, price: +(v.price * a.scale).toFixed(2), change: +(v.change * a.scale).toFixed(2) } : v];
+  }));
+
   return NextResponse.json(
-    { kospi, kosdaq, sp500, nasdaq, dow, russell, sox, vix, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() },
+    { ...asia, kospi, kosdaq, sp500, nasdaq, dow, russell, sox, vix, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" } }
   );
 }
