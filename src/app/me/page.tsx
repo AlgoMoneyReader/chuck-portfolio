@@ -72,7 +72,7 @@ function ThemeSetting() {
   );
 }
 
-// 글꼴 · 글자 크기 — 바로 적용, 로그인하면 계정에 저장
+// 글꼴 · 글자 크기 — 바로 적용, 기기마다 따로 저장 (PC 표준 · 휴대폰 작게 같은 조합 가능)
 function FontSetting() {
   const { font, scale, setFont, previewScale, commitScale } = useFontPref();
   const [open, setOpen] = useState(false);
@@ -87,7 +87,7 @@ function FontSetting() {
           <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand"><FiType size={18} /></span>
           <span className="flex-1 min-w-0">
             <span className="block text-sm font-semibold text-white">글꼴</span>
-            <span className="block text-xs text-gray-500 mt-0.5">{cur.label}</span>
+            <span className="block text-xs text-gray-500 mt-0.5">{cur.label} · 이 기기에만 적용</span>
           </span>
           <FiChevronRight className={`text-gray-500 transition-transform ${open ? "rotate-90" : ""}`} />
         </button>
@@ -115,7 +115,7 @@ function FontSetting() {
           <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand font-bold">가</span>
           <span className="flex-1 min-w-0">
             <span className="block text-sm font-semibold text-white">글자 크기</span>
-            <span className="block text-xs text-gray-500 mt-0.5">{system ? "시스템 설정 (기기·브라우저 글자 크기)" : `${FONT_SCALE_LABELS[idx]} · ${Math.round(FONT_SCALES[idx] * 100)}%`}</span>
+            <span className="block text-xs text-gray-500 mt-0.5">{system ? "시스템 설정 (기기·브라우저 글자 크기)" : `${FONT_SCALE_LABELS[idx]} · ${Math.round(FONT_SCALES[idx] * 100)}%`} · 이 기기에만 적용</span>
           </span>
           <button role="switch" aria-checked={system} onClick={() => commitScale(system ? 1 : null)}
             className={`shrink-0 text-xs px-2.5 py-1.5 rounded-lg border font-semibold ${system ? "border-cyan-brand/50 bg-cyan-brand/10 text-cyan-brand" : "border-navy-border text-gray-500"}`}>
