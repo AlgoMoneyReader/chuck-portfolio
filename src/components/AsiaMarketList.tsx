@@ -91,12 +91,20 @@ export default function AsiaMarketList() {
           <span className="text-gray-500">{t === "foreign" ? "외국인 순매수 금액 순 (직전 거래일)" : "대표 대형주 30 · 시총 상위권"}</span>
           {ts && <span className="text-gray-600">{ts} 기준</span>}
         </div>
-        <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+        <div className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(5,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+          <span className="text-center">#</span>
+          <span>종목</span>
+          <span className="text-right">현재가</span>
+          <span className="text-right">전일대비</span>
+          <span className="text-right">등락률</span>
+          <span className="text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인 순매수" : "거래대금"}</span>
+          <span className="text-right">거래량</span>
+        </div>
+        <div className="flex md:hidden gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
           <span className="w-5 text-center">#</span>
           <span className="flex-1">종목</span>
           <span className="text-right">현재가 · 등락률</span>
           <span className="w-16 text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인" : "거래대금"}</span>
-          <span className="hidden md:block w-28 text-right">거래량</span>
         </div>
         {loading ? (
           <div className="space-y-2 pt-1">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-9 bg-navy-border/40 rounded animate-pulse" />)}</div>
@@ -107,8 +115,24 @@ export default function AsiaMarketList() {
             {rows.map(r => {
               const showForeign = t === "foreign" || (mkt === "TW" && t === "cap");
               return (
-                <div key={r.code} onClick={() => open({ code: r.code, market: "US", name: r.name })}
-                  className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group">
+                <div key={r.code}>
+                <div onClick={() => open({ code: r.code, market: "US", name: r.name })}
+                  className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(160px,2fr)_repeat(5,minmax(0,1fr))] py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group text-sm num">
+                  <span className="flex justify-center"><RankBadge rank={r.rank} /></span>
+                  <div className="min-w-0">
+                    <p className="text-white font-medium truncate group-hover:text-cyan-brand">{r.name}</p>
+                    <p className="text-xs text-gray-600">{r.code.replace(/\.(T|TW|HK|SS|SZ)$/, "")}</p>
+                  </div>
+                  <span key={`${r.code}-d-${r.price}`} className="text-right text-white whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
+                  <span className={`text-right whitespace-nowrap ${tone(r.changePct)}`}>{r.change != null ? `${r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}${Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—"}</span>
+                  <span className={`text-right font-semibold whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "+" : r.changePct < 0 ? "-" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+                  <span className={`text-right whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
+                    {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
+                  </span>
+                  <span className="text-right text-gray-300 whitespace-nowrap">{r.volume ? r.volume.toLocaleString("ko-KR") : "—"}</span>
+                </div>
+                <div onClick={() => open({ code: r.code, market: "US", name: r.name })}
+                  className="flex md:hidden items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors group">
                   <RankBadge rank={r.rank} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white font-medium truncate group-hover:text-cyan-brand">{r.name}</p>
@@ -116,13 +140,12 @@ export default function AsiaMarketList() {
                   </div>
                   <div className="flex items-baseline gap-2 shrink-0">
                     <span key={`${r.code}-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
-                    {r.change != null && <span className={`hidden md:inline text-sm num whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>}
                     <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
                   </div>
                   <span className={`w-16 text-right text-xs num whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
                     {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
                   </span>
-                  <span className="hidden md:block w-28 text-right text-sm text-gray-300 num whitespace-nowrap">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
+                </div>
                 </div>
               );
             })}
