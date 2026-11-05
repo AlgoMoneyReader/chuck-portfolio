@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultRegion } from "@/lib/krSession";
 import LiveMarketPulse from "./LiveMarketPulse";
 import AfterHoursWidget, { AsiaTopWidget } from "./AfterHoursWidget";
 import MarketMap from "./MarketMap";
@@ -12,7 +13,7 @@ import { MarketClockStrip } from "./MarketClock";
 
 // 증시 탭: 국내/미국 → (국내) 증시/수급 → (수급) 코스피/코스닥/코스피200
 export default function HomeTabs() {
-  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, "kr");
+  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, defaultRegion());
   const [v, setV] = useQueryTab("v", ["market", "flow"] as const, "market");
   const [k, setK] = useQueryTab("k", ["kospi", "kosdaq", "k200"] as const, "kospi");
   const view = m !== "kr" ? "market" : v;

@@ -1,5 +1,6 @@
 "use client";
 
+import { defaultRegion } from "@/lib/krSession";
 import StockSearchPanel from "./StockSearchPanel";
 import MarketSummary from "./MarketSummary";
 import DualBuyWidget from "./DualBuyWidget";
@@ -9,7 +10,7 @@ import { Pills, RegionTabs, useQueryTab } from "./Segmented";
 
 // 매매동향 탭: AI 레이더 분석(맨 위) → 국내(코스피/코스닥/섹터 흐름) / 미국
 export default function FlowTabs() {
-  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, "kr");
+  const [m, setM] = useQueryTab("m", ["kr", "us", "asia"] as const, defaultRegion());
   const [k, setK] = useQueryTab("k", ["kospi", "kosdaq", "hot"] as const, "kospi");
   const [h, setH] = useQueryTab("h", ["sector", "dual"] as const, "sector");
   const [ui, setUi] = useQueryTab<USIndexType>("i", ["SP500", "NASDAQ", "DOW", "RUSSELL", "SOXX"] as const, "SP500");
