@@ -53,10 +53,10 @@ function WonInput({ value, onChange, className = "" }: { value: number; onChange
   return (
     <input inputMode="numeric" value={value ? value.toLocaleString("ko-KR") : ""} placeholder="0"
       onChange={e => onChange(parseWon(e.target.value))}
-      className={`w-full bg-navy-sub border border-navy-border rounded-lg px-2 py-1.5 text-right text-white num focus:border-cyan-brand outline-none ${className}`} />
+      className={`w-full bg-navy-sub border border-navy-border rounded-lg px-2 py-1.5 text-sm text-right text-white num focus:border-cyan-brand outline-none ${className}`} />
   );
 }
-const inputCls = "w-full bg-navy-sub border border-navy-border rounded-lg px-2 py-1.5 text-white num focus:border-cyan-brand outline-none";
+const inputCls = "w-full bg-navy-sub border border-navy-border rounded-lg px-2 py-1.5 text-sm text-white num focus:border-cyan-brand outline-none";
 
 // ─── 컴포넌트 ──────────────────────────────────────────────────────────────────
 export default function DeadlineCountdown() {
@@ -143,7 +143,7 @@ export default function DeadlineCountdown() {
         <div className="h-2 bg-navy-border rounded-full overflow-hidden">
           <div className="h-full bg-signal-green rounded-full transition-all" style={{ width: `${Math.min(100, paidPct)}%` }} />
         </div>
-        <div className="flex justify-between text-xs mt-1">
+        <div className="flex justify-between text-sm mt-1">
           <span className="text-signal-green num">납부 {won(paid)}</span>
           <span className="text-gray-500 num">잔여 {won(remain)}</span>
         </div>
@@ -155,22 +155,22 @@ export default function DeadlineCountdown() {
           <p className="text-[11px] text-gray-500">입금액·입금일을 넣고 저장하세요. 입금액이 분양대금 이상이면 ‘완납’, 일부면 ‘부분 납부’로 표시됩니다.</p>
           {draft.map((r, i) => (
             <div key={i} className="rounded-xl border border-navy-border bg-navy-sub/30 p-3 grid grid-cols-2 sm:grid-cols-[1.1fr_1fr_1.2fr_1.2fr_1fr_auto] gap-2 items-end">
-              <label className="space-y-1 col-span-2 sm:col-span-1"><span className="text-[10px] text-gray-500">차수</span>
+              <label className="space-y-1 col-span-2 sm:col-span-1"><span className="text-xs text-gray-500">차수</span>
                 <input value={r.label} onChange={e => set(i, { label: e.target.value })} className={inputCls} /></label>
-              <label className="space-y-1"><span className="text-[10px] text-gray-500">지정일</span>
+              <label className="space-y-1"><span className="text-xs text-gray-500">지정일</span>
                 <input type="date" value={r.dueDate} onChange={e => set(i, { dueDate: e.target.value })} className={inputCls} /></label>
-              <label className="space-y-1"><span className="text-[10px] text-gray-500">분양대금(원)</span>
+              <label className="space-y-1"><span className="text-xs text-gray-500">분양대금(원)</span>
                 <WonInput value={r.amount} onChange={n => set(i, { amount: n })} /></label>
-              <label className="space-y-1"><span className="text-[10px] text-gold">입금액(원)</span>
+              <label className="space-y-1"><span className="text-xs text-gold">입금액(원)</span>
                 <div className="flex gap-1">
                   <WonInput value={r.paidAmount} onChange={n => set(i, { paidAmount: n })} className="border-gold/40" />
                   <button type="button" title="분양대금 전액" onClick={() => set(i, { paidAmount: r.amount, paidDate: r.paidDate || new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10) })}
-                    className="shrink-0 px-2 rounded-lg text-[10px] border border-signal-green/40 text-signal-green">전액</button>
+                    className="shrink-0 px-2 rounded-lg text-xs border border-signal-green/40 text-signal-green">전액</button>
                 </div></label>
-              <label className="space-y-1"><span className="text-[10px] text-gold">입금일</span>
+              <label className="space-y-1"><span className="text-xs text-gold">입금일</span>
                 <input type="date" value={r.paidDate ?? ""} onChange={e => set(i, { paidDate: e.target.value || null })} className={`${inputCls} border-gold/40`} /></label>
-              <button type="button" onClick={() => setDraft(d => d!.filter((_, k) => k !== i))} className="text-[11px] text-gray-500 hover:text-signal-red py-1.5 px-1">삭제</button>
-              <label className="space-y-1 col-span-2 sm:col-span-6"><span className="text-[10px] text-gray-500">메모</span>
+              <button type="button" onClick={() => setDraft(d => d!.filter((_, k) => k !== i))} className="text-xs text-gray-500 hover:text-signal-red py-1.5 px-1">삭제</button>
+              <label className="space-y-1 col-span-2 sm:col-span-6"><span className="text-xs text-gray-500">메모</span>
                 <input value={r.memo ?? ""} placeholder="예: 중도금 대출 실행, 이체 계좌" onChange={e => set(i, { memo: e.target.value })} className={inputCls} /></label>
             </div>
           ))}
@@ -180,9 +180,9 @@ export default function DeadlineCountdown() {
       ) : (
         /* ── 납입 일정 테이블 ── */
         <div className="overflow-x-auto -mx-1">
-          <table className="w-full text-xs border-collapse min-w-[600px]">
+          <table className="w-full text-sm border-collapse min-w-[680px]">
             <thead>
-              <tr className="border-b border-navy-border/60 text-gray-500">
+              <tr className="border-b border-navy-border/60 text-gray-500 text-xs">
                 {["차수", "지정일", "분양대금", "입금액", "잔여", "입금일", "상태"].map((h, i) => (
                   <th key={h} className={`py-2 px-2 font-medium whitespace-nowrap ${i === 0 ? "text-left" : i === 1 || i >= 5 ? "text-center" : "text-right"}`}>{h}</th>
                 ))}
@@ -201,7 +201,7 @@ export default function DeadlineCountdown() {
                         {isNext && <span className="w-1.5 h-1.5 rounded-full bg-gold shrink-0" />}
                         <span className={`font-semibold ${isNext ? "text-gold" : "text-gray-300"}`}>{r.label}</span>
                       </div>
-                      {r.memo && <p className="text-[10px] text-gray-500 mt-0.5 max-w-[160px] truncate">{r.memo}</p>}
+                      {r.memo && <p className="text-xs text-gray-500 mt-0.5 max-w-[180px] truncate">{r.memo}</p>}
                     </td>
                     <td className="py-2.5 px-2 text-center text-gray-400 num whitespace-nowrap">{fmtDate(r.dueDate)}</td>
                     <td className="py-2.5 px-2 text-right font-semibold text-white num whitespace-nowrap" title={won(r.amount)}>{toUk(r.amount)}</td>
@@ -214,11 +214,11 @@ export default function DeadlineCountdown() {
                     <td className="py-2.5 px-2 text-center text-gray-400 num whitespace-nowrap">{r.paidDate ? fmtDate(r.paidDate) : <span className="text-gray-600">—</span>}</td>
                     <td className="py-2.5 px-2 text-center whitespace-nowrap">
                       {r.done ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-signal-green/10 border border-signal-green/30 text-signal-green">✓ 완납</span>
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-signal-green/10 border border-signal-green/30 text-signal-green">✓ 완납</span>
                       ) : partial ? (
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-gold/10 border border-gold/30 text-gold">부분 납부</span>
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold bg-gold/10 border border-gold/30 text-gold">부분 납부</span>
                       ) : (
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold border ${st.bg} ${st.text}`}>{r.days >= 0 ? `D-${r.days}` : `D+${-r.days}`}</span>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold border ${st.bg} ${st.text}`}>{r.days >= 0 ? `D-${r.days}` : `D+${-r.days}`}</span>
                       )}
                     </td>
                   </tr>
@@ -232,7 +232,7 @@ export default function DeadlineCountdown() {
                 <td className="py-2.5 px-2 text-right text-signal-green font-bold num">{toUk(paid)}</td>
                 <td className="py-2.5 px-2 text-right text-gold font-bold num">{toUk(remain)}</td>
                 <td className="py-2.5 px-2" />
-                <td className="py-2.5 px-2 text-center text-[11px] text-gray-500">{paidPct.toFixed(1)}%</td>
+                <td className="py-2.5 px-2 text-center text-xs text-gray-500">{paidPct.toFixed(1)}%</td>
               </tr>
             </tfoot>
           </table>
@@ -244,8 +244,8 @@ export default function DeadlineCountdown() {
         <div className={`p-3 rounded-xl border ${ddayStyle(nextDue.days, false).bg} flex items-center justify-between`}>
           <div>
             <p className={`text-xs font-bold ${ddayStyle(nextDue.days, false).text}`}>⏰ 다음 납부 예정</p>
-            <p className="text-sm text-gray-300 font-semibold mt-0.5">{nextDue.label}</p>
-            <p className="text-xs text-gray-500 num">{fmtDate(nextDue.dueDate)} · {won(Math.max(0, nextDue.amount - nextDue.paidAmount))}</p>
+            <p className="text-base text-gray-200 font-semibold mt-0.5">{nextDue.label}</p>
+            <p className="text-sm text-gray-400 num">{fmtDate(nextDue.dueDate)} · {won(Math.max(0, nextDue.amount - nextDue.paidAmount))}</p>
           </div>
           <p className={`text-3xl font-bold num ${ddayStyle(nextDue.days, false).text}`}>{nextDue.days >= 0 ? `D-${nextDue.days}` : `D+${-nextDue.days}`}</p>
         </div>

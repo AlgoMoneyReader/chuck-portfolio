@@ -464,7 +464,7 @@ export default function PortfolioManager() {
                 <div className="space-y-2">
                   {diagnosis.sectorWeights.slice(0, 5).map(s => (
                     <div key={s.sector}>
-                      <div className="flex justify-between text-xs mb-0.5">
+                      <div className="flex justify-between text-sm mb-0.5">
                         <span className="text-gray-300">{s.sector}</span>
                         <span className="text-gray-400 num">
                           {s.weight}%
@@ -490,7 +490,7 @@ export default function PortfolioManager() {
                 {/* 3-line comment */}
                 <div className="space-y-1.5 pt-2 border-t border-navy-border/40">
                   {diagnosis.comment.map((line, i) => (
-                    <p key={i} className="text-xs text-gray-300 leading-relaxed">{line}</p>
+                    <p key={i} className="text-sm text-gray-300 leading-relaxed">{line}</p>
                   ))}
                 </div>
 

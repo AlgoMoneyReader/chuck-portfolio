@@ -124,8 +124,8 @@ export default function AdminConsole() {
           [`AI 비용 (${days}일)`, `$${totalCost.toFixed(2)} · 약 ${won(totalCost)}`],
         ].map(([l, v]) => (
           <div key={l} className="rounded-xl bg-navy-sub/60 p-3">
-            <p className="text-[11px] text-gray-500">{l}</p>
-            <p className="text-sm font-bold text-white num mt-0.5">{v}</p>
+            <p className="text-xs text-gray-500">{l}</p>
+            <p className="text-base font-bold text-white num mt-0.5">{v}</p>
           </div>
         ))}
       </div>
@@ -138,8 +138,8 @@ export default function AdminConsole() {
 
       {tab === "users" && (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs min-w-[640px]">
-            <thead><tr className="text-gray-500 text-[11px]">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead><tr className="text-gray-500 text-xs">
               <th className="text-left font-normal py-1.5">닉네임</th><th className="text-left font-normal">가입일</th><th className="text-left font-normal">최근 활동</th>
               <th className="text-right font-normal">오늘 AI</th><th className="text-right font-normal">AI 호출</th><th className="text-right font-normal">토큰</th><th className="text-right font-normal">비용</th>
               <th className="text-right font-normal">검색</th><th className="text-right font-normal">조회</th>
@@ -147,7 +147,7 @@ export default function AdminConsole() {
             <tbody className="divide-y divide-navy-border/60 num">
               {rows.map(r => (
                 <tr key={r.id} onClick={() => { setSel(sel === r.id ? null : r.id); setTab("feed"); }} className="cursor-pointer hover:bg-white/5">
-                  <td className="py-2 text-white font-semibold">{r.nickname}</td>
+                  <td className="py-2.5 text-white font-semibold">{r.nickname}</td>
                   <td className="text-gray-400">{t(r.created_at)}</td>
                   <td className="text-gray-400">{r.last ? t(r.last) : "—"}</td>
                   <td className="text-right text-gray-300">{r.today}/5</td>
@@ -160,17 +160,17 @@ export default function AdminConsole() {
               ))}
             </tbody>
           </table>
-          <p className="text-[10px] text-gray-600 mt-2">회원을 누르면 그 회원의 활동 기록과 AI 사용 내역이 보입니다 · 비용은 Claude 기준 추정(Gemini 무료 등급은 0)</p>
+          <p className="text-[11px] text-gray-600 mt-2">회원을 누르면 그 회원의 활동 기록과 AI 사용 내역이 보입니다 · 비용은 Claude 기준 추정(Gemini 무료 등급은 0)</p>
         </div>
       )}
 
       {tab === "ai" && (
-        <table className="w-full text-xs">
-          <thead><tr className="text-gray-500 text-[11px]"><th className="text-left font-normal py-1.5">기능</th><th className="text-right font-normal">호출</th><th className="text-right font-normal">토큰</th><th className="text-right font-normal">비용</th><th className="text-left font-normal pl-3">모델</th></tr></thead>
+        <table className="w-full text-sm">
+          <thead><tr className="text-gray-500 text-xs"><th className="text-left font-normal py-1.5">기능</th><th className="text-right font-normal">호출</th><th className="text-right font-normal">토큰</th><th className="text-right font-normal">비용</th><th className="text-left font-normal pl-3">모델</th></tr></thead>
           <tbody className="divide-y divide-navy-border/60 num">
             {byFeature.map(([f, v]) => (
-              <tr key={f}><td className="py-2 text-white">{f}</td><td className="text-right text-gray-300">{v.calls}</td><td className="text-right text-gray-300">{tok(v.tokens)}</td>
-                <td className="text-right text-gold">${v.cost.toFixed(3)}</td><td className="pl-3 text-gray-500 text-[10px]">{Array.from(v.models).join(", ")}</td></tr>
+              <tr key={f}><td className="py-2.5 text-white">{f}</td><td className="text-right text-gray-300">{v.calls}</td><td className="text-right text-gray-300">{tok(v.tokens)}</td>
+                <td className="text-right text-gold">${v.cost.toFixed(3)}</td><td className="pl-3 text-gray-500 text-xs">{Array.from(v.models).join(", ")}</td></tr>
             ))}
           </tbody>
         </table>
@@ -178,7 +178,7 @@ export default function AdminConsole() {
 
       {tab === "feed" && (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1 text-[11px]">
+          <div className="flex flex-wrap items-center gap-1 text-xs">
             {sel && <button onClick={() => setSel(null)} className="px-2 py-1 rounded-lg bg-gold/15 text-gold">{nameOf(sel)} ✕</button>}
             {["all", ...Object.keys(KIND)].map(k => (
               <button key={k} onClick={() => setKind(k)} className={`px-2 py-1 rounded-lg ${kind === k ? "bg-cyan-brand/20 text-cyan-brand" : "text-gray-500"}`}>{k === "all" ? "전체" : KIND[k]}</button>
@@ -186,18 +186,18 @@ export default function AdminConsole() {
           </div>
           {sel && selAi.length > 0 && (
             <div className="rounded-xl bg-navy-sub/50 p-3">
-              <p className="text-[11px] text-gray-500 mb-1">AI 사용 내역</p>
-              <ul className="space-y-1 text-[11px] num">
-                {selAi.map(x => <li key={x.id} className="flex gap-2"><span className="text-gray-500 w-24 shrink-0">{t(x.created_at)}</span><span className="text-white">{x.feature}</span><span className="text-gray-400 truncate flex-1">{x.detail}</span><span className="text-gray-500">{tok(x.input_tokens + x.output_tokens)}</span><span className="text-gold w-14 text-right">${Number(x.cost_usd).toFixed(3)}</span></li>)}
+              <p className="text-xs text-gray-500 mb-1">AI 사용 내역</p>
+              <ul className="space-y-1.5 text-sm num">
+                {selAi.map(x => <li key={x.id} className="flex gap-2"><span className="text-gray-500 w-28 shrink-0 text-xs">{t(x.created_at)}</span><span className="text-white">{x.feature}</span><span className="text-gray-400 truncate flex-1">{x.detail}</span><span className="text-gray-500">{tok(x.input_tokens + x.output_tokens)}</span><span className="text-gold w-14 text-right">${Number(x.cost_usd).toFixed(3)}</span></li>)}
               </ul>
             </div>
           )}
-          <ul className="divide-y divide-navy-border/60 text-xs">
+          <ul className="divide-y divide-navy-border/60 text-sm">
             {feed.length === 0 ? <li className="py-4 text-gray-500 text-center">기록이 없습니다</li> : feed.map(a => (
-              <li key={a.id} className="py-2 flex gap-2 items-baseline">
-                <span className="text-gray-500 w-24 shrink-0 num">{t(a.created_at)}</span>
+              <li key={a.id} className="py-2.5 flex gap-2 items-baseline">
+                <span className="text-gray-500 w-28 shrink-0 num text-xs">{t(a.created_at)}</span>
                 <button onClick={() => setSel(a.user_id)} className={`font-semibold shrink-0 hover:text-cyan-brand ${nick[a.user_id] ? "text-white" : "text-gray-500 italic"}`} title={nick[a.user_id] ? undefined : "카카오 로그인 후 닉네임을 정하지 않아 프로필이 없는 사용자"}>{nameOf(a.user_id)}</button>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-navy-sub text-gray-400 shrink-0">{KIND[a.kind] ?? a.kind}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-navy-sub text-gray-400 shrink-0">{KIND[a.kind] ?? a.kind}</span>
                 <span className="text-gray-300 truncate">
                   {typeof a.detail?.code === "string" ? <Link href={`/stock/${a.detail.code}`} className="hover:text-cyan-brand">{actText(a)}</Link> : actText(a)}
                 </span>
