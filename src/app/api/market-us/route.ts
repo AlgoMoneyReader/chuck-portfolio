@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { yahooDaily } from "@/lib/yahooDaily";
 import { extendedOne, dayMarketOne, inDaySession } from "@/lib/usExtended";
 import { nasdaqQuotes, US_TICKERS } from "@/lib/usCaps";
 
@@ -324,10 +325,12 @@ export async function GET(request: Request) {
   // ① 섹터 ETF (pre/post 불필요)
   if (type === "sector") {
     const syms   = SECTOR_ETFS.map(e => e.symbol);
-    const sparks = await fetchSpark(syms);
+    // 일봉 5일치로 전일 종가를 직접 확인 (range=1d 값이 가끔 이틀 전 종가로 잡혀 등락률이 틀어짐)
+    const dq = await yahooDaily(syms);
+    const sparks = Object.keys(dq).length ? [] : await fetchSpark(syms);
     const sectors = SECTOR_ETFS.map(etf => {
-      const q = sparks.find(r => r.code === etf.symbol);
-      return { sector: etf.name, symbol: etf.symbol, changePct: q?.changePct ?? 0, price: q?.price ?? 0 };
+      const d = dq[etf.symbol], q = sparks.find(r => r.code === etf.symbol);
+      return { sector: etf.name, symbol: etf.symbol, changePct: d ? +d.changePct.toFixed(2) : q?.changePct ?? 0, price: d ? +d.price.toFixed(2) : q?.price ?? 0 };
     }).sort((a, b) => b.changePct - a.changePct);
     return NextResponse.json({ sectors, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
   }

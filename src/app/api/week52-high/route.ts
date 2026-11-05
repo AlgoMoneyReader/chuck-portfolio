@@ -96,6 +96,10 @@ async function fromKis(market: string): Promise<Week52Result[] | null> {
       const pct = (r.prdy_vrss_sign === "4" || r.prdy_vrss_sign === "5") ? -Math.abs(raw) : raw;
       // 이미 고가를 넘었으면 new_hgpr 가 현재가와 같아진다 → 0% (돌파)
       const dist = ((price - high) / high) * 100;
+      // 오늘 거래가 없는 종목(거래정지·관리 등)은 '현재가 = 고가, 0%'로 잡혀 맨 위에 쌓인다 → 제외
+      const vol = num(r.acml_vol) ?? 0;
+      if (vol <= 0) continue;
+      if (dist >= 0 && pct <= 0) continue; // 보합·하락인데 '신고가'로 잡힌 경우(전일 고가 그대로) 제외
       out.push({ rank: 0, code, name, price, changePct: Math.round(pct * 100) / 100,
         week52High: high, distFromHigh: Math.round(dist * 10) / 10, isNewHigh: dist >= 0 });
     }
@@ -123,7 +127,8 @@ export async function GET(request: Request) {
     const list = kis ?? await fromYahoo(market);
     const candidates = list
       .filter(r => r.distFromHigh >= -3)
-      .sort((a, b) => b.distFromHigh - a.distFromHigh || b.changePct - a.changePct)
+      // 오늘 신고가 경신 종목(상승률 순) → 그다음 근접 종목(고가에 가까운 순)
+      .sort((a, b) => (Number(b.isNewHigh) - Number(a.isNewHigh)) || (a.isNewHigh ? b.changePct - a.changePct : b.distFromHigh - a.distFromHigh))
       .slice(0, 30)
       .map((r, i) => ({ ...r, rank: i + 1 }));
     const body = { market, candidates, source: kis ? "kis" : "yahoo", timestamp: new Date().toISOString() };

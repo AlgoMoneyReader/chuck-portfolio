@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { yahooDaily } from "@/lib/yahooDaily";
 
 export const dynamic = "force-dynamic";
 
@@ -164,30 +165,14 @@ export async function GET(request: Request) {
   const nameMap  = Object.fromEntries(holdings.map(h => [h.ticker, h.name]));
 
   try {
-    // v7/finance/quote — 배치 실시간 시세 (pre/post 포함)
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(tickers.join(","))}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketVolume,shortName`,
-      {
-        headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-        cache: "no-store",
-      }
-    );
-
-    if (!res.ok) throw new Error(`quote fetch failed: ${res.status}`);
-
-    const j = await res.json();
-    const quotes = (j?.quoteResponse?.result ?? []) as Record<string, unknown>[];
-
-    // 순서 유지: holdings 순서(시가총액 기준) 그대로 반환
+    // v7/quote 는 인증(crumb)이 필요해 서버에서 막힌다 → spark 일봉으로 시세
+    const dq = await yahooDaily(tickers);
+    if (!Object.keys(dq).length) throw new Error("시세 응답 없음");
     const stocks: USSectorStock[] = holdings.map((h, i) => {
-      const q = quotes.find(r => (r.symbol as string) === h.ticker);
+      const q = dq[h.ticker];
       return {
-        rank:      i + 1,
-        code:      h.ticker,
-        name:      nameMap[h.ticker] ?? h.ticker,
-        price:     q ? parseFloat(((q.regularMarketPrice as number) ?? 0).toFixed(2)) : 0,
-        changePct: q ? parseFloat(((q.regularMarketChangePercent as number) ?? 0).toFixed(2)) : 0,
-        volume:    q ? (q.regularMarketVolume as number) ?? 0 : 0,
+        rank: i + 1, code: h.ticker, name: nameMap[h.ticker] ?? h.ticker,
+        price: q ? +q.price.toFixed(2) : 0, changePct: q ? +q.changePct.toFixed(2) : 0, volume: q?.volume ?? 0,
       };
     });
 

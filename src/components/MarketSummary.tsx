@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { krSession } from "@/lib/krSession";
 import { useStockModal } from "./StockModal";
 
@@ -427,12 +427,13 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
       <p className="text-xs text-gray-600 mb-3">5일 평균 대비 오늘 거래량 배율 기준 정렬</p>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-        <span className="w-5 text-center">#</span>
-        <span className="flex-1">종목</span>
-        <span className="w-14 text-right">등락률</span>
-        <span className="w-16 text-right">오늘 거래량</span>
-        <span className="w-12 text-right">배율</span>
+      <div className="grid items-center gap-x-3 grid-cols-[20px_minmax(0,1fr)_64px_76px_44px] md:gap-x-4 md:grid-cols-[28px_minmax(160px,2fr)_repeat(4,minmax(0,1fr))] py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+        <span className="text-center">#</span>
+        <span>종목</span>
+        <span className="hidden md:block text-right">현재가</span>
+        <span className="text-right">등락률</span>
+        <span className="text-right">오늘 거래량</span>
+        <span className="text-right">5일 평균 대비</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">데이터가 없습니다</p>
@@ -440,21 +441,20 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
             <div key={r.code}
-              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              className="grid items-center gap-x-3 grid-cols-[20px_minmax(0,1fr)_64px_76px_44px] md:gap-x-4 md:grid-cols-[28px_minmax(160px,2fr)_repeat(4,minmax(0,1fr))] py-2 md:py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
               onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
             >
-              <RankBadge rank={r.rank} />
-              <div className="flex-1 min-w-0">
+              <span className="flex justify-center"><RankBadge rank={r.rank} /></span>
+              <div className="min-w-0">
                 <p className="text-sm text-white font-medium truncate">{r.name}</p>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <span className={`w-14 text-right text-sm font-semibold num ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
+              <span className="hidden md:block text-right text-sm text-white num whitespace-nowrap">{r.price ? fmtPrice(r.price) : "—"}</span>
+              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.changePct >= 0 ? "text-signal-green" : "text-signal-red"}`}>
                 {r.changePct >= 0 ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
               </span>
-              <span className="w-16 text-right text-xs text-gray-300 num">{fmtVol(r.todayVolume)}</span>
-              <span className="w-12 text-right">
-                <span className="text-xs font-bold text-gold num">{r.ratio}x</span>
-              </span>
+              <span className="text-right text-sm text-gray-300 num whitespace-nowrap">{fmtVol(r.todayVolume)}</span>
+              <span className="text-right text-sm font-bold text-gold num">{r.ratio}x</span>
             </div>
           ))}
         </div>
@@ -714,15 +714,16 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
   return (
     <div>
       <div className="flex justify-between mb-3 text-xs">
-        <span className="text-gray-500">52주 신고가 돌파 · 3% 이내 근접 {source === "yahoo" ? "(주요 종목 기준)" : "(시장 전체)"}</span>
+        <span className="text-gray-500">오늘 52주 신고가 경신 · 고가 3% 이내 근접 {source === "yahoo" ? "(주요 종목 기준)" : "(시장 전체)"}</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
-        <span className="w-5 text-center shrink-0">#</span>
-        <span className="flex-1">종목</span>
-        <span className="text-right shrink-0">현재가 · 등락률</span>
-        <span className="hidden sm:block w-20 text-right shrink-0">52주 고가</span>
-        <span className="w-14 text-right shrink-0">고가 대비</span>
+      <div className="grid items-center gap-x-3 grid-cols-[20px_minmax(0,1fr)_auto_60px] md:gap-x-4 md:grid-cols-[28px_minmax(160px,2fr)_repeat(4,minmax(0,1fr))] py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+        <span className="text-center">#</span>
+        <span>종목</span>
+        <span className="text-right"><span className="md:hidden">현재가 · 등락률</span><span className="hidden md:inline">현재가</span></span>
+        <span className="hidden md:block text-right">등락률</span>
+        <span className="hidden md:block text-right">52주 고가</span>
+        <span className="text-right">고가 대비</span>
       </div>
       {loading ? <SkeletonRows /> : rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-6 text-center">52주 신고가 근접 종목이 없습니다</p>
@@ -730,11 +731,11 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
             <div key={r.code}
-              className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              className="grid items-center gap-x-3 grid-cols-[20px_minmax(0,1fr)_auto_60px] md:gap-x-4 md:grid-cols-[28px_minmax(160px,2fr)_repeat(4,minmax(0,1fr))] py-2 md:py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
               onClick={() => onSelect({ code: r.code, market: market === "KOSDAQ" ? "KQ" : "KS", name: r.name })}
             >
-              <RankBadge rank={r.rank} />
-              <div className="flex-1 min-w-0">
+              <span className="flex justify-center"><RankBadge rank={r.rank} /></span>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm text-white font-medium truncate">{r.name}</p>
                   {r.isNewHigh && (
@@ -743,13 +744,15 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
                 </div>
                 <p className="text-xs text-gray-600">{r.code}</p>
               </div>
-              <div className="flex flex-col items-end shrink-0">
+              <div className="flex flex-col items-end">
                 <span className="text-sm text-white num whitespace-nowrap">{fmtPrice(r.price)}</span>
-                <span className={`text-[11px] num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+                <span className={`md:hidden text-[11px] num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
               </div>
-              <span className="hidden sm:block w-20 text-right text-xs text-gray-400 num shrink-0">{fmtPrice(r.week52High)}</span>
-              <span className={`w-14 text-right text-sm font-semibold num shrink-0 ${r.distFromHigh >= 0 ? "text-gold" : "text-gray-400"}`}>
-                {r.distFromHigh >= 0 ? "+" : ""}{r.distFromHigh.toFixed(1)}%
+              <span className={`hidden md:block text-right text-sm font-semibold num ${r.changePct > 0 ? "text-signal-green" : r.changePct < 0 ? "text-signal-red" : "text-gray-400"}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
+              <span className="hidden md:block text-right text-sm text-gray-300 num whitespace-nowrap">{fmtPrice(r.week52High)}</span>
+              {/* 돌파 = 오늘 52주 고가를 새로 씀, 근접 = 고가까지 남은 하락폭 */}
+              <span className={`text-right text-sm font-semibold num whitespace-nowrap ${r.isNewHigh ? "text-gold" : "text-gray-300"}`}>
+                {r.isNewHigh ? "신고가" : `${r.distFromHigh.toFixed(1)}%`}
               </span>
             </div>
           ))}
@@ -1011,7 +1014,15 @@ function USStockList({
         <span className="text-gray-500">{subLabel}</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
-      <div className="flex gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
+      <div className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(180px,2fr)_repeat(4,minmax(0,1fr))] py-2 text-xs text-gray-500 font-medium border-b border-navy-border/40">
+        <span className="text-center">#</span>
+        <span>종목</span>
+        <span className="text-right">현재가 <span className="text-gray-700">(프리/애프터)</span></span>
+        <span className="text-right">전일대비</span>
+        <span className="text-right">등락률</span>
+        <span className="text-right">{isCap ? "시가총액" : isValue ? "거래대금" : "거래량"}</span>
+      </div>
+      <div className="flex md:hidden gap-3 py-1.5 text-xs text-gray-600 font-medium border-b border-navy-border/40">
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(프리/애프터)</span></span>
@@ -1033,8 +1044,32 @@ function USStockList({
             const extLabel = hasDay ? "데이마켓" : hasPre ? "프리" : hasPost ? (r.marketState === "POST" ? "애프터" : "애프터 종가") : null;
             const isPos    = r.changePct >= 0;
             return (
-              <div key={r.code}
-                className="flex items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
+              <Fragment key={r.code}>
+              <div className="hidden md:grid items-center gap-x-4 grid-cols-[28px_minmax(180px,2fr)_repeat(4,minmax(0,1fr))] py-2.5 hover:bg-navy-card/30 rounded cursor-pointer transition-colors text-sm num"
+                onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}>
+                <span className="flex justify-center"><RankBadge rank={r.rank} /></span>
+                <div className="min-w-0">
+                  <p className="text-white font-medium truncate">{r.name}</p>
+                  <p className="text-xs text-gray-600">{r.code}</p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span key={`${r.code}-d-${r.price}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">{fmtUSD(r.price)}</span>
+                  {extPrice != null && extPct != null && (
+                    <span className="text-[11px] whitespace-nowrap mt-0.5">
+                      <span className={`font-bold mr-1 ${hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300"}`}>{extLabel}</span>
+                      <span className="text-gray-300">{fmtUSD(extPrice)}</span>
+                      <span className={`ml-1 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>
+                    </span>
+                  )}
+                </div>
+                <span className={`text-right whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>{r.change != null ? `${isPos ? "▲" : "▼"}$${Math.abs(r.change).toFixed(2)}` : "—"}</span>
+                <span className={`text-right font-semibold whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "+" : "-"}{Math.abs(r.changePct).toFixed(2)}%</span>
+                <span className="text-right text-gray-300 whitespace-nowrap">
+                  {isCap ? (r.capUsd ? (r.capUsd >= 1e12 ? `$${(r.capUsd / 1e12).toFixed(2)}T` : `$${(r.capUsd / 1e9).toFixed(0)}B`) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
+                </span>
+              </div>
+              <div
+                className="flex md:hidden items-center gap-3 py-2 hover:bg-navy-card/30 rounded cursor-pointer transition-colors"
                 onClick={() => onSelect({ code: r.code, market: "US", name: r.name })}
               >
                 <RankBadge rank={r.rank} />
@@ -1062,6 +1097,7 @@ function USStockList({
                   {isCap ? (r.capUsd ? (r.capUsd >= 1e12 ? `$${(r.capUsd / 1e12).toFixed(2)}T` : `$${(r.capUsd / 1e9).toFixed(0)}B`) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
               </div>
+              </Fragment>
             );
           })}
         </div>
