@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { ASIA_SYMBOLS } from "@/lib/asiaMarkets";
 
 export const dynamic = "force-dynamic";
 
 // 지수 카드 라벨 → Yahoo 심볼
 const SYMBOLS: Record<string, string> = {
+  ...ASIA_SYMBOLS,
   KOSPI: "^KS11", KOSDAQ: "^KQ11",
   "S&P 500": "^GSPC", NASDAQ: "^IXIC", "다우존스": "^DJI", "러셀 2000": "^RUT", "필라델피아 반도체": "^SOX", VIX: "^VIX",
   "S&P500 선물": "ES=F", "나스닥 선물": "NQ=F", "다우 선물": "YM=F",
@@ -16,14 +18,22 @@ export async function GET() {
   if (cache && Date.now() - cache.at < TTL) return NextResponse.json(cache.body);
   const entries = Object.entries(SYMBOLS);
   try {
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${entries.map(([, s]) => encodeURIComponent(s)).join(",")}&range=1d&interval=5m`,
-      { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(8000) }
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const j = await res.json();
+    // Yahoo spark 는 한 번에 20개까지 — 나눠서 받는다
     const bySymbol = new Map<string, number[]>();
-    for (const r of (j?.spark?.result ?? []) as Record<string, unknown>[]) {
+    const syms = Array.from(new Set(entries.map(([, s]) => s)));
+    const chunks: string[][] = [];
+    for (let i = 0; i < syms.length; i += 15) chunks.push(syms.slice(i, i + 15));
+    const results = await Promise.all(chunks.map(async c => {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${c.map(encodeURIComponent).join(",")}&range=1d&interval=5m`,
+        { headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(8000) }
+      );
+      if (!res.ok) return [];
+      const j = await res.json();
+      return (j?.spark?.result ?? []) as Record<string, unknown>[];
+    }));
+    if (!results.some(r => r.length)) throw new Error("spark 응답 없음");
+    for (const r of results.flat()) {
       const resp = (r.response as Record<string, unknown>[])?.[0];
       const closes = ((resp?.indicators as { quote?: { close?: (number | null)[] }[] })?.quote?.[0]?.close ?? [])
         .filter((v): v is number => typeof v === "number");

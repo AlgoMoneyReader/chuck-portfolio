@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { OPEN_CHART_EVENT } from "./MarketTicker";
+import { ASIA } from "@/lib/asiaMarkets";
 const ChartModal = lazy(() => import("./ChartModal"));
 
 interface IndexData {
@@ -12,6 +13,7 @@ interface IndexData {
 }
 
 interface MarketData {
+  [asiaKey: string]: IndexData | null | undefined | string;
   kospi:   IndexData | null;
   kosdaq:  IndexData | null;
   sp500:   IndexData | null;
@@ -32,6 +34,7 @@ interface MarketData {
 const CHART_LABELS = new Set([
   "KOSPI", "KOSDAQ", "S&P 500", "NASDAQ", "다우존스", "러셀 2000", "필라델피아 반도체", "VIX",
   "S&P500 선물", "나스닥 선물", "다우 선물", "금", "WTI 원유", "USD/KRW", "주간선물", "야간선물",
+  ...ASIA.map(a => a.label),
 ]);
 
 // ── 하루 흐름 미니 그래프 (첫 점 = 전일 종가) ─────────────────────────────────
@@ -187,8 +190,9 @@ function useKospiFutures(enabled: boolean) {
   return { day: toIdx(day), night: toIdx(night), dayLine: toLine(day), nightLine: toLine(night) };
 }
 
-export default function LiveMarketPulse({ region }: { region?: "KR" | "US" } = {}) {
-  const showKR = region !== "US", showUS = region !== "KR";
+export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "ASIA" } = {}) {
+  const showKR = !region || region === "KR", showUS = !region || region === "US", showAsia = region === "ASIA";
+  const asiaOf = (k: string) => (data?.[k] as IndexData | null | undefined) ?? null;
   const [data, setData]           = useState<MarketData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>("");
@@ -251,7 +255,7 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" } = {
       <section className="space-y-3">
         {/* 헤더 */}
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{region === "KR" ? "국내 주요 지수" : region === "US" ? "미국 주요 지수" : "실시간 시장 현황"}</h2>
+          <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">{region === "KR" ? "국내 주요 지수" : region === "US" ? "미국 주요 지수" : region === "ASIA" ? "아시아 주요 지수" : "실시간 시장 현황"}</h2>
           <span className="text-xs text-gray-600">
             {loading ? "갱신 중..." : lastUpdated ? `${lastUpdated} 기준` : ""}
           </span>
@@ -300,6 +304,30 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" } = {
                 emoji="₿" onSelect={setChart} />
               {!region && <SmallRow label="USD/KRW" data={data?.usdKrw ?? null} emoji="💱" format="number" unit="원" onSelect={setChart} />}
             </div>
+          </>
+        )}
+        {showAsia && (
+          <>
+            {/* 아시아: 일본·대만·홍콩·중국 지수 + 닛케이 선물 + 환율 (한국시간 기준 거래 시간) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {ASIA.filter(a => a.group === "index").map(a => (
+                <IndexCard key={a.key} label={a.label} line={lines[a.label]} data={asiaOf(a.key)} onSelect={setChart} sub={a.sub} />
+              ))}
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">아시아 선물</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ASIA.filter(a => a.group === "futures").map(a => (
+                  <IndexCard key={a.key} label={a.label} line={lines[a.label]} data={asiaOf(a.key)} onSelect={setChart} sub={a.sub} />
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {ASIA.filter(a => a.group === "fx").map(a => (
+                <SmallRow key={a.key} label={a.label} data={asiaOf(a.key)} emoji="💱" format="number" unit="원" onSelect={setChart} />
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-600">시간은 한국시간 기준 · 지수는 거래소 사정에 따라 약 15분 지연될 수 있습니다</p>
           </>
         )}
       </section>

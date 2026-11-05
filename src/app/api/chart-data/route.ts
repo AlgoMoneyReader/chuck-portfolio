@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { ASIA_SYMBOLS } from "@/lib/asiaMarkets";
 import { getKisToken } from "@/lib/fetchKisMaster";
 
 export const dynamic = "force-dynamic";
 
 const SYMBOL_MAP: Record<string, string> = {
+  ...ASIA_SYMBOLS,
   "KOSPI":      "^KS11",
   "KOSDAQ":     "^KQ11",
   "S&P 500":    "^GSPC",

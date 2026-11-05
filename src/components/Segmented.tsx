@@ -20,7 +20,7 @@ export function useQueryTab<T extends string>(key: string, options: readonly T[]
 // 큰 탭(국내/미국)
 export function RegionTabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: [T, string][] }) {
   return (
-    <div className="grid grid-cols-2 rounded-xl bg-navy-card border border-navy-border p-1 text-sm font-bold">
+    <div className={`grid ${items.length === 3 ? "grid-cols-3" : "grid-cols-2"} rounded-xl bg-navy-card border border-navy-border p-1 text-sm font-bold`}>
       {items.map(([k, l]) => (
         <button key={k} onClick={() => onChange(k)} className={`py-2 rounded-lg transition-colors ${value === k ? "bg-navy-sub text-white" : "text-gray-500"}`}>{l}</button>
       ))}
