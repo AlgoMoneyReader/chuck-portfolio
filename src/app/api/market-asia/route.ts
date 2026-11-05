@@ -10,7 +10,7 @@ export const maxDuration = 30;
  *  type = cap(대형주 순) | gainers | losers | amount(거래대금) | foreign(대만 외국인 순매수)
  * 대만은 증권거래소(TWSE) 공개 자료로 외국인·투신·자기매매 순매수도 붙인다 (시장 전체 + 종목별)
  */
-interface Row { rank: number; code: string; name: string; price: number; changePct: number; volume: number; amount: number; foreignNet?: number | null }
+interface Row { rank: number; code: string; name: string; price: number; change: number; changePct: number; volume: number; amount: number; foreignNet?: number | null }
 
 async function spark(symbols: string[]) {
   const out: Record<string, { price: number; prev: number; volume: number }> = {};
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
       const code = x.s.replace(/\.(TW|T|HK|SS|SZ)$/, "");
       const fs = mkt === "TW" ? sflow[code] : undefined;
       return [{
-        rank: i + 1, code: x.s, name: x.ko, price: v.price, changePct: ((v.price - v.prev) / v.prev) * 100,
+        rank: i + 1, code: x.s, name: x.ko, price: v.price, change: v.price - v.prev, changePct: ((v.price - v.prev) / v.prev) * 100,
         volume: v.volume, amount: v.volume * v.price,
         foreignNet: fs != null ? fs * v.price : mkt === "TW" ? null : undefined,
       }];
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
     else if (type === "losers") rows = rows.filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct);
     else if (type === "amount") rows = rows.sort((a, b) => b.amount - a.amount);
     else if (type === "foreign") rows = rows.filter(r => r.foreignNet != null).sort((a, b) => (b.foreignNet ?? 0) - (a.foreignNet ?? 0));
-    rows = rows.map((r, i) => ({ ...r, rank: i + 1 }));
+    rows = rows.slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
     return NextResponse.json({ mkt, type, stocks: rows, flow, timestamp: new Date().toISOString() }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return NextResponse.json({ mkt, type, stocks: [], error: String(e).slice(0, 120) });
