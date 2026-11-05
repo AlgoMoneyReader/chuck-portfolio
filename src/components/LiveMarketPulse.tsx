@@ -182,7 +182,7 @@ function useKospiFutures(enabled: boolean) {
       fetch("/api/night-futures?session=night", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNight(j); }).catch(() => {});
     };
     load();
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 30_000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
     return () => clearInterval(iv);
   }, [enabled]);
   const toIdx = (f: FutData | null): IndexData | null => f ? { price: f.currentPrice, change: f.change, changePct: f.changePct, marketState: "REGULAR" } : null;
@@ -242,11 +242,12 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
       const kst  = new Date(Date.now() + 9 * 60 * 60 * 1000);
       const day  = kst.getUTCDay();
       const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-      const open = day >= 1 && day <= 5 && mins >= 540 && mins < 930;
-      return open ? 15_000 : 60_000;
+      // 평일엔 국내(08~20시)·미국(밤~새벽) 어느 쪽이든 장이 열려 있으니 5초, 주말만 30초
+      void mins;
+      return day >= 1 && day <= 6 ? 5_000 : 30_000;
     }
-    let iv = setInterval(fetchData, getInterval());
-    const reschedule = setInterval(() => { clearInterval(iv); iv = setInterval(fetchData, getInterval()); }, 60_000);
+    let iv = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, getInterval());
+    const reschedule = setInterval(() => { clearInterval(iv); iv = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, getInterval()); }, 60_000);
     return () => { clearInterval(iv); clearInterval(reschedule); };
   }, [fetchData]);
 

@@ -62,7 +62,10 @@ async function fetchYahoo(symbol: string) {
   } catch { return null; }
 }
 
+let marketMemo: { at: number; body: object } | null = null;
 export async function GET() {
+  if (marketMemo && Date.now() - marketMemo.at < 2_000)
+    return NextResponse.json(marketMemo.body, { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" } });
   const [kospi, kosdaq, sp500, nasdaq, dow, russell, usdKrw, esFut, nqFut, yjFut, gold, oil, sox, vix] =
     await Promise.all([
       fetchNaverIndex("KOSPI"),
@@ -88,8 +91,7 @@ export async function GET() {
     return [a.key, v && a.scale ? { ...v, price: +(v.price * a.scale).toFixed(2), change: +(v.change * a.scale).toFixed(2) } : v];
   }));
 
-  return NextResponse.json(
-    { ...asia, kospi, kosdaq, sp500, nasdaq, dow, russell, sox, vix, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() },
-    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" } }
-  );
+  const body = { ...asia, kospi, kosdaq, sp500, nasdaq, dow, russell, sox, vix, usdKrw, esFut, nqFut, yjFut, gold, oil, timestamp: new Date().toISOString() };
+  marketMemo = { at: Date.now(), body };
+  return NextResponse.json(body, { headers: { "Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache" } });
 }

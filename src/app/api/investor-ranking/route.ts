@@ -46,7 +46,7 @@ const parse = (r: Row): Parsed | null => {
   };
 };
 const toItems = (list: { p: Parsed; amt: number; qty: number }[]): RankItem[] =>
-  list.slice(0, 20).map((x, i) => ({ rank: i + 1, code: x.p.code, name: x.p.name, price: x.p.price, changePct: x.p.changePct, netBuyAmount: x.amt, netBuyQty: x.qty }));
+  list.slice(0, 30).map((x, i) => ({ rank: i + 1, code: x.p.code, name: x.p.name, price: x.p.price, changePct: x.p.changePct, netBuyAmount: x.amt, netBuyQty: x.qty }));
 
 const cache: Record<string, { at: number; body: object }> = {};
 const TTL = 60_000;

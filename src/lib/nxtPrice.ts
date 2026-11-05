@@ -24,13 +24,13 @@ export async function nxtQuote(code: string): Promise<NxtQuote | null> {
   const after = krSession().key === "nxt-after";
   const key = `${after ? "UN" : "NX"}:${code}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < 6_000) return hit.q;   // 실시간 티커처럼 6초
+  if (hit && Date.now() - hit.at < 8_000) return hit.q;   // 목록 전체(최대 100종목)에 붙이므로 8초 보관
   const q = after ? (await quoteOn("UN", code)) ?? (await quoteOn("NX", code)) : await quoteOn("NX", code);
   cache.set(key, { at: Date.now(), q });
   return q;
 }
 
-export async function nxtQuotes(codes: string[], concurrency = 6): Promise<Record<string, NxtQuote>> {
+export async function nxtQuotes(codes: string[], concurrency = 10): Promise<Record<string, NxtQuote>> {
   const out: Record<string, NxtQuote> = {};
   let i = 0;
   await Promise.all(Array.from({ length: concurrency }, async () => {

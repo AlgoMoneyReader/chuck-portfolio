@@ -39,7 +39,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
     const load = () => fetch(src, { cache: "no-store" })
       .then(r => r.json()).then(j => setState({ ...j, candles: j.candles ?? [] })).catch(e => setState({ candles: [], prevClose: null, error: String(e) }));
     load();
-    const iv = intraday ? setInterval(load, 30_000) : undefined;
+    const iv = intraday ? setInterval(() => { if (document.visibilityState === "visible") load(); }, 15_000) : undefined;
     return () => { if (iv) clearInterval(iv); };
   }, [label, tf, intraday, url]);
 

@@ -37,7 +37,7 @@ export default function WatchlistPanel() {
   }, [user, prices]);
 
   useEffect(() => { load(); }, [load]);
-  useMarketPoll(async () => setList(await prices(list)), 15_000);
+  useMarketPoll(async () => setList(await prices(list)), 5_000);
 
   const remove = async (code: string) => {
     const sb = getBrowserSupabase();

@@ -52,7 +52,7 @@ export default function MarketTicker() {
     const loadNews = () => fetch("/api/news-feed", { cache: "no-store" }).then(r => r.json())
       .then(j => setNews((j.items ?? []).slice(0, 8))).catch(() => {});
     loadMarket(); loadNews();
-    const a = setInterval(loadMarket, 60_000), b = setInterval(loadNews, 5 * 60_000);
+    const a = setInterval(() => { if (document.visibilityState === "visible") loadMarket(); }, 5_000), b = setInterval(loadNews, 5 * 60_000);
     return () => { clearInterval(a); clearInterval(b); };
   }, []);
 

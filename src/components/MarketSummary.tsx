@@ -412,6 +412,56 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
 
 // ─── 거래량 급등 ──────────────────────────────────────────────────────────────
 
+// ─── ETF·ETN (레버리지·인버스 포함) ─────────────────────────────────────────
+const ETF_SORTS: [string, string][] = [["cap", "시총상위"], ["up", "상승"], ["down", "하락"], ["amount", "거래대금"]];
+const ETF_KINDS: [string, string][] = [["all", "전체"], ["lev", "레버리지"], ["inv", "인버스"], ["etn", "ETN"]];
+function EtfList({ onSelect }: { onSelect: (d: DrawerState) => void }) {
+  const [sort, setSort] = useState("cap");
+  const [kind, setKind] = useState("all");
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [ts, setTs] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const j = await (await fetch(`/api/market-etf?sort=${sort}&kind=${kind}&_=${Date.now()}`, { cache: "no-store" })).json();
+      setRows(j.rows ?? []);
+      setTs(j.timestamp ? new Date(j.timestamp).toLocaleTimeString("ko-KR") : "");
+    } catch { /* 유지 */ } finally { setLoading(false); }
+  }, [sort, kind]);
+  useEffect(() => {
+    setLoading(true); load();
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 120_000);
+    return () => clearInterval(iv);
+  }, [load]);
+  const chip = (on: boolean) => `px-3 py-1 text-xs rounded-lg border whitespace-nowrap ${on ? "border-cyan-brand/50 bg-cyan-brand/10 text-cyan-brand font-semibold" : "border-navy-border text-gray-500 hover:text-gray-300"}`;
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        {ETF_SORTS.map(([k, l]) => <button key={k} onClick={() => setSort(k)} className={chip(sort === k)}>{l}</button>)}
+        <span className="w-px h-4 bg-navy-border mx-1" />
+        {ETF_KINDS.map(([k, l]) => <button key={k} onClick={() => setKind(k)} className={chip(kind === k)}>{l}</button>)}
+      </div>
+      <div className="flex justify-between mb-2 text-xs">
+        <span className="text-gray-500">국내 상장 ETF·ETN {kind === "lev" ? "· 레버리지" : kind === "inv" ? "· 인버스" : kind === "etn" ? "· ETN" : ""} · 최대 100</span>
+        {ts && <span className="text-gray-600">{ts} 기준</span>}
+      </div>
+      <SwipeHint />
+      {loading ? <SkeletonRows count={10} /> : rows.length === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">{sort === "up" ? "오르는 종목이 없습니다" : sort === "down" ? "내리는 종목이 없습니다" : "데이터를 불러올 수 없습니다"}</p>
+      ) : (
+        <ScrollTable>
+          <KrGridHead cap />
+          <div className="divide-y divide-navy-border/30">
+            {rows.map(r => (
+              <KrStockRow key={r.code} r={r} wideCap onClick={() => onSelect({ code: r.code, market: "KS", name: r.name })} />
+            ))}
+          </div>
+        </ScrollTable>
+      )}
+    </div>
+  );
+}
+
 function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<SpikeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -432,7 +482,7 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
     let tid: ReturnType<typeof setTimeout>;
     function schedule() {
       // 매 tick마다 장 상태를 재평가
-      const delay = isMarketOpen() ? 60_000 : 300_000;
+      const delay = isMarketOpen() ? 20_000 : 300_000;
       tid = setTimeout(() => { load(); schedule(); }, delay);
     }
     schedule();
@@ -865,7 +915,7 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
       .then(j => { if (j && !j.error) setData(j as RankData); })
       .finally(() => setLoading(false));
     load();
-    const iv = setInterval(() => { if (document.visibilityState === "visible" && isMarketOpen()) load(); }, 60_000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible" && isMarketOpen()) load(); }, 30_000);
     return () => clearInterval(iv);
   }, [market]);
 
@@ -1012,7 +1062,7 @@ function USStockList({
   useEffect(() => {
     setLoading(true); setRows([]); load();
     // 실시간 티커처럼: 화면이 보이는 동안 10초마다 (서버는 10초 캐시)
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 5_000);
     return () => clearInterval(iv);
   }, [load]);
 
@@ -1024,7 +1074,7 @@ function USStockList({
     ? "국내 투자자 인기 ETF·레버리지 · 거래대금 순 (지수 선택 무관)"
     : isValue
     ? (index === "DOW" ? "다우존스 30 · 거래대금(가격×거래량) 순" : `${index === "NASDAQ" ? "나스닥 상장" : "미국"} 주요 대형주 + 당일 거래 급증 종목 · 거래대금 순`)
-    : index === "SP500" ? "S&P 500 기준" : index === "NASDAQ" ? "NASDAQ 기준" : "다우존스 30 기준";
+    : `${index === "SP500" ? "S&P 500" : index === "NASDAQ" ? "나스닥 100" : "다우존스 30"} 구성 종목 전체 · ${type === "gainers" ? "상승률" : "하락률"} 순 (최대 100)`;
 
   return (
     <div>
@@ -1286,7 +1336,7 @@ function USSectorHeatmap() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RegionTabType = "KR" | "US";
-type MainTabType = "top10" | "cap" | "gainers" | "losers" | "amount" | "volume" | "sector" | "high52" | "flow";
+type MainTabType = "top10" | "cap" | "gainers" | "losers" | "amount" | "etf" | "volume" | "sector" | "high52" | "flow";
 type MarketType = "KOSPI" | "KOSDAQ";
 type USIndexType = "SP500" | "NASDAQ" | "DOW";
 type USContentTab = "cap" | "gainers" | "losers" | "actives" | "etf" | "sector";
@@ -1321,6 +1371,7 @@ const KR_MARKET_TABS: { id: MainTabType; label: string }[] = [
   { id: "gainers", label: "상승" },
   { id: "losers",  label: "하락" },
   { id: "amount",  label: "거래대금" },
+  { id: "etf",     label: "ETF·ETN" },
   { id: "volume",  label: "거래량급등" },
   { id: "flow",    label: "투자자동향" },
   { id: "high52",  label: "52주신고가" },
@@ -1399,6 +1450,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
         {mainTab === "losers"  && <MoversPanel market={market} mode="losers" onSelect={openStock} />}
         {mainTab === "amount" && <TopByAmountList  market={market} onSelect={openStock} />}
         {mainTab === "cap"    && <TopByAmountList  key="cap" kind="cap" market={market} onSelect={openStock} />}
+        {mainTab === "etf"    && <EtfList onSelect={openStock} />}
         {mainTab === "volume" && <VolumeSpikeList  market={market} onSelect={openStock} />}
         {mainTab === "sector" && <SectorHeatmap    market={market} />}
         {mainTab === "high52" && <Week52HighList   market={market} onSelect={openStock} />}

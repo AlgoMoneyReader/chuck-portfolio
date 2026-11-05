@@ -295,7 +295,8 @@ export async function GET(request: Request) {
     let basis = sess.key === "regular" || sess.key === "auction-close" ? "KRX 정규장" : "KRX 직전 정규장 종가 기준";
     const allZero = valid.length > 0 && valid.every(v => v.changePct === 0);
     if (sess.key !== "regular") {
-      const pickFor = ({ gainers, losers, amount, cap, all: [...gainers.slice(0, 10), ...losers.slice(0, 10), ...amount.slice(0, 10), ...cap.slice(0, 10)] }[nxList] ?? gainers).slice(0, 30);
+      // 보고 있는 목록 전체(최대 100)에 장외 시세를 붙인다 — 'all'(여러 목록을 한꺼번에)일 때만 앞부분으로 제한
+      const pickFor = { gainers, losers, amount, cap, all: [...gainers.slice(0, 20), ...losers.slice(0, 20), ...amount.slice(0, 20), ...cap.slice(0, 20)] }[nxList] ?? gainers;
       const codes = Array.from(new Set([...pickFor, ...(allZero && !kUp && (nxList === "gainers" || nxList === "losers" || nxList === "all") ? valid : [])].map(r => r.code)));
       const nx = await nxtQuotes(codes);
       const withNx = <T extends Omit<TopGainerRow, "rank">>(r: T): T => {

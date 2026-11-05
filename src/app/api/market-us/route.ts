@@ -260,10 +260,45 @@ async function withDayMarket(list: Quote[]): Promise<Quote[]> {
   return out;
 }
 
+const extCache = new Map<string, { at: number; q: Partial<Quote> }>();
+const EXT_KEYS = ["marketState", "preMarketPrice", "preMarketChangePct", "postMarketPrice", "postMarketChangePct", "dayMarketPrice", "dayMarketChangePct"] as const;
 async function withExtended(list: Quote[]): Promise<Quote[]> {
-  const ext = await Promise.all(list.map(q => (q.preMarketPrice != null || q.postMarketPrice != null ? q : extendedOne(q))));
-  return withDayMarket(ext);
+  const now = Date.now();
+  const need = list.filter(q => !(extCache.get(q.code) && now - extCache.get(q.code)!.at < 15_000) && q.preMarketPrice == null && q.postMarketPrice == null);
+  if (need.length) {
+    // 동시에 12개씩
+    const got: Quote[] = new Array(need.length);
+    let i = 0;
+    await Promise.all(Array.from({ length: 12 }, async () => { while (i < need.length) { const k = i++; got[k] = await extendedOne(need[k]); } }));
+    const withDay = await withDayMarket(got);
+    for (const q of withDay) extCache.set(q.code, { at: now, q: Object.fromEntries(EXT_KEYS.map(k => [k, q[k]])) as Partial<Quote> });
+  }
+  return list.map(q => ({ ...q, ...(extCache.get(q.code)?.q ?? {}) }));
 }
+
+// ── 지수 구성 종목 전체 시세 (S&P 500 · 나스닥 100 · 다우 30) — 8초 공유. 전일 종가는 일봉 5일치로 확인 ──
+const uniCache = new Map<string, { at: number; rows: Quote[] }>();
+async function indexUniverse(index: string): Promise<Quote[]> {
+  const hit = uniCache.get(index);
+  if (hit && Date.now() - hit.at < 8_000) return hit.rows;
+  const tag = index === "NASDAQ" ? "QQQ" : index === "DOW" ? "DIA" : "SPY";
+  const members = Object.entries(US_TICKERS).filter(([, v]) => v.idx.includes(tag)).map(([sym]) => sym)
+    .filter((sym, _, all) => !(sym === "GOOG" && all.includes("GOOGL")));
+  const dq = await yahooDaily(members);
+  const rows: Quote[] = members.flatMap(sym => {
+    const d = dq[sym];
+    if (!d || !d.price) return [];
+    return [{
+      rank: 0, code: sym, name: (index === "DOW" ? DOW30[sym] : undefined) ?? US_TICKERS[sym]?.n ?? sym,
+      price: +d.price.toFixed(2), change: +d.change.toFixed(2), changePct: +d.changePct.toFixed(2),
+      volume: d.volume, dollarVolume: d.price * d.volume, marketState: "REGULAR",
+      preMarketPrice: null, preMarketChangePct: null, postMarketPrice: null, postMarketChangePct: null,
+    } as Quote];
+  });
+  if (rows.length) uniCache.set(index, { at: Date.now(), rows });
+  return rows;
+}
+const TOP_N = 100;
 
 const resCache = new Map<string, { at: number; body: object }>();
 
@@ -275,7 +310,7 @@ export async function GET(request: Request) {
   const ts = new Date().toISOString();
   const ck = `${type}:${index}`;
   const hit = resCache.get(ck);
-  if (hit && Date.now() - hit.at < 10_000) return NextResponse.json(hit.body);
+  if (hit && Date.now() - hit.at < 5_000) return NextResponse.json(hit.body);
   const send = (body: { stocks: Quote[] } & Record<string, unknown>) => {
     if (body.stocks.length) resCache.set(ck, { at: Date.now(), body });
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
@@ -289,7 +324,7 @@ export async function GET(request: Request) {
     const ranked = members
       .filter(s => !(s === "GOOG" && members.includes("GOOGL")))
       .sort((a, b) => (caps?.[b]?.cap ?? 0) - (caps?.[a]?.cap ?? 0))
-      .slice(0, 30);
+      .slice(0, TOP_N);
     const quotes = await fetchSparkQuotes(ranked);
     const byCode = new Map(quotes.map(q => [q.code, q]));
     const rows = ranked.flatMap((s, i) => {
@@ -333,6 +368,18 @@ export async function GET(request: Request) {
       return { sector: etf.name, symbol: etf.symbol, changePct: d ? +d.changePct.toFixed(2) : q?.changePct ?? 0, price: d ? +d.price.toFixed(2) : q?.price ?? 0 };
     }).sort((a, b) => b.changePct - a.changePct);
     return NextResponse.json({ sectors, timestamp: ts }, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  // ①-2 상승·하락·거래대금: 지수 구성 종목 전체 기준 100위 (국내와 같은 방식)
+  if (type === "gainers" || type === "losers" || type === "actives") {
+    const uni = await indexUniverse(index);
+    if (uni.length) {
+      const list = (type === "gainers" ? uni.filter(q => q.changePct > 0).sort((a, b) => b.changePct - a.changePct)
+        : type === "losers" ? uni.filter(q => q.changePct < 0).sort((a, b) => a.changePct - b.changePct)
+        : [...uni].sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0)))
+        .slice(0, TOP_N).map((q, i) => ({ ...q, rank: i + 1 }));
+      return send({ stocks: await withExtended(list), timestamp: ts, universe: uni.length, basis: type === "actives" ? "dollarVolume" : "changePct" });
+    }
   }
 
   // ② 거래대금(가격×거래량) 순위
