@@ -1,4 +1,3 @@
-import LiveMarketPulse from "@/components/LiveMarketPulse";
 import AdminLogout from "@/components/AdminLogout";
 import DeadlineCountdown from "@/components/DeadlineCountdown";
 import PortfolioManager from "@/components/PortfolioManager";
@@ -20,9 +19,6 @@ export default function AdminPage() {
 
       {/* 회원 · AI 사용 현황 */}
       <AdminConsole />
-
-      {/* 실시간 시장 현황 */}
-      <LiveMarketPulse />
 
       {/* 분양대금 납입 현황 */}
       <DeadlineCountdown />
