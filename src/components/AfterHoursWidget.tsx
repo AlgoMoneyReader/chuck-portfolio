@@ -33,7 +33,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
   useEffect(() => {
     setLoading(true); load();
     const ext = krSession().extended;
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, region === "KR" && (isKrOpen() || ext) ? 15_000 : 60_000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, region === "KR" && (isKrOpen() || ext) ? 5_000 : 30_000);
     return () => clearInterval(iv);
   }, [load, region]);
 

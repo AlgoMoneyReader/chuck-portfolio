@@ -129,7 +129,7 @@ export default function MarketMap({ fixedRegion }: { fixedRegion?: Region } = {}
     const load = () => fetch(url, { cache: "no-store" })
       .then(r => r.json()).then(j => setData(j)).catch(() => setData(null)).finally(() => setLoading(false));
     load();
-    const iv = setInterval(load, 3 * 60 * 1000);
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 60_000);
     return () => clearInterval(iv);
   }, [region, index]);
 

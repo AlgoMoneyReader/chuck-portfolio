@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { KOSPI_SYMBOLS, KOSDAQ_SYMBOLS, koreanName } from "@/lib/stockList";
+import { kisGet, num } from "@/lib/kis";
 
 export const dynamic = "force-dynamic";
 
@@ -60,17 +61,42 @@ async function fetchVolumeData(symbol: string): Promise<VolumeResult | null> {
   }
 }
 
+// KIS 거래량 순위의 '거래증가율' 정렬(FID_BLNG_CLS_CODE=1) — 시장 전체에서 평소보다 거래가 몰린 종목 (최대 30)
+const ETF_RE = /^(KODEX|TIGER|KBSTAR|RISE|ACE|SOL|HANARO|KOSEF|ARIRANG|PLUS|TIMEFOLIO|KIWOOM|1Q|BNK|WON|파워|마이다스|에셋플러스|히어로즈|TRUSTON|UNICORN|FOCUS|KoAct|ITF)\b|ETN|스팩|SPAC/i;
+async function kisSpikes(market: string): Promise<VolumeResult[] | null> {
+  try {
+    const j = await kisGet("/uapi/domestic-stock/v1/quotations/volume-rank", "FHPST01710000", {
+      FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171", FID_INPUT_ISCD: market === "KOSDAQ" ? "1001" : "0001",
+      FID_DIV_CLS_CODE: "1", FID_BLNG_CLS_CODE: "1", FID_TRGT_CLS_CODE: "111111111",
+      FID_TRGT_EXLS_CLS_CODE: "0000000000", FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "", FID_VOL_CNT: "100000", FID_INPUT_DATE_1: "",
+    });
+    const rows = ((j.output ?? []) as Record<string, string>[]).flatMap(r => {
+      const code = (r.mksc_shrn_iscd ?? "").trim(), name = (r.hts_kor_isnm ?? "").trim();
+      const vol = num(r.acml_vol) ?? 0, avg = num(r.avrg_vol) ?? 0, price = num(r.stck_prpr) ?? 0;
+      if (!/^\d{6}$/.test(code) || !vol || !avg || !price || ETF_RE.test(name)) return [];
+      return [{ rank: 0, code, name, price, changePct: num(r.prdy_ctrt) ?? 0, todayVolume: vol, avgVolume: avg, ratio: Math.round((vol / avg) * 10) / 10 }];
+    });
+    return rows.length ? rows : null;
+  } catch { return null; }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const market = searchParams.get("market") ?? "KOSPI";
   const symbols = market === "KOSDAQ" ? KOSDAQ_SYMBOLS : KOSPI_SYMBOLS;
+
+  const k = await kisSpikes(market);
+  if (k) {
+    const spikes = k.filter(r => r.ratio >= 1).sort((a, b) => b.ratio - a.ratio).slice(0, 30).map((r, i) => ({ ...r, rank: i + 1 }));
+    if (spikes.length) return NextResponse.json({ market, spikes, source: "kis", timestamp: new Date().toISOString() });
+  }
 
   try {
     const results = await Promise.all(symbols.map(fetchVolumeData));
     const sorted = results
       .filter((r): r is VolumeResult => r !== null && r.ratio >= 1)
       .sort((a, b) => b.ratio - a.ratio)
-      .slice(0, 10)
+      .slice(0, 30)
       .map((r, i) => ({ ...r, rank: i + 1 }));
 
     return NextResponse.json({ market, spikes: sorted, timestamp: new Date().toISOString() });
