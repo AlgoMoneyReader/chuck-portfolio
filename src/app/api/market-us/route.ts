@@ -348,6 +348,7 @@ export async function GET(request: Request) {
     let quotes = (await fetchSparkQuotes(tickers)).map(q => ({ ...q, name: DOW30[q.code] ?? q.name }));
     if (!quotes.length) quotes = await fetchQuoteBatch(tickers, DOW30);
     const sorted  = quotes
+      .filter(q => (type === "gainers" ? q.changePct > 0 : type === "losers" ? q.changePct < 0 : true)) // 상승은 +, 하락은 − 종목만
       .sort((a, b) => {
         if (type === "gainers") return b.changePct - a.changePct;
         if (type === "losers")  return a.changePct - b.changePct;

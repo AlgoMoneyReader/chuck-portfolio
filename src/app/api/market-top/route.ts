@@ -120,6 +120,37 @@ async function fetchAllCodes(codes: string[]): Promise<Map<string, NaverSummary>
   return map;
 }
 
+// ── 네이버 증권 시장 전체 순위: 상승(up)·하락(down)·시가총액(marketValue) — 100위까지 ──
+const TOP_N = 100;
+const nNum = (v: unknown) => { const x = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(x) ? 0 : x; };
+async function naverRank(kind: "up" | "down" | "marketValue", market: string, n: number, suffix: string): Promise<TopGainerRow[] | null> {
+  try {
+    const out: TopGainerRow[] = [];
+    for (let page = 1; out.length < n && page <= Math.ceil(n / 100) + 1; page++) {
+      const res = await fetch(`https://m.stock.naver.com/api/stocks/${kind}/${market}?page=${page}&pageSize=100`, {
+        headers: { "User-Agent": "Mozilla/5.0", Referer: "https://m.stock.naver.com/" }, signal: AbortSignal.timeout(8000), cache: "no-store",
+      });
+      if (!res.ok) break;
+      const got = ((await res.json()).stocks ?? []) as Record<string, unknown>[];
+      if (!got.length) break;
+      for (const x of got) {
+        if (x.stockEndType && x.stockEndType !== "stock") continue; // ETF·ETN 제외
+        const code = String(x.itemCode ?? ""), price = nNum(x.closePrice), pct = nNum(x.fluctuationsRatio);
+        if (!/^\w{6}$/.test(code) || !price || out.some(o => o.code === code)) continue;
+        const ch = Math.abs(nNum(x.compareToPreviousClosePrice));
+        out.push({
+          rank: out.length + 1, code, symbol: code + suffix, name: String(x.stockName ?? code),
+          price, change: pct < 0 ? -ch : ch, changePct: pct,
+          volume: nNum(x.accumulatedTradingVolume), tradeAmount: nNum(x.accumulatedTradingValue) * 1e6, // 백만원 → 원
+          capEok: nNum(x.marketValue) || undefined, // 억원
+        });
+      }
+    }
+    return out.length ? out.slice(0, n) : null;
+  } catch { return null; }
+}
+const reRank = (rows: TopGainerRow[]) => rows.slice(0, TOP_N).map((r, i) => ({ ...r, rank: i + 1 }));
+
 // ── KIS 시장 전체 순위 (실패하면 null → 고정 목록 계산으로 대체) ─────────────────
 type KisRow = Record<string, string>;
 
@@ -203,12 +234,26 @@ export async function GET(request: Request) {
     const mktSuffix = market === "KOSDAQ" ? ".KQ" : ".KS";
     const isc = market === "KOSDAQ" ? "1001" : "0001";
 
-    const [kAmount, kUp, kDown, kCap] = await Promise.all([
+    const [kAmount, kUp0, kDown0, kCap0, nUp, nDown, nCap] = await Promise.all([
       kisAmountRank(isc, mktSuffix),
       kisFluctuation(isc, mktSuffix, "0000"),
       kisFluctuation(isc, mktSuffix, "0001"),
       kisCapRank(isc, mktSuffix),
+      naverRank("up", market, TOP_N, mktSuffix),
+      naverRank("down", market, TOP_N, mktSuffix),
+      naverRank("marketValue", market, 400, mktSuffix),
     ]);
+    // 상승은 0보다 큰 종목만, 하락은 0보다 작은 종목만 (시장 전체 기준)
+    const upOnly = (rows: TopGainerRow[] | null) => (rows ? rows.filter(r => r.changePct > 0).sort((a, b) => b.changePct - a.changePct) : null);
+    const downOnly = (rows: TopGainerRow[] | null) => (rows ? rows.filter(r => r.changePct < 0).sort((a, b) => a.changePct - b.changePct) : null);
+    const nU = upOnly(nUp), nD = downOnly(nDown);
+    const kUp = nU?.length ? reRank(nU) : kUp0;
+    const kDown = nD?.length ? reRank(nD) : kDown0;
+    const kCap = nCap?.length ? reRank(nCap) : kCap0;
+    // 거래대금: KIS 시장 전체 30위 + 시총 상위 400 종목의 거래대금으로 100위까지 채움
+    const amountPool = new Map<string, TopGainerRow>();
+    for (const r of [...(kAmount ?? []), ...(nCap ?? [])]) if (!amountPool.has(r.code)) amountPool.set(r.code, r);
+    const kAmountAll = amountPool.size ? reRank(Array.from(amountPool.values()).sort((a, b) => b.tradeAmount - a.tradeAmount)) : null;
 
     const dataMap = await fetchAllCodes(codes);
 
@@ -229,12 +274,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const topGainers: TopGainerRow[] = [...valid]
+    const topGainers: TopGainerRow[] = [...valid].filter(v => v.changePct > 0)
       .sort((a, b) => b.changePct - a.changePct)
       .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
 
-    const topLosers: TopGainerRow[] = [...valid]
+    const topLosers: TopGainerRow[] = [...valid].filter(v => v.changePct < 0)
       .sort((a, b) => a.changePct - b.changePct)
       .slice(0, 30)
       .map((r, i) => ({ rank: i + 1, ...r }));
@@ -246,11 +291,11 @@ export async function GET(request: Request) {
 
     // ── 정규장 밖(프리·애프터·장 종료): 넥스트레이드 시세를 붙인다 ──
     const sess = krSession();
-    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmount ?? topByAmount, cap = kCap ?? [];
+    let gainers = kUp ?? topGainers, losers = kDown ?? topLosers, amount = kAmountAll ?? topByAmount, cap = kCap ?? [];
     let basis = sess.key === "regular" || sess.key === "auction-close" ? "KRX 정규장" : "KRX 직전 정규장 종가 기준";
     const allZero = valid.length > 0 && valid.every(v => v.changePct === 0);
     if (sess.key !== "regular") {
-      const pickFor = { gainers, losers, amount, cap, all: [...gainers, ...losers, ...amount, ...cap] }[nxList] ?? gainers;
+      const pickFor = ({ gainers, losers, amount, cap, all: [...gainers.slice(0, 10), ...losers.slice(0, 10), ...amount.slice(0, 10), ...cap.slice(0, 10)] }[nxList] ?? gainers).slice(0, 30);
       const codes = Array.from(new Set([...pickFor, ...(allZero && !kUp && (nxList === "gainers" || nxList === "losers" || nxList === "all") ? valid : [])].map(r => r.code)));
       const nx = await nxtQuotes(codes);
       const withNx = <T extends Omit<TopGainerRow, "rank">>(r: T): T => {
@@ -276,7 +321,7 @@ export async function GET(request: Request) {
       topLosers: losers,
       topByAmount: amount,
       topByCap: cap,
-      source: { amount: kAmount ? "KIS 시장 전체" : "주요 종목 목록", gainers: kUp ? "KIS 시장 전체" : "주요 종목 목록", losers: kDown ? "KIS 시장 전체" : "주요 종목 목록" },
+      source: { amount: kAmountAll ? "시장 전체" : "주요 종목 목록", gainers: nU?.length ? "네이버 시장 전체" : kUp0 ? "KIS 시장 전체" : "주요 종목 목록", losers: nD?.length ? "네이버 시장 전체" : kDown0 ? "KIS 시장 전체" : "주요 종목 목록", cap: nCap?.length ? "네이버" : "KIS" },
       timestamp: new Date().toISOString(),
     };
     serverCache[cacheKey] = { data: payload, ts: Date.now() };

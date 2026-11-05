@@ -278,7 +278,7 @@ function TopMoversHalf({
   }, [load]);
 
   const accentColor = isGainer ? "text-signal-green" : "text-signal-red";
-  const title       = isGainer ? "상승 TOP30" : "하락 TOP30";
+  const title       = isGainer ? `상승률 상위${rows.length ? ` ${rows.length}` : ""}` : `하락률 상위${rows.length ? ` ${rows.length}` : ""}`;
   const icon        = isGainer ? "▲" : "▼";
 
   return (
@@ -390,7 +390,7 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
   return (
     <div>
       <div className="flex justify-between mb-3 text-xs">
-        <span className="text-gray-500">{market === "KOSDAQ" ? "코스닥" : "코스피"} {kind === "cap" ? "시가총액" : "당일 거래대금"} 상위 30종목</span>
+        <span className="text-gray-500">{market === "KOSDAQ" ? "코스닥" : "코스피"} {kind === "cap" ? "시가총액" : "당일 거래대금"} 상위 {rows.length || 100}종목</span>
         {ts && <span className="text-gray-600">{ts} 기준</span>}
       </div>
       <SwipeHint />
@@ -1293,11 +1293,11 @@ type USContentTab = "cap" | "gainers" | "losers" | "actives" | "etf" | "sector";
 
 const KR_TABS: { id: MainTabType; label: string }[] = [
   { id: "top10",  label: "상승/하락"  },
-  { id: "amount", label: "거래대금 TOP30" },
-  { id: "volume", label: "거래량 급등" },
+  { id: "amount", label: "거래대금" },
+  { id: "volume", label: "거래량급등" },
   { id: "sector", label: "섹터 흐름"  },
-  { id: "high52", label: "52주 신고가" },
-  { id: "flow",   label: "투자자 동향" },
+  { id: "high52", label: "52주신고가" },
+  { id: "flow",   label: "투자자동향" },
 ];
 
 const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
@@ -1307,23 +1307,23 @@ const US_INDEX_TABS: { id: USIndexType; label: string }[] = [
 ];
 
 const US_CONTENT_TABS: { id: USContentTab; label: string }[] = [
-  { id: "cap",     label: "시총 TOP30" },
-  { id: "gainers", label: "상승 TOP30" },
-  { id: "losers",  label: "하락 TOP30" },
-  { id: "actives", label: "거래대금 TOP30" },
+  { id: "cap",     label: "시총상위" },
+  { id: "gainers", label: "상승" },
+  { id: "losers",  label: "하락" },
+  { id: "actives", label: "거래대금" },
   { id: "etf",     label: "인기 ETF·레버리지" },
   { id: "sector",  label: "섹터 흐름"   },
 ];
 
 // 매매동향 탭에서 쓰는 단일 시장 보기 (상승·하락 분리)
 const KR_MARKET_TABS: { id: MainTabType; label: string }[] = [
-  { id: "cap",     label: "시총 TOP30" },
-  { id: "gainers", label: "상승 TOP30" },
-  { id: "losers",  label: "하락 TOP30" },
-  { id: "amount",  label: "거래대금 TOP30" },
-  { id: "volume",  label: "거래량 급등" },
-  { id: "flow",    label: "투자자 동향" },
-  { id: "high52",  label: "52주 신고가" },
+  { id: "cap",     label: "시총상위" },
+  { id: "gainers", label: "상승" },
+  { id: "losers",  label: "하락" },
+  { id: "amount",  label: "거래대금" },
+  { id: "volume",  label: "거래량급등" },
+  { id: "flow",    label: "투자자동향" },
+  { id: "high52",  label: "52주신고가" },
 ];
 
 // 상승·하락 한쪽만 (장 상태 표시 포함)
