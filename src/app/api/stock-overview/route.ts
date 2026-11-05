@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
   const code = sp.get("code") ?? "";
   const quoteOnly = sp.get("quote") === "1"; // 장중 폴링용: 시세만
-  if (!/^\d{6}$/.test(code)) return NextResponse.json({ error: "종목코드 6자리가 필요합니다" }, { status: 400 });
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return NextResponse.json({ error: "종목코드 6자리가 필요합니다" }, { status: 400 });
 
   const errors: string[] = [];
   const safe = async <T,>(name: string, fn: () => Promise<T>): Promise<T | null> => {

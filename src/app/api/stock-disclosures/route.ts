@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code") ?? "";
   const key = process.env.DART_API_KEY;
   if (!key) return NextResponse.json({ items: [], error: "DART_API_KEY 미설정" });
-  if (!/^\d{6}$/.test(code)) return NextResponse.json({ items: [], error: "종목코드 6자리가 필요합니다" });
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return NextResponse.json({ items: [], error: "종목코드 6자리가 필요합니다" });
 
   try {
     const corp = (await corpMap())[code];

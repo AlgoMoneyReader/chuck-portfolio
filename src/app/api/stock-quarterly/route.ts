@@ -121,7 +121,7 @@ const load = unstable_cache(async (code: string) => {
 
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code") ?? "";
-  if (!/^\d{6}$/.test(code)) return NextResponse.json({ error: "종목코드 6자리가 필요합니다" }, { status: 400 });
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return NextResponse.json({ error: "종목코드 6자리가 필요합니다" }, { status: 400 });
   try {
     const d = await load(code);
     return NextResponse.json({ ...d, latest: d.quarters[d.quarters.length - 1] ?? null, source: "DART 정기보고서 (연결 우선)" });

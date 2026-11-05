@@ -6,7 +6,7 @@ export const preferredRegion = "icn1";
 
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code") ?? "";
-  if (!/^\d{6}$/.test(code)) return NextResponse.json({ error: "code" }, { status: 400 });
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return NextResponse.json({ error: "code" }, { status: 400 });
   try {
     return NextResponse.json(await getLiveFlow(code));
   } catch (e) {

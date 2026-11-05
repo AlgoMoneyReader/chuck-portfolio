@@ -6,7 +6,7 @@ function toYahooTicker(ticker: string): string {
   // Already has suffix
   if (ticker.includes(".")) return ticker;
   // 6-digit Korean stock code
-  if (/^\d{6}$/.test(ticker)) return `${ticker}.KS`;
+  if (/^[0-9][0-9A-Z]{5}$/.test(ticker)) return `${ticker}.KS`;
   // US ticker
   return ticker.toUpperCase();
 }

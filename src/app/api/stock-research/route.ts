@@ -7,7 +7,7 @@ export const preferredRegion = "icn1";
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code") ?? "";
   const listUrl = `https://finance.naver.com/research/company_list.naver?searchType=itemCode&itemCode=${code}`;
-  if (!/^\d{6}$/.test(code)) return NextResponse.json({ items: [], listUrl });
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return NextResponse.json({ items: [], listUrl });
   try {
     const res = await fetch(listUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", Referer: "https://finance.naver.com/research/", "Accept-Language": "ko-KR,ko;q=0.9" },

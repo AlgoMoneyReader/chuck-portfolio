@@ -38,7 +38,7 @@ async function rank(isc: string, investor: "1" | "2", sort: "0" | "1"): Promise<
 interface Parsed { code: string; name: string; price: number; changePct: number; f: number; o: number; fq: number; oq: number }
 const parse = (r: Row): Parsed | null => {
   const code = (r.mksc_shrn_iscd ?? "").trim();
-  if (!/^\d{6}$/.test(code)) return null;
+  if (!/^[0-9][0-9A-Z]{5}$/.test(code)) return null;
   return {
     code, name: (r.hts_kor_isnm ?? "").trim(),
     price: num(r.stck_prpr) ?? 0, changePct: num(r.prdy_ctrt) ?? 0,
