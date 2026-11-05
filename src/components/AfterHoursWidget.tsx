@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { krSession } from "@/lib/krSession";
+import { ASIA_MARKETS, type AsiaMkt } from "@/data/asiaStocks";
+import { useStockModal } from "./StockModal";
 import { StockLink } from "./StockModal";
 
-interface KrItem { code: string; name: string; regularPrice: number; extPrice: number | null; extChangePct: number | null; changePct: number }
+interface KrItem { code: string; name: string; regularPrice: number; extPrice: number | null; extChangePct: number | null; changePct: number; change?: number | null }
 interface UsItem {
-  code: string; name: string; price: number; changePct: number; marketState: string;
+  code: string; name: string; price: number; change?: number; changePct: number; marketState: string;
   preMarketPrice: number | null; preMarketChangePct: number | null; postMarketPrice: number | null; postMarketChangePct: number | null;
   dayMarketPrice?: number | null; dayMarketChangePct?: number | null;
 }
@@ -38,6 +40,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
   }, [load, region]);
 
   const tone = (v: number) => (v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400");
+  const diff = (price: number, pct: number) => Math.abs(price - price / (1 + pct / 100));
 
   return (
     <section className="space-y-3">
@@ -54,7 +57,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                 className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors" code={s.code.split(".")[0]} name={s.name}>
                 <p className="text-xs font-semibold text-white truncate">{s.name}</p>
                 <p className={`text-base font-bold num mt-0.5 ${tone(s.changePct)}`}>{s.regularPrice.toLocaleString("ko-KR")}</p>
-                <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""} {Math.abs(s.changePct).toFixed(2)}%</p>
+                <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""}{Math.round(s.change != null ? Math.abs(s.change) : diff(s.regularPrice, s.changePct)).toLocaleString("ko-KR")} <span className="font-normal">({s.changePct > 0 ? "+" : s.changePct < 0 ? "-" : ""}{Math.abs(s.changePct).toFixed(2)}%)</span></p>
                 {s.extPrice != null && s.extChangePct != null && (() => {
                   const k = krSession();
                   const tag = k.key === "nxt-pre" || k.key === "auction-open" ? "NXT 프리" : k.key === "nxt-after" ? "애프터" : "애프터 종가";
@@ -77,7 +80,7 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
                   className="block bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors">
                   <p className="text-xs font-semibold text-white truncate">{s.name} <span className="text-gray-500 font-normal">{s.code}</span></p>
                   <p className={`text-base font-bold num mt-0.5 ${tone(s.changePct)}`}>${s.price.toFixed(2)}</p>
-                  <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""} {Math.abs(s.changePct).toFixed(2)}%</p>
+                  <p className={`text-xs font-semibold num ${tone(s.changePct)}`}>{s.changePct > 0 ? "▲" : s.changePct < 0 ? "▼" : ""}${(s.change != null ? Math.abs(s.change) : diff(s.price, s.changePct)).toFixed(2)} <span className="font-normal">({s.changePct > 0 ? "+" : s.changePct < 0 ? "-" : ""}{Math.abs(s.changePct).toFixed(2)}%)</span></p>
                   {ep != null && ec != null && (
                     <p className="text-[10px] num mt-0.5 truncate">
                       <span className={day ? "text-cyan-brand" : pre ? "text-amber-300" : "text-purple-300"}>{day ? "데이" : pre ? "프리" : "애프터"}</span>{" "}
@@ -88,6 +91,55 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
               );
             })}
       </div>
+    </section>
+  );
+}
+
+// ── 증시 탭 · 아시아: 나라별 주요 종목(대표 대형주 상위 12) ──
+interface AsiaRow { code: string; name: string; price: number; change?: number; changePct: number }
+export function AsiaTopWidget() {
+  const [mkt, setMkt] = useState<AsiaMkt>("JP");
+  const [rows, setRows] = useState<AsiaRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const open = useStockModal();
+  const info = ASIA_MARKETS.find(m => m.key === mkt)!;
+  const load = useCallback(() => fetch(`/api/market-asia?mkt=${mkt}&type=cap`, { cache: "no-store" }).then(r => r.json())
+    .then(j => setRows((j.stocks ?? []).slice(0, 12))).catch(() => {}).finally(() => setLoading(false)), [mkt]);
+  useEffect(() => {
+    setLoading(true); load();
+    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);
+    return () => clearInterval(iv);
+  }, [load]);
+  const tone = (v: number) => (v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400");
+  const money = (v: number) => `${info.currency}${v.toLocaleString("en-US", { minimumFractionDigits: v >= 1000 ? 0 : 2, maximumFractionDigits: 2 })}`;
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-medium text-gray-400 uppercase tracking-widest">아시아 주요 종목 TOP12</h2>
+        <Link href={`/flow?m=asia&a=${mkt}`} className="text-xs text-gray-400 hover:text-cyan-brand">더보기 ›</Link>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+        {ASIA_MARKETS.map(m => (
+          <button key={m.key} onClick={() => setMkt(m.key)}
+            className={`shrink-0 px-3.5 py-1.5 text-sm rounded-lg border whitespace-nowrap ${mkt === m.key ? "bg-white text-navy border-white font-bold" : "border-navy-border text-gray-400 hover:text-white"}`}>{m.flag} {m.label}</button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+        {loading && !rows.length
+          ? Array.from({ length: 12 }).map((_, i) => <div key={i} className="h-[72px] bg-navy-card border border-navy-border rounded-xl animate-pulse" />)
+          : rows.map(r => {
+              const ch = r.change != null ? Math.abs(r.change) : Math.abs(r.price - r.price / (1 + r.changePct / 100));
+              return (
+                <button key={r.code} onClick={() => open({ code: r.code, market: "US", name: r.name })}
+                  className="text-left bg-navy-card border border-navy-border rounded-xl p-3 hover:border-cyan-brand/40 transition-colors">
+                  <p className="text-xs font-semibold text-white truncate">{r.name}</p>
+                  <p key={`${r.code}-${r.price}`} className={`text-base font-bold num mt-0.5 rounded animate-tick ${tone(r.changePct)}`}>{money(r.price)}</p>
+                  <p className={`text-xs font-semibold num ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{ch.toLocaleString("en-US", { maximumFractionDigits: 2 })} <span className="font-normal">({r.changePct > 0 ? "+" : r.changePct < 0 ? "-" : ""}{Math.abs(r.changePct).toFixed(2)}%)</span></p>
+                </button>
+              );
+            })}
+      </div>
+      <p className="text-[11px] text-gray-600">{info.sub} · 현지 통화 · 거래소에 따라 약 15분 지연</p>
     </section>
   );
 }

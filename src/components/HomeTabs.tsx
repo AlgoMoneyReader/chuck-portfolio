@@ -1,7 +1,7 @@
 "use client";
 
 import LiveMarketPulse from "./LiveMarketPulse";
-import AfterHoursWidget from "./AfterHoursWidget";
+import AfterHoursWidget, { AsiaTopWidget } from "./AfterHoursWidget";
 import MarketMap from "./MarketMap";
 import FlowBoard from "./FlowBoard";
 import { useEffect } from "react";
@@ -36,7 +36,7 @@ export default function HomeTabs() {
         <>
           <LiveMarketPulse key={m} region={m === "kr" ? "KR" : m === "us" ? "US" : "ASIA"} />
           {m !== "asia" && <MarketMap fixedRegion={m === "kr" ? "KR" : "US"} />}
-          {m !== "asia" && <AfterHoursWidget key={`top-${m}`} region={m === "kr" ? "KR" : "US"} />}
+          {m !== "asia" ? <AfterHoursWidget key={`top-${m}`} region={m === "kr" ? "KR" : "US"} /> : <AsiaTopWidget />}
         </>
       ) : (
         <>

@@ -18,20 +18,22 @@ const STOCKS = [
 interface StockResult {
   code: string; name: string;
   regularPrice: number; extPrice: number | null; extChangePct: number | null;
-  changePct: number; marketState: string;
+  changePct: number; change?: number | null; marketState: string;
 }
 
 let cache: { data: StockResult[]; at: number } | null = null;
 const TTL = 15_000;
 
 // KIS 주식 현재가 (실시간). Yahoo 국내 시세는 약 20분 늦어 장 초반엔 전날 값이 보였다
-async function kisPrice(code: string): Promise<{ price: number; pct: number } | null> {
+async function kisPrice(code: string): Promise<{ price: number; pct: number; change: number } | null> {
   try {
     const j = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
       { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code });
     const o = j.output ?? {};
     const price = num(o.stck_prpr), pct = num(o.prdy_ctrt);
-    return price ? { price, pct: pct ?? 0 } : null;
+    // 전일 대비 금액(부호는 등락률을 따른다)
+    const ch = Math.abs(num(o.prdy_vrss) ?? 0);
+    return price ? { price, pct: pct ?? 0, change: (pct ?? 0) < 0 ? -ch : ch } : null;
   } catch { return null; }
 }
 
@@ -75,6 +77,7 @@ export async function GET() {
     regularPrice: quotes[i]?.price ?? 0,
     extPrice: nx[s.code]?.price ?? null, extChangePct: nx[s.code] ? parseFloat(nx[s.code].pct.toFixed(2)) : null,
     changePct: parseFloat((quotes[i]?.pct ?? 0).toFixed(2)),
+    change: quotes[i]?.change ?? null,
     marketState: state,
   }));
 
