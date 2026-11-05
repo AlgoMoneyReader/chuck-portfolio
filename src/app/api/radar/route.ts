@@ -28,7 +28,7 @@ const eok = (v: unknown) => {
   const n = Number(v);
   if (!isFinite(n)) return "—";
   const a = Math.abs(n), s = n > 0 ? "+" : n < 0 ? "-" : "";
-  return a >= 10000 ? `${s}${(a / 10000).toFixed(2)}조` : `${s}${Math.round(a).toLocaleString("ko-KR")}억`;
+  return a >= 10000 ? `${s}${(a / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}조` : `${s}${Math.round(a).toLocaleString("ko-KR")}억`;
 };
 
 const SYSTEM = `당신은 '알읽남 AI 레이더'의 수석 애널리스트입니다. 정량 신호(수급·기술 지표)와 펀더멘털(실적·밸류에이션)·뉴스·업황을 하나로 묶어

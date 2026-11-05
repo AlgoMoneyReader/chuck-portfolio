@@ -26,7 +26,7 @@ function fmtCap(v: number | null) {
   if (!v) return "—";
   if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`;
   if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`;
-  if (v >= 1e8)  return `${(v / 1e8).toFixed(0)}억`;
+  if (v >= 1e8)  return `${(v / 1e8).toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}억`;
   return `${v.toLocaleString()}`;
 }
 
@@ -150,7 +150,7 @@ export async function GET(request: Request) {
     const finGrade: Grade = finScore >= 80 ? "S" : finScore >= 65 ? "A" : finScore >= 50 ? "B" : finScore >= 35 ? "C" : finScore >= 20 ? "D" : "F";
 
     // FCF sign label
-    const fcfFmt = fcf === null ? "—" : fcf >= 0 ? `+${(fcf / 1e8).toFixed(0)}억` : `${(fcf / 1e8).toFixed(0)}억`;
+    const fcfFmt = fcf === null ? "—" : fcf >= 0 ? `+${(fcf / 1e8).toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}억` : `${(fcf / 1e8).toLocaleString("ko-KR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}억`;
 
     return NextResponse.json({
       metrics: [

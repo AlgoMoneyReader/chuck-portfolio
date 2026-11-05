@@ -46,7 +46,7 @@ const won = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleStr
 const eok = (n: number | null | undefined) => {
   if (n == null) return "—";
   const a = Math.abs(n);
-  if (a >= 10000) return `${(n / 10000).toFixed(a >= 100000 ? 0 : 1)}조`;
+  if (a >= 10000) return `${(n / 10000).toLocaleString("ko-KR", { minimumFractionDigits: a >= 100000 ? 0 : 1, maximumFractionDigits: a >= 100000 ? 0 : 1 })}조`;
   if (a > 0 && a < 1) return `${Math.round(n * 10000).toLocaleString("ko-KR")}만`;
   return `${(a >= 100 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString("ko-KR")}억`;
 };
@@ -327,7 +327,7 @@ function OverviewTab({ d }: { d: Overview }) {
   );
 }
 
-function ChartTab({ symbol, digits = 0 }: { symbol: string; digits?: number }) {
+function ChartTab({ symbol, digits = 0, live }: { symbol: string; digits?: number; live?: number | null }) {
   const [tf, setTf] = useState<Timeframe>("D");
   return (
     <section className="card space-y-2">
@@ -337,7 +337,7 @@ function ChartTab({ symbol, digits = 0 }: { symbol: string; digits?: number }) {
             className={`shrink-0 px-3 py-1 text-xs rounded-lg ${tf === k ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40" : "text-gray-500"}`}>{l}</button>
         ))}
       </div>
-      <CandleChart label={symbol} tf={tf} height={320} digits={digits} />
+      <CandleChart label={symbol} tf={tf} height={320} digits={digits} live={live} />
     </section>
   );
 }
@@ -478,7 +478,7 @@ interface Detail {
 }
 
 const fmtVolume = (n: number) =>
-  n >= 100_000_000 ? `${(n / 100_000_000).toFixed(2)}억주` : n >= 10_000 ? `${(n / 10_000).toFixed(n >= 1_000_000 ? 0 : 1)}만주` : `${n.toLocaleString("ko-KR")}주`;
+  n >= 100_000_000 ? `${(n / 100_000_000).toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}억주` : n >= 10_000 ? `${(n / 10_000).toFixed(n >= 1_000_000 ? 0 : 1)}만주` : `${n.toLocaleString("ko-KR")}주`;
 
 // 정규장 밖 시세: 미국 데이마켓 > 프리 > 애프터, 국내 NXT 프리 / 애프터
 function extOf(x: Detail, isUS: boolean) {
@@ -544,7 +544,7 @@ function QuoteTab({ x, isUS, symbol }: { x: Detail | null; isUS: boolean; symbol
           </>
         )}
       </section>
-      <ChartTab symbol={symbol} digits={isUS ? 2 : 0} />
+      <ChartTab symbol={symbol} digits={isUS ? 2 : 0} live={x?.price ?? null} />
     </div>
   );
 }
@@ -737,14 +737,8 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadDetail, [code, mk]);
-  useMarketPoll(() => { if (isUS || krSession().key !== "closed") loadDetail(); }, isUS ? 10_000 : 15_000, { krxOnly: false, enabled: true });
-
-  // 국내 머리글 현재가(NXT 포함) 15초마다
-  useMarketPoll(() => {
-    if (isUS || krSession().key === "closed") return;
-    fetch(`/api/stock-overview?code=${code}&quote=1`, { cache: "no-store" })
-      .then(r => r.json()).then(j => { if (!j.error && j.quote) setD(prev => (prev ? { ...prev, quote: { ...prev.quote, ...j.quote }, nxt: j.nxt ?? null, session: j.session } : prev)); }).catch(() => {});
-  }, 15_000, { krxOnly: false, enabled: !isUS });
+  // 실시간 티커처럼: 국내 3초(08~20시), 미국 5초 — 머리글·현황·차트 마지막 봉이 함께 움직인다
+  useMarketPoll(() => { if (isUS || krSession().key !== "closed") loadDetail(); }, isUS ? 5_000 : 3_000, { krxOnly: false, enabled: true });
 
   useEffect(() => {
     const sb = getBrowserSupabase();
@@ -763,10 +757,10 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   };
 
   const q = d?.quote;
-  const headPrice = isUS ? x?.price ?? null : q?.price ?? null;
-  const headPct = isUS ? x?.changePct ?? null : q?.changePct ?? null;
-  const headChg = isUS ? x?.change ?? null : q?.change ?? null;
-  const usExt = isUS && x ? extOf(x, true) : null;
+  const headPrice = x?.price ?? q?.price ?? null;
+  const headPct = x ? x.changePct : q?.changePct ?? null;
+  const headChg = x ? x.change : q?.change ?? null;
+  const usExt = x ? extOf(x, isUS) : null;
   const newsName = isUS ? (usItem?.ko.split(" ")[0] || name.replace(/,?\s*(Inc\.?|Corp(oration)?\.?|Holdings,?|Ltd\.?|Co\.?|plc|N\.V\.|Class [A-C])\b.*$/i, "").trim() || code) : (d?.name ?? name);
 
   return (
@@ -780,20 +774,13 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
               <p className="text-sm num">
                 <span key={headPrice} className="text-white font-semibold rounded animate-tick">{isUS ? `$${headPrice.toFixed(2)}` : `${won(headPrice)}원`}</span>{" "}
                 <span className={tone(headPct)}>{headPct != null && headPct > 0 ? "▲" : headPct != null && headPct < 0 ? "▼" : ""} {isUS ? `$${Math.abs(headChg ?? 0).toFixed(2)}` : won(Math.abs(headChg ?? 0))} ({pct(headPct, 2)})</span>
-                {!isUS && d?.session && <span className="ml-1.5 text-[10px] text-gray-500">{d.session.key === "regular" ? "KRX 정규장" : "KRX 종가"}</span>}
-              </p>
-            )}
-            {!isUS && d?.nxt && d.session && d.session.key !== "regular" && (
-              <p className="text-xs num">
-                <span className="text-purple-300 font-semibold">{d.session.key === "nxt-pre" || d.session.key === "auction-open" ? "NXT 프리마켓" : d.session.key === "nxt-after" ? "애프터마켓" : "애프터 종가"}</span>{" "}
-                <span key={d.nxt.price} className="text-white font-semibold rounded animate-tick">{won(d.nxt.price)}원</span>{" "}
-                <span className={tone(d.nxt.pct)}>{d.nxt.pct > 0 ? "+" : ""}{d.nxt.pct.toFixed(2)}%</span>
+                {!isUS && <span className="ml-1.5 text-[10px] text-gray-500">{krSession().key === "regular" ? "KRX 정규장 · 실시간" : "KRX 종가"}</span>}
               </p>
             )}
             {usExt && usExt.pct != null && (
               <p className="text-xs num">
                 <span className={`${usExt.cls} font-semibold`}>{usExt.label}</span>{" "}
-                <span key={usExt.price} className="text-white font-semibold rounded animate-tick">${usExt.price.toFixed(2)}</span>{" "}
+                <span key={usExt.price} className="text-white font-semibold rounded animate-tick">{isUS ? `$${usExt.price.toFixed(2)}` : `${won(usExt.price)}원`}</span>{" "}
                 <span className={tone(usExt.pct)}>{usExt.pct > 0 ? "+" : ""}{usExt.pct.toFixed(2)}%</span>
               </p>
             )}

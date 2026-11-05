@@ -78,7 +78,7 @@ function RatioBar({ foreign, institution }: { foreign: number; institution: numb
 
 // ── 억원 포맷 ─────────────────────────────────────────────────────────────────
 function fmtUk(n: number): string {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)}조`;
+  if (n >= 10000) return `${(n / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조`;
   return `${n.toLocaleString("ko-KR")}억`;
 }
 

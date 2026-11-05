@@ -21,7 +21,7 @@ function calcDays(d: string) {
 
 function fmtW(won: number) {
   const abs = Math.abs(won), s = won < 0 ? "-" : "";
-  if (abs >= 1e8) return `${s}${(abs / 1e8).toFixed(1)}억`;
+  if (abs >= 1e8) return `${s}${(abs / 1e8).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}억`;
   if (abs >= 1e4) return `${s}${Math.round(abs / 1e4).toLocaleString()}만`;
   return `${s}${Math.round(abs).toLocaleString()}원`;
 }

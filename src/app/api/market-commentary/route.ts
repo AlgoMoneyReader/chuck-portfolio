@@ -18,7 +18,7 @@ const kstHM = () => kstNow().toISOString().slice(11, 16);
 type Q = { price: number; change: number; changePct: number } | null;
 const fmtEok = (v: number) => {
   const a = Math.abs(v), s = v >= 0 ? "+" : "-";
-  return a >= 10000 ? `${s}${(a / 10000).toFixed(1)}조` : `${s}${a.toLocaleString("ko-KR")}억`;
+  return a >= 10000 ? `${s}${(a / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조` : `${s}${a.toLocaleString("ko-KR")}억`;
 };
 const fmtQ = (name: string, q: Q, digits = 2) =>
   q ? `${name} ${q.price.toLocaleString("en-US", { maximumFractionDigits: digits })} (${q.changePct >= 0 ? "+" : ""}${q.changePct.toFixed(2)}%)` : null;

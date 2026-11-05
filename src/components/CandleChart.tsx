@@ -22,16 +22,19 @@ function fmtTime(t: Time | undefined, intraday: boolean): string {
   return `${t.year}.${t.month}.${t.day}`;
 }
 
-export default function CandleChart({ label, tf, height = 320, digits = 2, url }: { label: string; tf: Timeframe; height?: number; digits?: number; url?: string }) {
+export default function CandleChart({ label, tf, height = 320, digits = 2, url, live }: { label: string; tf: Timeframe; height?: number; digits?: number; url?: string; live?: number | null }) {
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  // 실시간 현재가로 움직이는 마지막 봉 (차트를 다시 그리지 않고 마지막 봉만 갱신)
+  const [liveBar, setLiveBar] = useState<Candle | null>(null);
   const [state, setState] = useState<{ candles: Candle[]; prevClose: number | null; source?: string; error?: string } | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
   const intraday = !["D", "W", "M"].includes(tf);
   const cc = useChartColors();
 
   useEffect(() => {
-    setState(null); setHover(null);
+    setState(null); setHover(null); setLiveBar(null);
     const src = url ? `${url}${url.includes("?") ? "&" : "?"}tf=${tf}` : `/api/candles?label=${encodeURIComponent(label)}&tf=${tf}`;
     const load = () => fetch(src, { cache: "no-store" })
       .then(r => r.json()).then(j => setState({ ...j, candles: j.candles ?? [] })).catch(e => setState({ candles: [], prevClose: null, error: String(e) }));
@@ -61,6 +64,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
       const series: ISeriesApi<"Candlestick"> = chart.addCandlestickSeries({
         upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
       });
+      seriesRef.current = series;
       series.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
       series.setData(state.candles.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close })));
       if (state.candles.some(c => c.volume)) {
@@ -79,10 +83,21 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url }
       ro = new ResizeObserver(([e]) => chart.applyOptions({ width: e.contentRect.width }));
       ro.observe(box.current);
     });
-    return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; };
+    return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; };
   }, [state, height, intraday, digits, cc]);
 
-  const last = state?.candles[state.candles.length - 1];
+  useEffect(() => {
+    const c = state?.candles[state.candles.length - 1];
+    if (!live || !c) return;
+    setLiveBar(prev => {
+      const base = prev && String(prev.time) === String(c.time) ? prev : c;
+      const bar = { ...base, close: live, high: Math.max(base.high, live), low: Math.min(base.low, live) };
+      try { seriesRef.current?.update({ time: bar.time as Time, open: bar.open, high: bar.high, low: bar.low, close: bar.close }); } catch { /* 차트 준비 전 */ }
+      return bar;
+    });
+  }, [live, state]);
+
+  const last = liveBar ?? state?.candles[state.candles.length - 1];
   const shown = hover ?? last;
   const idx = shown ? state!.candles.findIndex(c => String(c.time) === String(shown.time)) : -1;
   const base = intraday ? state?.prevClose ?? null : idx > 0 ? state!.candles[idx - 1].close : null;

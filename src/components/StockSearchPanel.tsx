@@ -47,7 +47,7 @@ interface InvestorData {
 function fmtUk(n: number): string {
   const abs = Math.abs(n);
   const sign = n >= 0 ? "+" : "-";
-  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(1)}조`;
+  if (abs >= 10000) return `${sign}${(abs / 10000).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}조`;
   if (abs > 0 && abs < 1) return `${sign}${Math.round(abs * 10000).toLocaleString("ko-KR")}만`;
   return `${sign}${(abs >= 100 ? Math.round(abs) : Math.round(abs * 10) / 10).toLocaleString("ko-KR")}억`;
 }
