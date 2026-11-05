@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import staticMaster from "@/data/stock_master.json";
 import { US_POPULAR } from "@/data/usPopular";
+import { searchAsia } from "@/data/asiaStocks";
+import { useStockModal } from "./StockModal";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 import RadarReport from "./RadarReport";
 import { TbRadar2 } from "react-icons/tb";
@@ -14,7 +16,7 @@ import { useMarketPoll } from "@/lib/useMarketPoll";
 interface SearchResult {
   code: string;
   name: string;
-  market: "KS" | "KQ" | "US";
+  market: "KS" | "KQ" | "US" | "ASIA";
   type: string;
 }
 
@@ -133,6 +135,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
   // ── 전종목 마스터: 정적 JSON 직접 import (0ms, 네트워크 없음) ──────────────
   // KRX KIND에서 수집한 KOSPI+KOSDAQ 2,610개 — src/data/stock_master.json
   // 업데이트: scripts/generate-stock-master.py 실행 후 커밋
+  const stockModal = useStockModal();
   const [allStocks] = useState<SearchResult[]>(() => {
     const stocks = (staticMaster.stocks as SearchResult[]).filter(
       (s) => s.type !== "spac" && s.type !== "preferred"
@@ -193,7 +196,9 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
         .sort((a, b) => (a.code.toLowerCase() === lq ? -1 : 0) - (b.code.toLowerCase() === lq ? -1 : 0))
         .slice(0, 6)
         .map(u => ({ code: u.code, name: `${u.ko.split(" ")[0]} · ${u.name}`, market: "US", type: u.type === "etf" ? "us-etf" : "us" } as SearchResult));
-      const hits = /^[A-Za-z]/.test(lq) ? [...us, ...kr] : [...kr, ...us];
+      // 아시아 종목: AI 레이더 분석은 없고, 누르면 종목 팝업(시세·차트·뉴스)
+      const asia: SearchResult[] = searchAsia(q, 5).map(h => ({ code: h.code, name: `${h.name} · ${h.label}`, market: "ASIA", type: "asia" } as SearchResult));
+      const hits = (/^[A-Za-z]/.test(lq) ? [...us, ...kr] : [...kr, ...us]).concat(asia);
 
       // 영문 입력이면 hits가 0이어도 US stock 버튼을 위해 dropdown 열기
       if (hits.length === 0 && /^[A-Za-z]/.test(lq)) {
@@ -228,6 +233,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
     const code   = item.code   ?? "";
     const market = item.market ?? "KS";
     const name   = item.name   ?? item.code ?? "";
+    if (market === "ASIA") { setDropdownOpen(false); stockModal({ code, market: "US", name: name.split(" · ")[0] }); return; }
     logActivity("search", { code, name, from: "종목검색" });
     const isUS   = market === "US";
 
@@ -277,7 +283,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
         .finally(() => setInvLoading(false));
     }
 
-  }, []);
+  }, [stockModal]);
 
   // 다른 화면에서 종목을 넘겨받으면(예: /analyze?ticker=005930.KS) 바로 연다
   useEffect(() => {
@@ -359,7 +365,7 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
             onKeyDown={handleKeyDown}
             placeholder={
               allStocks.length > 0
-                ? "종목명·코드·미국 티커 (예: 삼성전자, 테슬라, SOXL)"
+                ? "종목명·코드·티커 (예: 삼성전자, 테슬라, TSMC, 키옥시아)"
                 : masterFetching
                   ? "KIS 종목 데이터 수집 중... (종목코드 먼저 검색 가능)"
                   : "종목코드로 검색 (예: 005930) · 한글 검색은 KIS 로그인 필요"
@@ -407,11 +413,13 @@ export default function StockSearchPanel({ initialTicker = "", initialName = "" 
               const itemMarket = item?.market ?? "KS";
               const itemType   = item?.type   ?? "regular";
               const marketLabel =
+                itemMarket === "ASIA" ? "🌏 시세만" :
                 itemType === "us-etf" ? "🇺🇸 ETF" :
                 itemMarket === "US"   ? "🇺🇸 미국" :
                 itemType === "etf"    ? "ETF"    :
                 itemMarket === "KS"   ? "KOSPI"  : "KOSDAQ";
               const marketColor =
+                itemMarket === "ASIA" ? "text-gray-400" :
                 itemMarket === "US"   ? "text-gold" :
                 itemType === "etf"    ? "text-gold" :
                 itemMarket === "KS"   ? "text-gray-600" : "text-cyan-brand/60";

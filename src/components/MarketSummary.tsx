@@ -23,8 +23,20 @@ interface StockRow {
 }
 
 // 국내 종목 한 줄 — 미국 목록과 같은 배치: 종목 | 현재가·등락률(아래 줄에 프리/애프터) | 끝 열(시총·거래대금)
-function KrStockRow({ r, onClick, rankCls, last, badge, compact = false }: {
-  r: StockRow; onClick: () => void; rankCls?: string; last?: string; badge?: string; compact?: boolean;
+// PC(md 이상) 넓은 표의 추가 열 — 머리글과 행이 같은 정의를 쓴다
+export const WIDE_COLS = "hidden md:block text-right text-sm num whitespace-nowrap";
+function KrWideHead({ cap }: { cap?: boolean }) {
+  return (
+    <>
+      <span className="hidden md:block w-24 text-right">거래량</span>
+      <span className="hidden md:block w-24 text-right">거래대금</span>
+      {cap && <span className="hidden md:block w-24 text-right">시가총액</span>}
+    </>
+  );
+}
+
+function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap }: {
+  r: StockRow; onClick: () => void; rankCls?: string; last?: string; badge?: string; compact?: boolean; wideCap?: boolean;
 }) {
   const s = krSession();
   const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "애프터" : "애프터 종가";
@@ -41,6 +53,7 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false }: {
       <div className="flex flex-col items-end shrink-0">
         <div className="flex items-baseline gap-2">
           <span key={`${r.code}-${r.price}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{r.price.toLocaleString("ko-KR")}{compact ? "" : "원"}</span>
+          {!compact && r.change != null && <span className={`hidden md:inline text-sm num whitespace-nowrap ${tone(v)}`}>{v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(r.change).toLocaleString("ko-KR")}</span>}
           <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(v)}`}>{v > 0 ? "▲" : v < 0 ? "▼" : ""}{Math.abs(v).toFixed(2)}%</span>
         </div>
         {r.nxtPrice != null && r.nxtPct != null && (
@@ -51,7 +64,14 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false }: {
           </span>
         )}
       </div>
-      {last != null && <span className="w-14 text-right text-xs text-gray-300 num whitespace-nowrap">{last}</span>}
+      {last != null && <span className={`w-14 text-right text-xs text-gray-300 num whitespace-nowrap ${compact ? "" : "md:hidden"}`}>{last}</span>}
+      {!compact && (
+        <>
+          <span className={`${WIDE_COLS} w-24 text-gray-300`}>{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
+          <span className={`${WIDE_COLS} w-24 text-gray-300`}>{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span>
+          {wideCap && <span className={`${WIDE_COLS} w-24 text-gray-200 font-semibold`}>{fmtCap(r.capEok)}</span>}
+        </>
+      )}
     </div>
   );
 }
@@ -120,8 +140,8 @@ function RankBadge({ rank }: { rank: number }) {
 function MarketTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className={`px-3 py-1 text-xs font-semibold rounded-full transition-all whitespace-nowrap ${
-        active ? "bg-cyan-brand/20 text-cyan-brand border border-cyan-brand/40"
+      className={`px-4 py-1.5 text-sm rounded-md transition-all whitespace-nowrap ${
+        active ? "bg-navy-card text-white font-bold shadow-sm ring-1 ring-white/70"
                : "text-gray-500 hover:text-gray-300"
       }`}>{label}</button>
   );
@@ -130,8 +150,8 @@ function MarketTab({ label, active, onClick }: { label: string; active: boolean;
 function MainTabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className={`px-3 py-1 text-xs rounded-full transition-all whitespace-nowrap ${
-        active ? "bg-navy-card text-white font-semibold" : "text-gray-500 hover:text-gray-300"
+      className={`px-3.5 py-1.5 text-sm rounded-lg border transition-all whitespace-nowrap ${
+        active ? "bg-white text-navy border-white font-bold" : "border-navy-border text-gray-400 hover:text-white hover:border-gray-500"
       }`}>{label}</button>
   );
 }
@@ -229,6 +249,7 @@ function TopMoversHalf({
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
+        {large && <KrWideHead />}
       </div>
 
       {loading ? <SkeletonRows count={10} /> : (
@@ -328,12 +349,13 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
         <span className="w-5 text-center">#</span>
         <span className="flex-1">종목</span>
         <span className="text-right">현재가 · 등락률 <span className="text-gray-700">(NXT/애프터)</span></span>
-        <span className="w-14 text-right">{kind === "cap" ? "시가총액" : "거래대금"}</span>
+        <span className="w-14 text-right md:hidden">{kind === "cap" ? "시가총액" : "거래대금"}</span>
+        <KrWideHead cap={kind === "cap"} />
       </div>
       {loading ? <SkeletonRows count={10} /> : (
         <div className="divide-y divide-navy-border/30">
           {rows.map(r => (
-            <KrStockRow key={r.code} r={r}
+            <KrStockRow key={r.code} r={r} wideCap={kind === "cap"}
               badge={r.nxtPrice == null ? badges[r.code] : undefined}
               last={kind === "cap" ? fmtCap(r.capEok) : r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}
               onClick={() => onSelect({ code: r.code, market: mkt, name: r.name })} />
@@ -997,6 +1019,7 @@ function USStockList({
                 <div className="flex flex-col items-end shrink-0">
                   <div className="flex items-baseline gap-2">
                     <span key={`${r.code}-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{fmtUSD(r.price)}</span>
+                    {r.change != null && <span className={`hidden md:inline text-sm num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "▲" : "▼"}${Math.abs(r.change).toFixed(2)}</span>}
                     <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${isPos ? "text-signal-green" : "text-signal-red"}`}>
                       {isPos ? "▲" : "▼"}{Math.abs(r.changePct).toFixed(2)}%
                     </span>
@@ -1309,12 +1332,12 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
       {/* ── KR 헤더 + 컨텐츠 ── */}
       {region === "KR" && (<>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          {(!krMarket && !krSectorOnly) && <div className="flex gap-1">
+          {(!krMarket && !krSectorOnly) && <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-navy-border">
             {(["KOSPI","KOSDAQ"] as MarketType[]).map(m => (
               <MarketTab key={m} label={m} active={market === m} onClick={() => setMarket(m)} />
             ))}
           </div>}
-          {!krSectorOnly && <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5 flex-wrap">
+          {!krSectorOnly && <div className="flex gap-1.5 flex-wrap">
             {(krMarket ? KR_MARKET_TABS : KR_TABS).map(t => (
               <MainTabBtn key={t.id} label={t.label} active={mainTab === t.id} onClick={() => setMainTab(t.id)} />
             ))}
@@ -1335,12 +1358,12 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
       {/* ── US 헤더 + 컨텐츠 ── */}
       {region === "US" && (<>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="flex gap-1">
+          <div className="inline-flex gap-0.5 p-0.5 rounded-lg border border-navy-border">
             {US_INDEX_TABS.map(t => (
               <MarketTab key={t.id} label={t.label} active={usIndex === t.id} onClick={() => setUsIndex(t.id)} />
             ))}
           </div>
-          <div className="flex gap-0.5 bg-navy-border/30 rounded-full p-0.5 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
             {US_CONTENT_TABS.map(t => (
               <MainTabBtn key={t.id} label={t.label} active={usContent === t.id} onClick={() => setUsContent(t.id)} />
             ))}

@@ -5,7 +5,7 @@ import { ASIA_MARKETS, type AsiaMkt } from "@/data/asiaStocks";
 import { useStockModal } from "./StockModal";
 import { Pills, useQueryTab } from "./Segmented";
 
-interface Row { rank: number; code: string; name: string; price: number; changePct: number; volume: number; amount: number; foreignNet?: number | null }
+interface Row { rank: number; code: string; name: string; price: number; change?: number; changePct: number; volume: number; amount: number; foreignNet?: number | null }
 interface Flow { date: string | null; foreign: number; trust: number; dealer: number }
 type ListType = "cap" | "gainers" | "losers" | "amount" | "foreign";
 
@@ -81,10 +81,10 @@ export default function AsiaMarketList() {
         <div className="flex items-center justify-between">
           <h3 className="text-xs text-gray-400">{info.flag} {info.label} 시장 동향 <span className="text-gray-600">· {info.sub}</span></h3>
         </div>
-        <div className="flex flex-wrap gap-1 p-1 rounded-2xl bg-navy-sub/60">
+        <div className="flex flex-wrap gap-1.5">
           {types.map(([k, l]) => (
             <button key={k} onClick={() => setType(k)}
-              className={`px-3 py-1 text-xs rounded-full whitespace-nowrap ${t === k ? "bg-navy-card text-white font-semibold" : "text-gray-500 hover:text-gray-300"}`}>{l}</button>
+              className={`px-3.5 py-1.5 text-sm rounded-lg border whitespace-nowrap transition-all ${t === k ? "bg-white text-navy border-white font-bold" : "border-navy-border text-gray-400 hover:text-white hover:border-gray-500"}`}>{l}</button>
           ))}
         </div>
         <div className="flex justify-between text-xs">
@@ -96,6 +96,7 @@ export default function AsiaMarketList() {
           <span className="flex-1">종목</span>
           <span className="text-right">현재가 · 등락률</span>
           <span className="w-16 text-right">{t === "foreign" || (mkt === "TW" && t === "cap") ? "외국인" : "거래대금"}</span>
+          <span className="hidden md:block w-28 text-right">거래량</span>
         </div>
         {loading ? (
           <div className="space-y-2 pt-1">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-9 bg-navy-border/40 rounded animate-pulse" />)}</div>
@@ -115,11 +116,13 @@ export default function AsiaMarketList() {
                   </div>
                   <div className="flex items-baseline gap-2 shrink-0">
                     <span key={`${r.code}-${r.price}`} className="text-sm text-white num whitespace-nowrap rounded px-0.5 animate-tick">{money(r.price)}</span>
+                    {r.change != null && <span className={`hidden md:inline text-sm num whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.change).toLocaleString("en-US", { maximumFractionDigits: 2 })}</span>}
                     <span className={`w-16 text-right text-sm font-semibold num whitespace-nowrap ${tone(r.changePct)}`}>{r.changePct > 0 ? "▲" : r.changePct < 0 ? "▼" : ""}{Math.abs(r.changePct).toFixed(2)}%</span>
                   </div>
                   <span className={`w-16 text-right text-xs num whitespace-nowrap ${showForeign ? (r.foreignNet == null ? "text-gray-600" : tone(r.foreignNet)) : "text-gray-300"}`}>
                     {showForeign ? (r.foreignNet == null ? "—" : `${r.foreignNet > 0 ? "+" : ""}${big(r.foreignNet)}`) : r.amount ? big(r.amount) : "—"}
                   </span>
+                  <span className="hidden md:block w-28 text-right text-sm text-gray-300 num whitespace-nowrap">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span>
                 </div>
               );
             })}

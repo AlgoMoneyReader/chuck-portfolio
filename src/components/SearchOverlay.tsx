@@ -6,6 +6,7 @@ import { FiSearch, FiX } from "react-icons/fi";
 import master from "@/data/stock_master.json";
 import { logActivity } from "@/lib/activity";
 import { US_POPULAR } from "@/data/usPopular";
+import { searchAsia } from "@/data/asiaStocks";
 import { useStockModal } from "./StockModal";
 
 type S = { code: string; name: string; market: string; type?: string };
@@ -57,7 +58,9 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
     const rank = (s: S) => (s.name.toLowerCase() === t || s.code.toLowerCase() === t ? -100 : 0) + (s.market === "US" ? 3 : s.name.length) + (s.type && s.type !== "regular" && s.market !== "US" ? 20 : 0);
     starts.sort((a, b) => rank(a) - rank(b));
     incl.sort((a, b) => rank(a) - rank(b));
-    return [...starts, ...incl].slice(0, 20);
+    // 아시아(일본·대만·홍콩·중국): 한글 이름·코드, 목록 밖 종목은 접미사(.T/.TW/.HK/.SS/.SZ)로 직접 입력
+    const asia: S[] = searchAsia(q, 8).map(h => ({ code: h.code, name: h.name, market: "ASIA", type: h.label }));
+    return [...starts, ...incl].slice(0, 16).concat(asia).slice(0, 24);
   }, [q]);
 
   const go = (s: S) => {
@@ -65,7 +68,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
     try { localStorage.setItem(RECENT_KEY, JSON.stringify([s, ...readRecent().filter(r => r.code !== s.code)].slice(0, 8))); } catch { /* 무시 */ }
     onClose();
     // 국내·미국 모두 종목 팝업(현황·정보·뉴스·공시·레이더)
-    stockModal({ code: s.code, market: s.market === "US" ? "US" : undefined, name: s.name.replace(/ \(미국 티커 직접 입력\)$/, "") });
+    stockModal({ code: s.code, market: s.market === "US" || s.market === "ASIA" ? "US" : undefined, name: s.name.replace(/ \((미국 티커 )?직접 입력\)$/, "") });
   };
 
   const list = q.trim() ? results : recent;
@@ -81,14 +84,14 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
               else if (e.key === "ArrowUp") { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); }
               else if (e.key === "Enter" && list[hi]) go(list[hi]);
             }}
-            placeholder="종목명·코드·미국 티커 (예: 삼성전자, 005930, SOXL, 테슬라)"
+            placeholder="종목명·코드·티커 (예: 삼성전자, 테슬라, TSMC, 키옥시아)"
             className="flex-1 bg-transparent text-white text-base placeholder-gray-500 outline-none" />
           <button onClick={onClose} aria-label="닫기" className="p-1 text-gray-500 hover:text-white"><FiX size={20} /></button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
           {!q.trim() && recent.length > 0 && <p className="px-4 pt-3 pb-1 text-[11px] text-gray-500">최근 검색</p>}
           {list.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-gray-500 text-center">{q.trim() ? "검색 결과가 없습니다" : "국내 상장 2,600여 종목과 미국 인기 종목·ETF(SOXL·TSLL 등)를 검색할 수 있습니다"}</p>
+            <p className="px-4 py-6 text-sm text-gray-500 text-center">{q.trim() ? "검색 결과가 없습니다" : "국내 2,600여 종목, 미국 인기 종목·ETF, 일본·대만·홍콩·중국 대표 종목을 검색할 수 있습니다 (예: 7203.T, 2330.TW, 0700.HK)"}</p>
           ) : (
             <ul>
               {list.map((s, i) => (
@@ -97,7 +100,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left ${i === hi ? "bg-cyan-brand/10" : ""}`}>
                     <span className="flex-1 text-sm font-semibold text-white truncate">{s.name}</span>
                     <span className="text-xs text-gray-500 num">{s.code}</span>
-                    <span className="text-[10px] text-gray-500 w-14 text-right">{s.type === "us-etf" ? "미국 ETF" : s.market === "US" ? "미국" : s.type === "etf" ? "ETF" : s.market === "KQ" ? "코스닥" : "코스피"}</span>
+                    <span className="text-[10px] text-gray-500 w-14 text-right">{s.market === "ASIA" ? s.type : s.type === "us-etf" ? "미국 ETF" : s.market === "US" ? "미국" : s.type === "etf" ? "ETF" : s.market === "KQ" ? "코스닥" : "코스피"}</span>
                   </button>
                 </li>
               ))}
