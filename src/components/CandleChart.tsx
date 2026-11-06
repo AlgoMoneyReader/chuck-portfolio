@@ -22,7 +22,7 @@ function fmtTime(t: Time | undefined, intraday: boolean): string {
   return `${t.year}.${t.month}.${t.day}`;
 }
 
-export default function CandleChart({ label, tf, height = 320, digits = 2, url, live }: { label: string; tf: Timeframe; height?: number; digits?: number; url?: string; live?: number | null }) {
+export default function CandleChart({ label, tf, height = 320, digits = 2, url, live, fill }: { label: string; tf: Timeframe; height?: number; digits?: number; url?: string; live?: number | null; fill?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -51,7 +51,7 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
       if (disposed || !box.current) return;
       chartRef.current?.remove();
       const chart = createChart(box.current, {
-        width: box.current.clientWidth, height,
+        width: box.current.clientWidth, height: fill ? Math.max(160, box.current.clientHeight || height) : height,
         layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: cc.text, fontFamily: "Pretendard Variable, Pretendard, sans-serif", fontSize: 11 },
         grid: { vertLines: { color: cc.grid }, horzLines: { color: cc.grid } },
         rightPriceScale: { borderColor: cc.border },
@@ -84,11 +84,12 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
         const d = p.seriesData.get(series) as Candle | undefined;
         setHover(d && "open" in d ? { ...d, time: p.time as number | string } : null);
       });
-      ro = new ResizeObserver(([e]) => chart.applyOptions({ width: e.contentRect.width }));
+      // fill: 남은 공간 높이에 맞춤 (팝업 안에서 아래 시간축이 잘리지 않게)
+      ro = new ResizeObserver(([e]) => chart.applyOptions(fill ? { width: e.contentRect.width, height: Math.max(160, e.contentRect.height) } : { width: e.contentRect.width }));
       ro.observe(box.current);
     });
     return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; };
-  }, [state, height, intraday, digits, cc, tf]);
+  }, [state, height, intraday, digits, cc, tf, fill]);
 
   useEffect(() => {
     const c = state?.candles[state.candles.length - 1];
@@ -116,8 +117,8 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
   const f = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
   return (
-    <div className="space-y-1.5">
-      <div className="min-h-[34px] text-[11px] num text-gray-400 flex flex-wrap gap-x-2.5 gap-y-0.5 items-center">
+    <div className={fill ? "h-full flex flex-col gap-1.5" : "space-y-1.5"}>
+      <div className="min-h-[34px] shrink-0 text-[11px] num text-gray-400 flex flex-wrap gap-x-2.5 gap-y-0.5 items-center">
         {shown && (
           <>
             <span className="text-gray-300">{fmtTime(shown.time as Time, intraday)}</span>
@@ -129,13 +130,13 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
           </>
         )}
       </div>
-      <div className="relative" style={{ height }}>
+      <div className={fill ? "relative flex-1 min-h-[160px]" : "relative"} style={fill ? undefined : { height }}>
         {!state ? <div className="absolute inset-0 bg-navy-border/30 rounded-xl animate-pulse" />
           : !state.candles.length ? <p className="absolute inset-0 flex items-center justify-center text-sm text-gray-500">차트 데이터를 불러올 수 없습니다</p>
           : null}
         <div ref={box} className="absolute inset-0" />
       </div>
-      {state?.source && <p className="text-[10px] text-gray-600 text-right">{state.source}</p>}
+      {state?.source && <p className="shrink-0 text-[10px] text-gray-600 text-right">{state.source}</p>}
     </div>
   );
 }

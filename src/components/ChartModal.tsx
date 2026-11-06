@@ -207,7 +207,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
       <div className="fixed z-50 bottom-0 left-0 right-0 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
         <div
           className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up sm:animate-fade-in flex flex-col"
-          style={{ height: "min(92vh, 640px)" }}
+          style={{ height: "min(92vh, 720px)" }}
           onClick={e => e.stopPropagation()}
         >
           {/* 헤더 */}
@@ -286,7 +286,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
                 ))}
               </div>
               <div className="flex-1 min-h-0 px-3 pb-3 overflow-hidden">
-                <CandleChart label={label} tf={tf} height={400} digits={2} />
+                <CandleChart label={label} tf={tf} height={400} digits={2} fill />
               </div>
             </>
           )}
