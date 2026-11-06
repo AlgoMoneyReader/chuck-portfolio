@@ -140,7 +140,10 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
     for (let i = state.candles.length - 1; i >= 0; i--) if (dayOf(state.candles[i].time) < d) return state.candles[i].close;
     return null;
   })();
-  const base = intraday ? prevDayClose ?? state?.prevClose ?? null : idx > 0 ? state!.candles[idx - 1].close : null;
+  // 오늘 봉은 공식 전일 종가(머리글과 같은 기준), 지난 날짜 봉은 그 전날 마지막 봉 기준
+  const lastDay = state?.candles.length ? dayOf(state.candles[state.candles.length - 1].time) : null;
+  const isToday = !!shown && intraday && dayOf(shown.time as number) === lastDay;
+  const base = intraday ? (isToday ? state?.prevClose ?? prevDayClose : prevDayClose ?? state?.prevClose) ?? null : idx > 0 ? state!.candles[idx - 1].close : null;
   const chg = shown && base ? ((shown.close - base) / base) * 100 : null;
   const f = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
