@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
 import { krSession } from "@/lib/krSession";
@@ -739,10 +739,13 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   }, [code, isUS]);
 
   // 현황 시세(고저·거래량·52주·프리/애프터)
+  const curCode = useRef(code);
+  curCode.current = code;
   const loadDetail = () => {
     if (!mk) return;
-    fetch(`/api/stock-detail?code=${code}&market=${mk}`, { cache: "no-store" })
-      .then(r => (r.ok ? r.json() : null)).then(j => { if (j && !("error" in j)) setX(j); }).catch(() => {});
+    const c = code; // 다른 종목으로 넘어간 뒤 늦게 온 응답은 버린다
+    fetch(`/api/stock-detail?code=${c}&market=${mk}`, { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null)).then(j => { if (j && !("error" in j) && curCode.current === c) setX(j); }).catch(() => {});
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadDetail, [code, mk]);

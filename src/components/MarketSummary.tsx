@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useCallback } from "react";
+import { useRef, Fragment, useEffect, useState, useCallback } from "react";
 import { krSession } from "@/lib/krSession";
 import { useStockModal } from "./StockModal";
 
@@ -155,17 +155,24 @@ function isMarketOpen(): boolean {
 const fmtPrice = (n: number) => n.toLocaleString("ko-KR") + "원";
 
 // 종목별 AI 한줄 요약: 세션 동안 종목당 한 번만 받는다 (시세 갱신마다 AI를 부르지 않도록)
+// AI 가 못 만들어 등락률로 임시 문구를 받은 종목은 캐시하지 않고 10분 뒤 다시 시도한다 (지금 등락률로 임시 문구 표시)
 const SUMMARY = new Map<string, string>();
 const PENDING = new Set<string>();
+const RETRY_AT = new Map<string, number>();
 function summaryBadges(list: { code: string; name: string; changePct: number }[], mkt: string, set: (fn: (p: Record<string, string>) => Record<string, string>) => void) {
   const init: Record<string, string> = {};
   list.forEach(r => { init[r.code] = SUMMARY.get(r.code) ?? heuristicBadge(r.changePct); });
-  set(() => init);
-  list.filter(r => !SUMMARY.has(r.code) && !PENDING.has(r.code)).forEach(r => {
+  // 내용이 그대로면 상태를 바꾸지 않아 100줄 표가 다시 그려지지 않게
+  set(prev => { const ks = Object.keys(init); return ks.length === Object.keys(prev).length && ks.every(k => prev[k] === init[k]) ? prev : init; });
+  list.filter(r => !SUMMARY.has(r.code) && !PENDING.has(r.code) && (RETRY_AT.get(r.code) ?? 0) <= Date.now()).forEach(r => {
     PENDING.add(r.code);
     fetch(`/api/stock-news-summary?ticker=${encodeURIComponent(`${r.code}.${mkt}`)}&name=${encodeURIComponent(r.name)}&changePct=${r.changePct}`)
       .then(res => res.ok ? res.json() : null)
-      .then(ns => { if (ns?.summary) { SUMMARY.set(r.code, ns.summary); set(prev => ({ ...prev, [r.code]: ns.summary })); } })
+      .then(ns => {
+        if (!ns?.summary) return;
+        if (ns.heuristic) { RETRY_AT.set(r.code, Date.now() + 10 * 60_000); return; }
+        SUMMARY.set(r.code, ns.summary); set(prev => ({ ...prev, [r.code]: ns.summary }));
+      })
       .catch(() => null)
       .finally(() => PENDING.delete(r.code));
   });
@@ -253,11 +260,14 @@ function TopMoversHalf({
   const mkt = market === "KOSDAQ" ? "KQ" : "KS";
   const isGainer = mode === "gainers";
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/market-top?market=${market}&nx=${mode}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       const list: StockRow[] = (isGainer ? json.topGainers : json.topLosers) ?? [];
       setRows(list);
 
@@ -320,7 +330,7 @@ function GainersLosersPanel({ market, onSelect }: { market: string; onSelect: (d
   useEffect(() => {
     fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); })
+      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) + " 기준"); })
       .catch(() => null);
   }, [market]);
 
@@ -362,14 +372,17 @@ function TopByAmountList({ market, onSelect, kind = "amount" }: { market: string
 
   const mkt = market === "KOSDAQ" ? "KQ" : "KS";
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/market-top?market=${market}&nx=${kind}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       const list: StockRow[] = (kind === "cap" ? json.topByCap : json.topByAmount) ?? [];
       setRows(list);
-      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
 
       summaryBadges(list, mkt, setBadges);
     } catch { /* silent */ } finally { setLoading(false); }
@@ -420,17 +433,23 @@ function EtfList({ onSelect }: { onSelect: (d: DrawerState) => void }) {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const j = await (await fetch(`/api/market-etf?sort=${sort}&kind=${kind}&_=${Date.now()}`, { cache: "no-store" })).json();
+      if (my !== reqSeq.current) return;
       setRows(j.rows ?? []);
-      setTs(j.timestamp ? new Date(j.timestamp).toLocaleTimeString("ko-KR") : "");
+      setTs(j.timestamp ? new Date(j.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
     } catch { /* 유지 */ } finally { setLoading(false); }
   }, [sort, kind]);
   useEffect(() => {
     setLoading(true); load();
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 120_000);
-    return () => clearInterval(iv);
+    // 장 시간 여부를 매번 다시 봐서 간격을 정한다 (아침에 열어 둔 화면이 하루 종일 느리게 도는 것 방지)
+    let tid: ReturnType<typeof setTimeout>;
+    const tick = () => { tid = setTimeout(() => { if (document.visibilityState === "visible") load(); tick(); }, liveHours() ? 5_000 : 120_000); };
+    tick();
+    return () => clearTimeout(tid);
   }, [load]);
   const chip = (on: boolean) => `px-3 py-1 text-xs rounded-lg border whitespace-nowrap ${on ? "border-cyan-brand/50 bg-cyan-brand/10 text-cyan-brand font-semibold" : "border-navy-border text-gray-500 hover:text-gray-300"}`;
   return (
@@ -467,14 +486,17 @@ function VolumeSpikeList({ market, onSelect }: { market: string; onSelect: (d: D
   const [loading, setLoading] = useState(true);
   const [ts, setTs] = useState("");
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/volume-spike?market=${market}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       setRows(json.spikes ?? []);
       setBasis(json.basis ?? "5일 평균 대비");
-      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market]);
 
@@ -551,11 +573,14 @@ function SectorHeatmap({ market }: { market: string }) {
   const [modalStocks, setModalStocks] = useState<SectorStockLive[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/sector-perf?market=${market}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       setSectors(json.sectors ?? []);
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market]);
@@ -763,21 +788,27 @@ function Week52HighList({ market, onSelect }: { market: string; onSelect: (d: Dr
   const [ts, setTs] = useState("");
   const [source, setSource] = useState("");
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/week52-high?market=${market}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       setRows(json.candidates ?? []);
       setSource(json.source ?? "");
-      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
     } catch { /* silent */ } finally { setLoading(false); }
   }, [market]);
 
   useEffect(() => {
     setLoading(true); load();
-    const i = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 300_000);
-    return () => clearInterval(i);
+    // 장 시간 여부를 매번 다시 봐서 간격을 정한다 (아침에 열어 둔 화면이 하루 종일 느리게 도는 것 방지)
+    let tid: ReturnType<typeof setTimeout>;
+    const tick = () => { tid = setTimeout(() => { if (document.visibilityState === "visible") load(); tick(); }, liveHours() ? 5_000 : 300_000); };
+    tick();
+    return () => clearTimeout(tid);
   }, [load]);
 
   return (
@@ -911,14 +942,18 @@ function InvestorFlowList({ market, onSelect }: { market: string; onSelect: (d: 
 
   useEffect(() => {
     setLoading(true);
+    let stale = false;
     const load = () => fetch(`/api/investor-ranking?market=${market}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j && !j.error) setData(j as RankData); })
+      .then(j => { if (!stale && j && !j.error) setData(j as RankData); })
       .finally(() => setLoading(false));
     load();
     // 순위는 서버가 60초 보관, 가격·등락률은 5초마다 실시간
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, liveHours() ? 5_000 : 60_000);
-    return () => clearInterval(iv);
+    // 장 시간 여부를 매번 다시 봐서 간격을 정한다 (아침에 열어 둔 화면이 하루 종일 느리게 도는 것 방지)
+    let tid: ReturnType<typeof setTimeout>;
+    const tick = () => { tid = setTimeout(() => { if (document.visibilityState === "visible") load(); tick(); }, liveHours() ? 5_000 : 60_000); };
+    tick();
+    return () => { stale = true; clearTimeout(tid); };
   }, [market]);
 
   const cols = data?.[mode];
@@ -1056,13 +1091,16 @@ function USStockList({
   const [loading, setLoading] = useState(true);
   const [ts, setTs]           = useState("");
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/market-us?type=${type}&index=${index}&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       setRows(json.stocks ?? []);
-      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR") : "");
+      setTs(json.timestamp ? new Date(json.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) : "");
     } catch { /* silent */ } finally { setLoading(false); }
   }, [type, index]);
 
@@ -1170,11 +1208,14 @@ function USSectorHeatmap() {
   const [modalStocks, setModalStocks] = useState<USSectorStockRow[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
 
+  const reqSeq = useRef(0); // 늦게 온 예전 응답(다른 탭·시장)이 새 화면을 덮지 않게
   const load = useCallback(async () => {
+    const my = ++reqSeq.current;
     try {
       const res = await fetch(`/api/market-us?type=sector&_=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
+      if (my !== reqSeq.current) return;
       setSectors(json.sectors ?? []);
     } catch { /* silent */ } finally { setLoading(false); }
   }, []);
@@ -1395,7 +1436,7 @@ function MoversPanel({ market, mode, onSelect }: { market: string; mode: "gainer
   useEffect(() => {
     fetch(`/api/market-top?market=${market}&_=${Date.now()}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null)
-      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR") + " 기준"); if (j?.basis) setBasis(j.basis); })
+      .then(j => { if (j?.timestamp) setTs(new Date(j.timestamp).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }) + " 기준"); if (j?.basis) setBasis(j.basis); })
       .catch(() => null);
   }, [market]);
   return (

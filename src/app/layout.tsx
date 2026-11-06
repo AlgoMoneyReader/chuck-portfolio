@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-import PricePoller from "@/components/PricePoller";
 import BottomTabBar from "@/components/BottomTabBar";
 import TourGuide from "@/components/TourGuide";
 import InstallGuide from "@/components/InstallGuide";
@@ -44,7 +43,6 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-navy min-h-screen pb-24">
         {/* 전역 실시간 시세 폴링 — 렌더링 없음, 5초마다 Zustand 스토어 업데이트 */}
-        <PricePoller />
         <AuthProvider>
           <ThemeProvider>
            <StockModalProvider>

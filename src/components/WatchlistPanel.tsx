@@ -9,6 +9,8 @@ import { StockLink } from "./StockModal";
 
 interface W { code: string; name: string; market: string; price?: number; changePct?: number }
 
+const merge = <T extends { code: string }>(cur: T[], fresh: T[]) => cur.map(w => fresh.find(x => x.code === w.code) ?? w);
+
 export default function WatchlistPanel() {
   const { user } = useAuth();
   const [list, setList] = useState<W[]>([]);
@@ -33,11 +35,13 @@ export default function WatchlistPanel() {
     const items = (data as W[]) ?? [];
     setList(items);
     setLoading(false);
-    setList(await prices(items));
+    const p = await prices(items);
+    setList(cur => merge(cur, p));
   }, [user, prices]);
 
   useEffect(() => { load(); }, [load]);
-  useMarketPoll(async () => setList(await prices(list)), 5_000);
+  // 시세만 덮어쓴다: 응답을 기다리는 사이 지운 종목이 되살아나지 않게 '지금 목록'에 값만 합친다
+  useMarketPoll(async () => { const p = await prices(list); setList(cur => merge(cur, p)); }, 5_000);
 
   const remove = async (code: string) => {
     const sb = getBrowserSupabase();

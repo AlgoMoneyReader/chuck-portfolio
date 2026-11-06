@@ -33,22 +33,46 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
   const intraday = !["D", "W", "M"].includes(tf);
   const cc = useChartColors();
 
+  // 봉 데이터 불러오기 (분봉은 15초마다 새로). 늦게 온 예전 응답(다른 주기)이 덮어쓰지 않게 stale 표시
   useEffect(() => {
+    let stale = false;
     setState(null); setHover(null); setLiveBar(null);
     const src = url ? `${url}${url.includes("?") ? "&" : "?"}tf=${tf}` : `/api/candles?label=${encodeURIComponent(label)}&tf=${tf}`;
     const load = () => fetch(src, { cache: "no-store" })
-      .then(r => r.json()).then(j => setState({ ...j, candles: j.candles ?? [] })).catch(e => setState({ candles: [], prevClose: null, error: String(e) }));
+      .then(r => r.json()).then(j => { if (!stale) setState({ ...j, candles: j.candles ?? [] }); })
+      .catch(e => { if (!stale) setState(prev => prev ?? { candles: [], prevClose: null, error: String(e) }); });
     load();
     const iv = intraday ? setInterval(() => { if (document.visibilityState === "visible") load(); }, 15_000) : undefined;
-    return () => { if (iv) clearInterval(iv); };
+    return () => { stale = true; if (iv) clearInterval(iv); };
   }, [label, tf, intraday, url]);
 
+  // 차트는 주기·테마·크기가 바뀔 때만 새로 만든다. 15초 갱신 때는 데이터만 바꿔서 확대·스크롤 위치가 유지된다
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const prevLineRef = useRef<{ price: number; line: ReturnType<ISeriesApi<"Candlestick">["createPriceLine"]> } | null>(null);
+  const [built, setBuilt] = useState(0);
+  const hasData = !!state?.candles.length;
+
+  const applyData = (st: NonNullable<typeof state>) => {
+    const series = seriesRef.current;
+    if (!series) return;
+    series.setData(st.candles.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close })));
+    volRef.current?.setData(st.candles.some(c => c.volume) ? st.candles.map(c => ({ time: c.time as Time, value: c.volume ?? 0, color: c.close >= c.open ? cc.upVol : cc.downVol })) : []);
+    const pc = intraday ? st.prevClose : null;
+    if (prevLineRef.current && prevLineRef.current.price !== pc) { series.removePriceLine(prevLineRef.current.line); prevLineRef.current = null; }
+    if (pc && !prevLineRef.current) {
+      prevLineRef.current = { price: pc, line: series.createPriceLine({ price: pc, color: cc.refLine, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "전일" }) };
+    }
+  };
+
   useEffect(() => {
-    if (!box.current || !state?.candles.length) return;
+    if (!box.current || !hasData) return;
     let disposed = false;
     let ro: ResizeObserver | undefined;
-    import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, LineStyle }) => {
-      if (disposed || !box.current) return;
+    import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode }) => {
+      const st = stateRef.current;
+      if (disposed || !box.current || !st?.candles.length) return;
       chartRef.current?.remove();
       const chart = createChart(box.current, {
         width: box.current.clientWidth, height: fill ? Math.max(160, box.current.clientHeight || height) : height,
@@ -66,18 +90,14 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
       });
       seriesRef.current = series;
       series.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
-      series.setData(state.candles.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close })));
-      if (state.candles.some(c => c.volume)) {
-        const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false, priceLineVisible: false });
-        vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-        vol.setData(state.candles.map(c => ({ time: c.time as Time, value: c.volume ?? 0, color: c.close >= c.open ? cc.upVol : cc.downVol })));
-      }
-      if (intraday && state.prevClose) {
-        series.createPriceLine({ price: state.prevClose, color: cc.refLine, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: "전일" });
-      }
+      const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false, priceLineVisible: false });
+      vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+      volRef.current = vol;
+      prevLineRef.current = null;
+      applyData(st);
       // 처음 화면: 최근 구간만 (과거는 왼쪽으로 끌거나 줄이면 이어서 보인다)
       const SHOW: Record<string, number> = { "1m": 390, "2m": 200, "5m": 160, "30m": 130, "60m": 120, D: 130, W: 110, M: 120 };
-      const n = state.candles.length, k = SHOW[tf] ?? 150;
+      const n = st.candles.length, k = SHOW[tf] ?? 150;
       if (n > k) chart.timeScale().setVisibleLogicalRange({ from: n - k, to: n + 2 });
       else chart.timeScale().fitContent();
       chart.subscribeCrosshairMove(p => {
@@ -87,9 +107,17 @@ export default function CandleChart({ label, tf, height = 320, digits = 2, url, 
       // fill: 남은 공간 높이에 맞춤 (팝업 안에서 아래 시간축이 잘리지 않게)
       ro = new ResizeObserver(([e]) => chart.applyOptions(fill ? { width: e.contentRect.width, height: Math.max(160, e.contentRect.height) } : { width: e.contentRect.width }));
       ro.observe(box.current);
+      setBuilt(b => b + 1);
     });
-    return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; };
-  }, [state, height, intraday, digits, cc, tf, fill]);
+    return () => { disposed = true; ro?.disconnect(); chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null; volRef.current = null; prevLineRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasData, height, intraday, digits, cc, tf, fill]);
+
+  // 15초 갱신: 차트는 그대로 두고 데이터만 교체
+  useEffect(() => {
+    if (state?.candles.length && seriesRef.current) { try { applyData(state); } catch { /* 차트 교체 중 */ } }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, built]);
 
   useEffect(() => {
     const c = state?.candles[state.candles.length - 1];
