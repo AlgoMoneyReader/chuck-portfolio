@@ -302,6 +302,14 @@ export async function GET(request: Request) {
         return q ? { ...r, nxtPrice: q.price, nxtPct: parseFloat(q.pct.toFixed(2)) } : r;
       };
       gainers = gainers.map(withNx); losers = losers.map(withNx); amount = amount.map(withNx); cap = cap.map(withNx);
+      // 장외 시간엔 화면 메인이 장외 시세 → 상승·하락도 장외 등락률로 다시 줄 세운다 (장외 시세 없는 종목은 뒤로)
+      if (sess.key !== "auction-close") {
+        const byExt = (dir: 1 | -1) => (a: TopGainerRow, b: TopGainerRow) =>
+          a.nxtPct == null && b.nxtPct == null ? 0 : a.nxtPct == null ? 1 : b.nxtPct == null ? -1 : dir * (b.nxtPct - a.nxtPct);
+        gainers = reRank([...gainers].sort(byExt(1)));
+        losers = reRank([...losers].sort(byExt(-1)));
+        basis = sess.key === "nxt-pre" || sess.key === "auction-open" ? "NXT 프리마켓 시세 기준" : "애프터마켓 시세 기준";
+      }
       // 개장 전엔 KRX 등락률이 0% → 주요 종목을 NXT 등락률로 순위
       if (allZero) {
         const nxRows = base.map(withNx).filter(r => r.nxtPct != null);
