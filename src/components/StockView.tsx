@@ -779,20 +779,27 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
           {!modal && <button onClick={() => router.back()} aria-label="뒤로" className="-ml-1 p-1 text-gray-300"><FiChevronLeft size={22} /></button>}
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold text-white truncate">{name} <span className="text-xs font-normal text-gray-500">{code}{isUS && usItem ? ` · ${usItem.ko.split(" ")[0]}` : ""}{asiaInfo ? ` · ${asiaInfo.flag} ${asiaInfo.label}` : ""}</span></p>
-            {headPrice != null && (
-              <p className="text-sm num">
-                <span key={headPrice} className="text-white font-semibold rounded animate-tick">{isUS ? `${cur}${headPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${won(headPrice)}원`}</span>{" "}
-                <span className={tone(headPct)}>{headPct != null && headPct > 0 ? "▲" : headPct != null && headPct < 0 ? "▼" : ""} {isUS ? `${cur}${Math.abs(headChg ?? 0).toFixed(2)}` : won(Math.abs(headChg ?? 0))} ({pct(headPct, 2)})</span>
-                {!isUS && <span className="ml-1.5 text-[10px] text-gray-500">{krSession().key === "regular" ? "KRX 정규장 · 실시간" : "KRX 종가"}</span>}
-              </p>
-            )}
-            {usExt && usExt.pct != null && (
-              <p className="text-xs num">
-                <span className={`${usExt.cls} font-semibold`}>{usExt.label}</span>{" "}
-                <span key={usExt.price} className="text-white font-semibold rounded animate-tick">{isUS ? `$${usExt.price.toFixed(2)}` : `${won(usExt.price)}원`}</span>{" "}
-                <span className={tone(usExt.pct)}>{usExt.pct > 0 ? "+" : ""}{usExt.pct.toFixed(2)}%</span>
-              </p>
-            )}
+            {/* 장외(NXT·애프터·프리·데이)엔 장외 시세가 메인, 아래 줄은 정규장 종가 / 정규장엔 정규장 시세 */}
+            {(() => {
+              const money = (v: number) => (isUS ? `${cur}${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${won(v)}원`);
+              const ext = usExt && usExt.pct != null ? usExt : null;
+              const mPrice = ext ? ext.price : headPrice, mPct = ext ? ext.pct : headPct;
+              const mChg = ext && headPrice != null ? ext.price - headPrice : headChg;
+              if (mPrice == null) return null;
+              return (
+                <>
+                  <p className="text-sm num">
+                    {ext && <span className={`${ext.cls} text-[11px] font-bold mr-1`}>{ext.label}</span>}
+                    <span key={mPrice} className="text-white font-semibold rounded animate-tick">{money(mPrice)}</span>{" "}
+                    <span className={tone(mPct)}>{mPct != null && mPct > 0 ? "▲" : mPct != null && mPct < 0 ? "▼" : ""} {isUS ? `${cur}${Math.abs(mChg ?? 0).toFixed(2)}` : won(Math.round(Math.abs(mChg ?? 0)))} ({pct(mPct, 2)})</span>
+                    {!ext && !isUS && <span className="ml-1.5 text-[10px] text-gray-500">{krSession().key === "regular" ? "KRX 정규장 · 실시간" : "KRX 종가"}</span>}
+                  </p>
+                  {ext && headPrice != null && (
+                    <p className="text-xs num text-gray-500">정규장 종가 {money(headPrice)} <span className={tone(headPct)}>{pct(headPct, 2)}</span></p>
+                  )}
+                </>
+              );
+            })()}
           </div>
           {!isUS && d && <AddToPortfolio code={code} name={d.name} market={d.marketCode} price={q?.price} />}
           <button onClick={toggleFav} aria-label="관심종목"

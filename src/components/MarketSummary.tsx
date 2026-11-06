@@ -56,18 +56,17 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
   r: StockRow; onClick: () => void; rankCls?: string; last?: string; badge?: string; compact?: boolean; wideCap?: boolean;
 }) {
   const s = krSession();
-  const tag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT 프리" : s.key === "nxt-after" ? "애프터" : "애프터 종가";
   const v = r.changePct;
   const tone = (x: number) => (x > 0 ? "text-signal-green" : x < 0 ? "text-signal-red" : "text-gray-400");
   const val = compact ? "text-xs" : "text-sm";
-  const arrow = v > 0 ? "▲" : v < 0 ? "▼" : "";
-  const nxt = r.nxtPrice != null && r.nxtPct != null ? (
-    <span className={`${compact ? "text-[10px]" : "text-[11px]"} num whitespace-nowrap mt-0.5`}>
-      <span className={`font-bold mr-1 ${tag === "NXT 프리" ? "text-amber-300" : "text-purple-300"}`}>{tag}</span>
-      <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded px-0.5 animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>
-      <span className={`ml-1 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>
-    </span>
-  ) : null;
+  const extended = s.key !== "regular" && s.key !== "auction-close";
+  const useExt = extended && r.nxtPrice != null && r.nxtPct != null;
+  const extTag = s.key === "nxt-pre" || s.key === "auction-open" ? "NXT" : s.key === "nxt-after" ? "애프터" : "애프터 종가";
+  const mPrice = useExt ? r.nxtPrice! : r.price;
+  const mPct = useExt ? r.nxtPct! : v;
+  const mChange = useExt ? r.nxtPrice! - r.price : r.change; // 기준 = 직전 정규장 종가
+  const mArrow = mPct > 0 ? "▲" : mPct < 0 ? "▼" : "";
+  const tagCls = extTag === "NXT" ? "text-amber-300" : "text-purple-300";
   return (
     <>
       {/* 모바일(또는 2열 좁은 패널): 종목 | 현재가·등락률(아래 NXT) | 끝 열 */}
@@ -80,10 +79,10 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
         </div>
         <div className="flex flex-col items-end shrink-0">
           <div className="flex items-baseline gap-2">
-            <span key={`${r.code}-${r.price}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{r.price.toLocaleString("ko-KR")}{compact ? "" : "원"}</span>
-            <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(v)}`}>{arrow}{Math.abs(v).toFixed(2)}%</span>
+            <span key={`${r.code}-${mPrice}`} className={`${val} text-white num whitespace-nowrap rounded px-0.5 animate-tick`}>{useExt && <span className={`text-[9px] font-bold mr-0.5 ${tagCls}`}>{extTag}</span>}{mPrice.toLocaleString("ko-KR")}</span>
+            <span className={`${compact ? "w-14" : "w-16"} text-right ${val} font-semibold num whitespace-nowrap ${tone(mPct)}`}>{mArrow}{Math.abs(mPct).toFixed(2)}%</span>
           </div>
-          {nxt}
+          {useExt && <span className="text-[10px] text-gray-500 num whitespace-nowrap mt-0.5">종가 {r.price.toLocaleString("ko-KR")} {v > 0 ? "+" : ""}{v.toFixed(2)}%</span>}
         </div>
         {last != null && <span className="w-14 text-right text-xs text-gray-300 num whitespace-nowrap">{last}</span>}
       </div>}
@@ -98,23 +97,22 @@ function KrStockRow({ r, onClick, rankCls, last, badge, compact = false, wideCap
               <p className="text-xs truncate"><span className={`text-gray-600 ${badge ? "hidden md:inline" : ""}`}>{r.code}</span>{badge && <span className="text-gold/80"><span className="hidden md:inline"> · </span>{badge}</span>}</p>
             </div>
           </div>
+          {/* 장외엔 NXT·애프터 시세가 메인, 아래 줄은 정규장 종가 / 정규장엔 정규장 시세 */}
           <div className="flex flex-col items-end">
-            <span key={`${r.code}-${r.price}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">{r.price.toLocaleString("ko-KR")}원</span>
-            {r.nxtPrice != null && r.nxtPct != null && (
-              <span className="text-[11px] whitespace-nowrap mt-0.5">
-                <span className={`font-bold mr-1 ${tag === "NXT 프리" ? "text-amber-300" : "text-purple-300"}`}>{tag === "NXT 프리" ? "NXT" : tag === "애프터" ? "애프터" : "종가후"}</span>
-                <span key={`${r.code}-n-${r.nxtPrice}`} className="text-gray-300 rounded animate-tick">{r.nxtPrice.toLocaleString("ko-KR")}</span>
-              </span>
-            )}
+            <span key={`${r.code}-${mPrice}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">
+              {useExt && <span className={`text-[10px] font-bold mr-1 ${tagCls}`}>{extTag}</span>}{mPrice.toLocaleString("ko-KR")}원
+            </span>
+            {useExt ? <span className="text-[11px] text-gray-500 whitespace-nowrap mt-0.5">정규장 종가 {r.price.toLocaleString("ko-KR")}</span>
+              : extended ? <span className="text-[11px] text-gray-600 whitespace-nowrap mt-0.5">NXT 미거래</span> : null}
           </div>
           <div className="flex flex-col items-end">
-            <span key={`${r.code}-p-${v}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${tone(v)}`}>{v > 0 ? "+" : v < 0 ? "-" : ""}{Math.abs(v).toFixed(2)}%</span>
-            {r.nxtPrice != null && r.nxtPct != null && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${tone(r.nxtPct)}`}>{r.nxtPct > 0 ? "+" : ""}{r.nxtPct.toFixed(2)}%</span>}
+            <span key={`${r.code}-p-${mPct}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${tone(mPct)}`}>{mPct > 0 ? "+" : mPct < 0 ? "-" : ""}{Math.abs(mPct).toFixed(2)}%</span>
+            {useExt && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${tone(v)}`}>{v > 0 ? "+" : ""}{v.toFixed(2)}%</span>}
           </div>
           {/* 값이 바뀐 칸은 잠깐 깜빡인다 (가격이 움직이면 등락률·시총·거래대금·전일대비·거래량도 함께) */}
           {wideCap && <span className="text-right"><span key={`${r.code}-c-${fmtCap(r.capEok)}`} className="text-gray-200 font-semibold whitespace-nowrap rounded px-0.5 animate-tick">{fmtCap(r.capEok)}</span></span>}
           <span className="text-right"><span key={`${r.code}-a-${r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : ""}`} className="text-gray-300 whitespace-nowrap rounded px-0.5 animate-tick">{r.tradeAmount ? fmtTradeAmt(r.tradeAmount) : "—"}</span></span>
-          <span className="text-right"><span key={`${r.code}-d-${r.change}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${tone(v)}`}>{r.change != null ? `${arrow}${Math.abs(r.change).toLocaleString("ko-KR")}` : "—"}</span></span>
+          <span className="text-right"><span key={`${r.code}-d-${mChange}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${tone(mPct)}`}>{mChange != null ? `${mArrow}${Math.abs(mChange).toLocaleString("ko-KR")}` : "—"}</span></span>
           <span className="text-right"><span key={`${r.code}-v-${r.volume}`} className="text-gray-300 whitespace-nowrap rounded px-0.5 animate-tick">{r.volume ? `${r.volume.toLocaleString("ko-KR")}주` : "—"}</span></span>
         </div>
       )}
@@ -1114,6 +1112,11 @@ function USStockList({
             const extPrice = hasDay ? r.dayMarketPrice : hasPre ? r.preMarketPrice : hasPost ? r.postMarketPrice : null;
             const extPct   = hasDay ? r.dayMarketChangePct : hasPre ? r.preMarketChangePct : hasPost ? r.postMarketChangePct : null;
             const isPos    = r.changePct >= 0;
+            // 장외(데이·프리·애프터)엔 장외 시세가 메인, 아래 줄은 정규장 종가 (등락률은 정규장 종가 대비)
+            const useExt = extPrice != null && extPct != null;
+            const mPrice = useExt ? extPrice! : r.price, mPct = useExt ? extPct! : r.changePct;
+            const mChange = useExt ? extPrice! - r.price : r.change, mPos = mPct >= 0;
+            const extTagCls = hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300";
             return (
               <Fragment key={r.code}>
               <div className="grid items-center gap-x-3 w-max min-w-full grid-cols-[max(136px,calc(100vw_-_240px))_84px_64px_84px_84px] md:w-auto md:gap-x-4 md:grid-cols-[minmax(200px,2fr)_repeat(4,minmax(0,1fr))] py-2.5 hover:bg-navy-sub/40 cursor-pointer transition-colors text-sm num group"
@@ -1126,22 +1129,19 @@ function USStockList({
                   </div>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span key={`${r.code}-d-${r.price}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">{fmtUSD(r.price)}</span>
-                  {extPrice != null && extPct != null && (
-                    <span className="text-[11px] whitespace-nowrap mt-0.5">
-                      <span className={`font-bold mr-1 ${hasDay ? "text-cyan-brand" : hasPre ? "text-amber-300" : "text-purple-300"}`}>{hasDay ? "데이" : hasPre ? "프리" : "애프터"}</span>
-                      <span className="text-gray-300">{fmtUSD(extPrice)}</span>
-                    </span>
-                  )}
+                  <span key={`${r.code}-d-${mPrice}`} className="text-white whitespace-nowrap rounded px-0.5 animate-tick">
+                    {useExt && <span className={`text-[10px] font-bold mr-1 ${extTagCls}`}>{hasDay ? "데이" : hasPre ? "프리" : "애프터"}</span>}{fmtUSD(mPrice)}
+                  </span>
+                  {useExt && <span className="text-[11px] text-gray-500 whitespace-nowrap mt-0.5">정규장 종가 {fmtUSD(r.price)}</span>}
                 </div>
                 <div className="flex flex-col items-end">
-                  <span key={`${r.code}-c-${r.changePct}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "+" : "-"}{Math.abs(r.changePct).toFixed(2)}%</span>
-                  {extPrice != null && extPct != null && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${extPct >= 0 ? "text-signal-green" : "text-signal-red"}`}>{extPct >= 0 ? "+" : ""}{extPct.toFixed(2)}%</span>}
+                  <span key={`${r.code}-c-${mPct}`} className={`font-semibold whitespace-nowrap rounded px-0.5 animate-tick ${mPos ? "text-signal-green" : "text-signal-red"}`}>{mPos ? "+" : "-"}{Math.abs(mPct).toFixed(2)}%</span>
+                  {useExt && <span className={`text-[11px] whitespace-nowrap mt-0.5 ${isPos ? "text-signal-green" : "text-signal-red"}`}>{isPos ? "+" : ""}{r.changePct.toFixed(2)}%</span>}
                 </div>
                 <span className="text-right text-gray-300 whitespace-nowrap">
                   {isCap ? (r.capUsd ? fmtUsdCap(r.capUsd) : "—") : isValue && r.dollarVolume ? `$${fmtVolUS(r.dollarVolume)}` : fmtVolUS(r.volume)}
                 </span>
-                <span className="text-right"><span key={`${r.code}-d-${r.change}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${isPos ? "text-signal-green" : "text-signal-red"}`}>{r.change != null ? `${isPos ? "▲" : "▼"}$${Math.abs(r.change).toFixed(2)}` : "—"}</span></span>
+                <span className="text-right"><span key={`${r.code}-d-${mChange}`} className={`whitespace-nowrap rounded px-0.5 animate-tick ${mPos ? "text-signal-green" : "text-signal-red"}`}>{mChange != null ? `${mPos ? "▲" : "▼"}$${Math.abs(mChange).toFixed(2)}` : "—"}</span></span>
               </div>
               </Fragment>
             );

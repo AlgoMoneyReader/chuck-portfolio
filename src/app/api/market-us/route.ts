@@ -424,7 +424,15 @@ export async function GET(request: Request) {
         : type === "losers" ? uni.filter(q => q.changePct < 0).sort((a, b) => a.changePct - b.changePct)
         : [...uni].sort((a, b) => (b.dollarVolume ?? 0) - (a.dollarVolume ?? 0)))
         .slice(0, TOP_N).map((q, i) => ({ ...q, rank: i + 1 }));
-      return send({ stocks: await withExtended(list), timestamp: ts, universe: uni.length, basis: type === "actives" ? "dollarVolume" : "changePct" });
+      let out = await withExtended(list);
+      // 장외(데이·프리·애프터) 시세가 붙은 시간엔 화면 메인이 장외 시세 → 상승·하락도 장외 등락률로 (없는 종목은 뒤로)
+      const extPctOf = (q: Quote) => q.dayMarketChangePct ?? (q.marketState === "PRE" ? q.preMarketChangePct : null) ?? q.postMarketChangePct ?? null;
+      if ((type === "gainers" || type === "losers") && out.filter(q => extPctOf(q) != null).length > out.length / 2) {
+        const dir = type === "gainers" ? 1 : -1;
+        out = [...out].sort((a, b) => { const x = extPctOf(a), y = extPctOf(b); return x == null && y == null ? 0 : x == null ? 1 : y == null ? -1 : dir * (y - x); })
+          .map((q, i) => ({ ...q, rank: i + 1 }));
+      }
+      return send({ stocks: out, timestamp: ts, universe: uni.length, basis: type === "actives" ? "dollarVolume" : "changePct" });
     }
   }
 
