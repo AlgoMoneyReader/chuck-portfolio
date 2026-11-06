@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sharedJson } from "@/lib/sharedFetch";
 import { usePathname, useRouter } from "next/navigation";
 
 interface Q { price: number; changePct: number }
@@ -46,8 +47,9 @@ export default function MarketTicker() {
 
   useEffect(() => {
     const loadMarket = () => {
-      fetch("/api/market", { cache: "no-store" }).then(r => r.json()).then(setM).catch(() => {});
-      fetch("/api/crypto-prices", { cache: "no-store" }).then(r => r.json()).then(j => j?.btc && setBtc(j.btc)).catch(() => {});
+      // 증시 카드(LiveMarketPulse)와 같은 요청을 공유한다
+      sharedJson<Parameters<typeof setM>[0]>("/api/market").then(setM).catch(() => {});
+      sharedJson<{ btc?: Parameters<typeof setBtc>[0] }>("/api/crypto-prices").then(j => { if (j?.btc) setBtc(j.btc); }).catch(() => {});
     };
     const loadNews = () => fetch("/api/news-feed", { cache: "no-store" }).then(r => r.json())
       .then(j => setNews((j.items ?? []).slice(0, 8))).catch(() => {});

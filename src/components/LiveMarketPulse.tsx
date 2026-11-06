@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
+import { sharedJson } from "@/lib/sharedFetch";
 import { OPEN_CHART_EVENT } from "./MarketTicker";
 import { ASIA } from "@/lib/asiaMarkets";
 const ChartModal = lazy(() => import("./ChartModal"));
@@ -223,17 +224,14 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/market", { cache: "no-store" });
-      if (!res.ok) return;
-      const json: MarketData = await res.json();
+      const json = await sharedJson<MarketData>("/api/market"); // 상단 티커와 요청 공유
       setData(json);
-      setLastUpdated(new Date().toLocaleTimeString("ko-KR"));
+      setLastUpdated(new Date().toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul" }));
     } catch { /* silent */ } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
-    fetch("/api/crypto-prices", { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
+    sharedJson<{ btc?: { price: number; changePct: number } }>("/api/crypto-prices")
       .then(j => { if (j?.btc) setBtc({ price: j.btc.price, changePct: j.btc.changePct }); })
       .catch(() => {});
   }, []);
@@ -244,9 +242,9 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
       const kst  = new Date(Date.now() + 9 * 60 * 60 * 1000);
       const day  = kst.getUTCDay();
       const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-      // 평일엔 국내(08~20시)·미국(밤~새벽) 어느 쪽이든 장이 열려 있으니 5초, 주말만 30초
-      void mins;
-      return day >= 1 && day <= 6 ? 5_000 : 30_000;
+      // 평일엔 국내(08~20시)·미국(밤~새벽) 어느 쪽이든 장이 열려 있으니 5초.
+      // 토요일은 미국 금요일 애프터마켓이 끝나는 오전 10시까지만 5초, 그 뒤 주말은 30초
+      return (day >= 1 && day <= 5) || (day === 6 && mins < 600) ? 5_000 : 30_000;
     }
     let iv = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, getInterval());
     const reschedule = setInterval(() => { clearInterval(iv); iv = setInterval(() => { if (document.visibilityState === "visible") fetchData(); }, getInterval()); }, 60_000);

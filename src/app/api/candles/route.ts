@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { yahooDaily } from "@/lib/yahooDaily";
 import { ASIA_SYMBOLS } from "@/lib/asiaMarkets";
 import { kisGet, num } from "@/lib/kis";
 
@@ -131,6 +132,8 @@ export async function GET(request: Request) {
       const y = await yahoo(sym, tf);
       candles = y.candles; prevClose = y.prevClose; source = "Yahoo";
     }
+    // 분봉의 '전일' 기준: 여러 날짜 구간이면 Yahoo chartPreviousClose 는 구간 시작 전 종가라 틀린다 → 일봉으로 구한 공식 전일 종가
+    if (intraday(tf)) { const d = (await yahooDaily([sym]).catch(() => ({} as Awaited<ReturnType<typeof yahooDaily>>)))[sym]; if (d?.prev) prevClose = d.prev; }
     return NextResponse.json({ label, tf, source, prevClose, candles }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return NextResponse.json({ label, tf, candles: [], error: String(e).slice(0, 160) });

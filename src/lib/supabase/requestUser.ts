@@ -17,3 +17,15 @@ export async function requestUser(req: Request): Promise<{ sb: SupabaseClient; u
 }
 
 export interface Quota { login: boolean; admin?: boolean; used?: number; limit?: number }
+
+// AI 한도: 생성 '전에' 1회 차감(원자적, count < 5 일 때만) → 동시에 여러 번 보내 한도를 넘기는 것 방지.
+// 생성에 실패하면 refundQuota 로 돌려준다. 함수가 아직 없으면(SQL 미실행) 예전처럼 막지 않는다.
+export async function reserveQuota(sb: SupabaseClient): Promise<{ ok: boolean; quota: Quota }> {
+  const { data, error } = await sb.rpc("use_ai_quota");
+  if (error || !data) return { ok: true, quota: { login: true } };
+  const d = data as { ok?: boolean; admin?: boolean; used?: number; limit?: number };
+  return { ok: d.ok !== false, quota: { login: true, admin: d.admin, used: d.used, limit: d.limit } };
+}
+export async function refundQuota(sb: SupabaseClient) {
+  try { await sb.rpc("refund_ai_quota"); } catch { /* 함수가 없으면 무시 */ }
+}

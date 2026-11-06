@@ -41,6 +41,6 @@ create table if not exists analyses (
   created_at timestamptz default now()
 );
 
--- RLS 비활성화 (개인 사용 시) — 멀티유저 전환 시 활성화
-alter table holdings disable row level security;
-alter table analyses disable row level security;
+-- RLS 켬 (정책 없음 = 외부 접근 차단). 지금 사이트는 이 테이블을 쓰지 않는다
+alter table holdings enable row level security;
+alter table analyses enable row level security;

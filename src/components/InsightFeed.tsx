@@ -6,6 +6,7 @@ import { SiNaver } from "react-icons/si";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { useAuth } from "./AuthProvider";
 import { relTime } from "@/lib/time";
+import { authFetch } from "@/lib/supabase/authFetch";
 
 interface Reel { id: number; url: string; caption: string | null; created_at: string }
 interface Blog { title: string; url: string; summary: string; thumb: string | null; publishedAt: string | null }
@@ -47,7 +48,12 @@ export default function InsightFeed() {
     if (!sb) return;
     const { error } = await sb.from("insights").insert({ url: url.trim(), caption: caption.trim() || null });
     setMsg(error ? `올리기 실패: ${error.message}` : "올렸습니다");
-    if (!error) { setUrl(""); setCaption(""); load(); }
+    if (!error) {
+      // 알림을 켠 사람들에게 '새 릴스' 푸시
+      authFetch("/api/push/insight", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ caption }) })
+        .then(r => r.json()).then(j => { if (j?.sent) setMsg(`올렸습니다 · 알림 ${j.sent}명에게 보냄`); }).catch(() => {});
+      setUrl(""); setCaption(""); load();
+    }
   };
   const remove = async (id: number) => {
     if (!confirm("이 릴스를 내릴까요?")) return;

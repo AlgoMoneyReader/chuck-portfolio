@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { krSession } from "@/lib/krSession";
 import { ASIA_MARKETS, type AsiaMkt } from "@/data/asiaStocks";
@@ -34,9 +34,11 @@ export default function AfterHoursWidget({ region = "KR" }: { region?: "KR" | "U
 
   useEffect(() => {
     setLoading(true); load();
-    const ext = krSession().extended;
-    const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, region === "KR" && (isKrOpen() || ext) ? 5_000 : 30_000);
-    return () => clearInterval(iv);
+    // 장 시간 여부를 매번 다시 봐서 간격을 정한다
+    let tid: ReturnType<typeof setTimeout>;
+    const tick = () => { tid = setTimeout(() => { if (document.visibilityState === "visible") load(); tick(); }, region === "KR" && (isKrOpen() || krSession().extended) ? 5_000 : 30_000); };
+    tick();
+    return () => clearTimeout(tid);
   }, [load, region]);
 
   const tone = (v: number) => (v > 0 ? "text-signal-green" : v < 0 ? "text-signal-red" : "text-gray-400");
@@ -103,8 +105,11 @@ export function AsiaTopWidget() {
   const [loading, setLoading] = useState(true);
   const open = useStockModal();
   const info = ASIA_MARKETS.find(m => m.key === mkt)!;
+  const cur = useRef(mkt);
+  cur.current = mkt;
+  // 나라를 바꾼 뒤 늦게 온 예전 나라 응답은 버린다
   const load = useCallback(() => fetch(`/api/market-asia?mkt=${mkt}&type=cap`, { cache: "no-store" }).then(r => r.json())
-    .then(j => setRows((j.stocks ?? []).slice(0, 10))).catch(() => {}).finally(() => setLoading(false)), [mkt]);
+    .then(j => { if (cur.current === mkt) setRows((j.stocks ?? []).slice(0, 10)); }).catch(() => {}).finally(() => setLoading(false)), [mkt]);
   useEffect(() => {
     setLoading(true); load();
     const iv = setInterval(() => { if (document.visibilityState === "visible") load(); }, 10_000);

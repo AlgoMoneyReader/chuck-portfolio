@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSwipeTabs } from "@/lib/useSwipeTabs";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
 
@@ -129,11 +130,13 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
   useEffect(() => {
     if ((activeTab !== "night" && activeTab !== "day") || !isFut) return;
     setNightLoading(true); setNightError(false); setNightFutures(null);
+    let stale = false; // 주간↔야간을 빨리 바꿀 때 예전 응답이 덮지 않게
     fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(j => { if (j.error) throw new Error(); setNightFutures(j); })
-      .catch(() => setNightError(true))
-      .finally(() => setNightLoading(false));
+      .then(j => { if (j.error) throw new Error(); if (!stale) setNightFutures(j); })
+      .catch(() => { if (!stale) setNightError(true); })
+      .finally(() => { if (!stale) setNightLoading(false); });
+    return () => { stale = true; };
   }, [activeTab, isFut]);
 
   // ── 창이 열려 있는 동안 자동 갱신 (로딩 표시 없이 값만 교체) ───────────────
@@ -152,9 +155,12 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
     fetch(`/api/market-breadth?market=${label}`, { cache: "no-store" })
       .then(r => r.ok ? r.json() : null).then(j => { if (j?.advance != null) setBreadth(j); }).catch(() => {});
   }, 20_000, { enabled: activeTab === "flow" && isIndex });
+  const tabRef = useRef(activeTab);
+  tabRef.current = activeTab;
   useMarketPoll(() => {
-    fetch(`/api/night-futures?session=${activeTab}`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error) setNightFutures(j); }).catch(() => {});
+    const tab = activeTab;
+    fetch(`/api/night-futures?session=${tab}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j && !j.error && tabRef.current === tab) setNightFutures(j); }).catch(() => {});
   }, 20_000, { krxOnly: false, enabled: (activeTab === "night" || activeTab === "day") && isFut });
 
   // AI 시황은 10분마다 새로 (서버도 10분 캐시)
@@ -197,6 +203,8 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
   };
 
   const maxFlowAbs = flow ? Math.max(...flow.map(f => Math.abs(f.netBuy)), 1) : 1;
+  // 휴대폰: 좌우로 밀어 차트 ↔ 수급·시황 (주간 ↔ 야간 선물). 차트 위에서 민 것은 차트 조작으로 둔다
+  const swipe = useSwipeTabs<"chart" | "flow" | "day" | "night">(isFut ? ["day", "night"] : isIndex ? ["chart", "flow"] : [], activeTab, setActiveTab);
 
   const nightIsPos  = (nightFutures?.changePct ?? 0) >= 0;
   const nightColor  = nightIsPos ? "#1D9E75" : "#E24B4A";
@@ -208,6 +216,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
         <div
           className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up sm:animate-fade-in flex flex-col h-[min(80vh,660px)] sm:h-[min(92vh,720px)]"
           onClick={e => e.stopPropagation()}
+          {...swipe}
         >
           {/* 헤더 */}
           <div className="flex items-start justify-between px-5 py-4 border-b border-navy-border/60 shrink-0">

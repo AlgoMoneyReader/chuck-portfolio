@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gemini, GeminiError } from "@/lib/gemini";
-import { requestUser, type Quota } from "@/lib/supabase/requestUser";
+import { requestUser, reserveQuota, refundQuota } from "@/lib/supabase/requestUser";
 
 export const maxDuration = 60;
 
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let reserved: Awaited<ReturnType<typeof requestUser>> = null;
   try {
     const body = await req.json();
     const { ticker, companyName, thesis, goal } = body;
@@ -79,12 +80,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ticker 또는 companyName이 필요합니다" }, { status: 400 });
     }
 
-    // 로그인 + 하루 5회 한도 (운영자 무제한). 생성에 성공했을 때만 1회 차감
+    // 로그인 + 하루 5회 한도 (운영자 무제한). 먼저 1회 차감하고, 실패하면 돌려준다
     const me = await requestUser(req);
     if (!me) return NextResponse.json({ error: "로그인 후 이용할 수 있습니다", needLogin: true }, { status: 401 });
-    const { data: st } = await me.sb.rpc("ai_quota_status");
-    const quota = (st ?? {}) as Quota;
-    if (!quota.admin && (quota.used ?? 0) >= (quota.limit ?? 5)) {
+    const { ok, quota } = await reserveQuota(me.sb);
+    if (!ok) {
       return NextResponse.json({ error: `오늘 AI 종목분석 ${quota.limit ?? 5}회를 모두 사용했습니다. 내일 다시 이용해 주세요.`, quota }, { status: 429 });
     }
 
@@ -120,11 +120,12 @@ ${currentPriceLine}
 위 정보를 바탕으로 엘리트 주식 리서치 보고서를 작성해주세요.
     `.trim();
 
+    reserved = me;
     const { text, model } = await gemini({ prompt: userMessage, system: SYSTEM_PROMPT, search: true, timeoutMs: 55_000, effort: "medium", log: { feature: "AI 리서치", userId: me.user.id, sb: me.sb, detail: `${companyName ?? ""} ${ticker ?? ""}`.trim() } });
 
-    const { data: used } = await me.sb.rpc("use_ai_quota");
+    reserved = null;
     return NextResponse.json({
-      quota: used,
+      quota,
       analysis: text,
       ticker,
       companyName,
@@ -132,6 +133,7 @@ ${currentPriceLine}
       model,
     });
   } catch (error) {
+    if (reserved) await refundQuota(reserved.sb);
     const msg = error instanceof Error ? error.message : "알 수 없는 오류";
     console.error("🚨 [Gemini API ERROR] /api/analyze:", msg);
     return NextResponse.json({ error: msg }, { status: error instanceof GeminiError && error.quota ? 429 : 500 });

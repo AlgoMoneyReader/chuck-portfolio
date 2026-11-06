@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { gemini, GeminiError, parseJsonLoose } from "@/lib/gemini";
-import { requestUser, type Quota } from "@/lib/supabase/requestUser";
+import { requestUser, reserveQuota, refundQuota, type Quota } from "@/lib/supabase/requestUser";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -55,7 +55,9 @@ export async function GET(request: Request) {
   if (saved && !(force && quota.admin)) return NextResponse.json({ report: saved.report, cached: true, quota });
   if (!run) return NextResponse.json({ report: null, quota, storage: savedErr ? "missing" : "ok" });
 
-  if (!quota.admin && (quota.used ?? 0) >= (quota.limit ?? 5)) {
+  // 생성 전에 1회 차감 (동시 요청으로 한도 넘기기 방지). 실패하면 아래 catch 에서 돌려준다
+  const reserve = await reserveQuota(me.sb);
+  if (!reserve.ok) {
     return NextResponse.json({ error: `오늘 AI 레이더 분석 ${quota.limit ?? 5}회를 모두 사용했습니다. 다른 회원이 이미 분석한 종목은 계속 무료로 볼 수 있어요.`, quota }, { status: 429 });
   }
 
@@ -149,9 +151,9 @@ JSON 만 반환:
       const { error } = await me.sb.from("radar_reports").insert({ code, day, report, created_by: me.user.id });
       saveErr = error ? error.message : null;
     }
-    const { data: used } = await me.sb.rpc("use_ai_quota");
-    return NextResponse.json({ report, cached: false, quota: used ?? quota, saveError: saveErr });
+    return NextResponse.json({ report, cached: false, quota: { ...quota, ...reserve.quota }, saveError: saveErr });
   } catch (e) {
+    await refundQuota(me.sb);
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg, quota }, { status: e instanceof GeminiError && e.quota ? 429 : 500 });
   }

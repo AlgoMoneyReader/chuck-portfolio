@@ -143,18 +143,19 @@ ${headlines.map((h, i) => `${i + 1}. ${h}`).join("\n")}
       summary = headlines[0].slice(0, 20);
     }
 
-    const entry: CacheEntry = { summary, headlines, cachedAt: Date.now() };
-    cache.set(ticker, entry);
+    // 등락률로 만든 임시 문구(heuristic)는 캐시하지 않는다 — 등락 방향이 바뀌면 문구가 틀려지므로
+    const isHeuristic = summary === heuristic(changePct);
+    if (!isHeuristic) cache.set(ticker, { summary, headlines, cachedAt: Date.now() } as CacheEntry);
 
     return NextResponse.json(
-      { summary, headlines, cached: false },
+      { summary, headlines, cached: false, heuristic: isHeuristic },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch {
     // 예외 발생 시에도 heuristic 기반 응답 반환 (뱃지는 반드시 표시)
     const summary = heuristic(changePct);
     return NextResponse.json(
-      { summary, headlines: [], cached: false },
+      { summary, headlines: [], cached: false, heuristic: true },
       { headers: { "Cache-Control": "no-store" } }
     );
   }

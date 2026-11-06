@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { gemini, QUALITY } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
@@ -106,17 +107,17 @@ function parseJson(text: string) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const market = url.searchParams.get("market") === "KOSDAQ" ? "KOSDAQ" : "KOSPI";
-  const qPct = parseFloat(url.searchParams.get("changePct") ?? "");
+  // 보안: 클라이언트가 보낸 price·changePct 는 쓰지 않는다 (값을 바꿔 가며 캐시를 우회해 AI 를 반복 호출하거나 프롬프트에 끼워 넣는 것 방지)
+  // 지수 등락률은 서버가 직접 모은 값(idxPct)만 쓴다
   const day = kstDay();
 
   const hit = cache[market];
-  if (hit && hit.day === day && Date.now() - hit.at < TTL && (isNaN(qPct) || Math.abs(hit.pct - qPct) < 0.3)) {
+  if (hit && hit.day === day && Date.now() - hit.at < TTL) {
     return NextResponse.json(hit.data);
   }
 
-  const price = url.searchParams.get("price");
-  const { facts, news: rawNews, idxPct } = await collect(url.origin, market, price && !isNaN(qPct) ? `${price} (${qPct >= 0 ? "+" : ""}${qPct.toFixed(2)}%)` : undefined);
-  const pct = !isNaN(qPct) && qPct !== 0 ? qPct : idxPct ?? 0; // 화면 상단 값과 일치시킨다
+  const { facts, news: rawNews, idxPct } = await collect(url.origin, market);
+  const pct = idxPct ?? 0;
   const up = pct >= 0;
   const dir = up ? "상승" : "하락";
   // 지수 관련 기사 우선, 무관한 기사(종목 소개·공모주 등) 제외
@@ -160,7 +161,12 @@ JSON만 반환:
     if (!news.length) throw new Error("no news");
     let j: { summary?: string; reasons?: unknown } | null = null;
     try {
-      j = parseJson((await gemini({ prompt, models: QUALITY, json: true, temperature: 0.3, timeoutMs: 30_000, log: { feature: "AI 시황", detail: market } })).text);
+      // 서버 인스턴스끼리 공유되는 캐시: 시장·15분 구간마다 AI 는 한 번만 부른다
+      const bucket = Math.floor(Date.now() / (15 * 60_000));
+      const run = unstable_cache(
+        async () => (await gemini({ prompt, models: QUALITY, json: true, temperature: 0.3, timeoutMs: 30_000, log: { feature: "AI 시황", detail: market } })).text,
+        ["market-commentary-ai-v2", market, day, String(bucket)], { revalidate: 15 * 60 });
+      j = parseJson(await run());
     } catch (e) { aiErrors.push(String(e).slice(0, 200)); }
     if (!j) throw new Error("ai");
     const reasons: Reason[] = (Array.isArray(j.reasons) ? j.reasons : []).slice(0, 3)

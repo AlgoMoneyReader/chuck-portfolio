@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSwipeTabs } from "@/lib/useSwipeTabs";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
 import { krSession } from "@/lib/krSession";
@@ -728,6 +729,8 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const tabs: Tab[] = asia ? ["현황", "뉴스"] : isUS ? ["현황", "정보", "뉴스", "공시", "레이더"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더"];
 
   useEffect(() => { setTab("현황"); setX(null); setD(null); }, [code]);
+  // 휴대폰: 좌우로 밀어 옆 탭 (차트·가로 스크롤 표에서 시작한 밀기는 무시)
+  const swipe = useSwipeTabs(tabs, tab, setTab);
 
   // 국내: 종목 개요(이름·시장·PER 등)
   useEffect(() => {
@@ -739,10 +742,13 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   }, [code, isUS]);
 
   // 현황 시세(고저·거래량·52주·프리/애프터)
+  const curCode = useRef(code);
+  curCode.current = code;
   const loadDetail = () => {
     if (!mk) return;
-    fetch(`/api/stock-detail?code=${code}&market=${mk}`, { cache: "no-store" })
-      .then(r => (r.ok ? r.json() : null)).then(j => { if (j && !("error" in j)) setX(j); }).catch(() => {});
+    const c = code; // 다른 종목으로 넘어간 뒤 늦게 온 응답은 버린다
+    fetch(`/api/stock-detail?code=${c}&market=${mk}`, { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null)).then(j => { if (j && !("error" in j) && curCode.current === c) setX(j); }).catch(() => {});
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadDetail, [code, mk]);
@@ -773,7 +779,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const newsName = asia ? (asiaName ?? name) : isUS ? (usItem?.ko.split(" ")[0] || name.replace(/,?\s*(Inc\.?|Corp(oration)?\.?|Holdings,?|Ltd\.?|Co\.?|plc|N\.V\.|Class [A-C])\b.*$/i, "").trim() || code) : (d?.name ?? name);
 
   return (
-    <div className={modal ? "" : "max-w-3xl mx-auto animate-fade-in"}>
+    <div className={modal ? "" : "max-w-3xl mx-auto animate-fade-in"} {...swipe}>
       <div className={`sticky z-20 border-b border-navy-border px-4 pt-3 ${modal ? "top-0 bg-navy rounded-t-2xl" : "bg-navy/95 backdrop-blur"}`} style={modal ? undefined : { top: "var(--hdr, 115px)" }}>
         <div className="flex items-center gap-2">
           {!modal && <button onClick={() => router.back()} aria-label="뒤로" className="-ml-1 p-1 text-gray-300"><FiChevronLeft size={22} /></button>}
@@ -821,7 +827,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
         </div>
       </div>
 
-      <div className="px-4 py-4">
+      <div key={tab} className="px-4 py-4 animate-fade-in">
         {/* 현황·뉴스·공시는 종목 개요(PER 등)가 없어도 보여준다 — 영문 섞인 신형 우선주 코드(18064K 등)처럼 개요 조회가 안 되는 종목 대비 */}
         {!isUS && loading && tab !== "현황" ? (
           <div className="space-y-3">{[0, 1, 2].map(i => <div key={i} className="card h-40 animate-pulse" />)}</div>
