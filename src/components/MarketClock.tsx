@@ -94,7 +94,10 @@ export function MarketClockStrip() {
             {c.def.flag}
             <span className={`absolute -top-0.5 -right-1 w-1.5 h-1.5 rounded-full ring-1 ring-navy-card ${dot(c)}`} />
           </span>
-          <span className={`mt-1 text-[10px] font-semibold num whitespace-nowrap ${c.regular ? "text-signal-green" : "text-gray-400"}`}>{c.regular ? c.short.replace("마감 ", "") : c.short.replace(" 개장", "").replace(/^[일월화수목금토] /, "")}</span>
+          {/* 장중: '-4:54'(D-day처럼 남은 시간) · 점심 직전은 노랑 · 점심 휴장 중엔 '점심' · 장 밖: 다음 개장 시각 */}
+          <span className={`mt-1 text-[10px] font-semibold num whitespace-nowrap ${c.phase === "toClose" ? "text-signal-green" : c.phase === "toLunch" || c.phase === "lunch" ? "text-amber-400" : "text-gray-400"}`}>
+            {c.regular ? `-${c.leftShort}` : c.phase === "lunch" ? "점심" : c.short.replace(" 개장", "").replace(/^[일월화수목금토] /, "")}
+          </span>
         </button>
       ))}
     </div>
@@ -108,7 +111,7 @@ export function MarketClockStrip() {
             <span className="truncate">{c.def.name}</span>
             <span className={`ml-auto w-1.5 h-1.5 rounded-full shrink-0 ${dot(c)} ${c.regular ? "animate-pulse" : ""}`} />
           </p>
-          <p className={`mt-0.5 text-sm font-bold num truncate ${c.regular ? "text-white" : "text-gray-400"}`}>{c.short}</p>
+          <p className={`mt-0.5 text-[13px] font-bold num truncate ${c.phase === "toClose" ? "text-white" : c.phase === "closed" ? "text-gray-400" : "text-amber-400"}`} title={c.short}>{c.short}</p>
         </button>
       ))}
     </div>
@@ -119,10 +122,15 @@ export function MarketClockStrip() {
           <span className="text-lg leading-none">{c0.def.flag}</span>{c0.def.name} 증시
           <span className={`ml-auto flex items-center gap-1 text-xs ${tone(c0)}`}><span className={`w-1.5 h-1.5 rounded-full ${dot(c0)}`} />{c0.status}</span>
         </p>
-        <p className="mt-1.5 text-gray-200">{c0.regular ? `지금 정규장 거래 중 · ${c0.short.replace("마감", "마감까지")}` : `다음 정규장 개장: ${c0.short.replace(" 개장", "")}`}</p>
+        <p className="mt-1.5 text-gray-200">{
+          c0.phase === "toClose" ? `지금 정규장 거래 중 · 마감까지 ${c0.left} 남음`
+          : c0.phase === "toLunch" ? `지금 오전장 거래 중 · 점심 휴장까지 ${c0.left} 남음`
+          : c0.phase === "lunch" ? `지금 점심 휴장 중 · 한국시간 ${c0.resumeKst}에 오후장 재개`
+          : `다음 정규장 개장: ${c0.short.replace(" 개장", "")}`}</p>
         {c0.holiday && <p className="mt-1 text-xs text-signal-red">오늘 {c0.holiday}</p>}
         <p className="mt-1 text-xs text-gray-500">정규장(한국시간): {c0.barsKst.map(([a, b]) => `${String(Math.floor((a % 1440) / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}~${String(Math.floor((b % 1440) / 60)).padStart(2, "0")}:${String(b % 60).padStart(2, "0")}`).join(", ")}</p>
-        <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">시각은 모두 <b className="text-gray-300">한국시간</b> 기준입니다. 초록 숫자 = 마감까지 남은 시간, 회색 숫자 = 다음 개장 시각. 점: 초록 장중 · 노랑 장외거래 · 회색 휴장</p>
+        {c0.lunchKst && <p className="text-xs text-gray-500">점심 휴장(한국시간): {c0.lunchKst}</p>}
+        <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">시각은 모두 <b className="text-gray-300">한국시간</b> 기준입니다. <span className="text-signal-green">-4:54</span> = 마감까지 4시간 54분 남음, <span className="text-amber-400">노랑</span> = 점심 휴장 전후(중국·홍콩·일본), 회색 시각 = 다음 개장 시각. 점: 초록 장중 · 노랑 장외거래 · 회색 휴장</p>
       </div>
     )}
     </div>
