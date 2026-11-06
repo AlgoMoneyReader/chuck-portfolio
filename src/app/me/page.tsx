@@ -11,6 +11,7 @@ import { relTime } from "@/lib/time";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { resetTours } from "@/components/TourGuide";
 import { openInstallGuide } from "@/components/InstallGuide";
+import PushSettings from "@/components/PushSettings";
 import { useFontPref, loadFontCss } from "@/lib/fontPref";
 import { FONTS, FONT_SCALES, FONT_SCALE_LABELS } from "@/lib/themeScript";
 import { StockLink } from "@/components/StockModal";
@@ -71,6 +72,7 @@ function ThemeSetting() {
           </div>
         </div>
         <FontSetting />
+        <PushSettings />
         <button onClick={openInstallGuide}
           className="w-full flex items-center gap-4 px-4 py-4 border-t border-navy-border/60 hover:bg-white/5 text-left">
           <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand"><FiSmartphone size={18} /></span>
