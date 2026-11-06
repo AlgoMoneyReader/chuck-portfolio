@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FiPieChart, FiCpu, FiLock, FiInstagram, FiChevronRight, FiUser, FiEdit2, FiHeart, FiFileText, FiMoon, FiSun, FiType, FiMonitor, FiHelpCircle } from "react-icons/fi";
+import { FiPieChart, FiCpu, FiLock, FiInstagram, FiChevronRight, FiUser, FiEdit2, FiHeart, FiFileText, FiMoon, FiSun, FiType, FiMonitor, FiHelpCircle, FiSmartphone } from "react-icons/fi";
 import { useAuth } from "@/components/AuthProvider";
 import { LoginButtons, NicknameForm } from "@/components/LoginPanel";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { resetTours } from "@/components/TourGuide";
+import { openInstallGuide } from "@/components/InstallGuide";
 import { useFontPref, loadFontCss } from "@/lib/fontPref";
 import { FONTS, FONT_SCALES, FONT_SCALE_LABELS } from "@/lib/themeScript";
 import { StockLink } from "@/components/StockModal";
@@ -70,6 +71,15 @@ function ThemeSetting() {
           </div>
         </div>
         <FontSetting />
+        <button onClick={openInstallGuide}
+          className="w-full flex items-center gap-4 px-4 py-4 border-t border-navy-border/60 hover:bg-white/5 text-left">
+          <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand"><FiSmartphone size={18} /></span>
+          <span className="flex-1">
+            <span className="block text-sm font-semibold text-white">앱처럼 설치하기</span>
+            <span className="block text-xs text-gray-500 mt-0.5">홈 화면에 아이콘 추가 · 아이폰·안드로이드</span>
+          </span>
+          <FiChevronRight className="text-gray-600" />
+        </button>
         <button onClick={() => { resetTours(); window.location.href = "/"; }}
           className="w-full flex items-center gap-4 px-4 py-4 border-t border-navy-border/60 hover:bg-white/5 text-left">
           <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-cyan-brand"><FiHelpCircle size={18} /></span>
