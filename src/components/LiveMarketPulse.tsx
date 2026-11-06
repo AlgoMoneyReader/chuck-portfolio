@@ -267,7 +267,7 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
         {showKR && (
           <>
             {/* 국내: 코스피·코스닥 + 코스피200 선물(주간·야간) + 환율 */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" data-tour="index">
               <IndexCard label="KOSPI" line={lines["KOSPI"]}  data={data?.kospi  ?? null} onSelect={setChart} />
               <IndexCard label="KOSDAQ" line={lines["KOSDAQ"]} data={data?.kosdaq ?? null} onSelect={setChart} />
               <IndexCard label="주간선물" line={fut.dayLine} data={fut.day} onSelect={() => setChartState({ label: "코스피200 선물", tab: "day" })} sub="코스피200 · 08:45~15:45" />
@@ -282,7 +282,7 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
             {/* 미국: 지수 6 + 3대 선물 + 금·원유·비트코인 */}
             <div>
               {!region && <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">미국 지수</p>}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" data-tour="index">
                 <IndexCard label="S&P 500" line={lines["S&P 500"]}    data={data?.sp500   ?? null} onSelect={setChart} />
                 <IndexCard label="NASDAQ" line={lines["NASDAQ"]}     data={data?.nasdaq  ?? null} onSelect={setChart} />
                 <IndexCard label="다우존스" line={lines["다우존스"]}   data={data?.dow     ?? null} onSelect={setChart} sub="Dow Jones" />
@@ -293,7 +293,7 @@ export default function LiveMarketPulse({ region }: { region?: "KR" | "US" | "AS
             </div>
             <div>
               <p className="text-[10px] text-gray-600 uppercase tracking-widest mb-1.5">3대 지수 선물</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" data-tour="index">
                 <IndexCard label="S&P500 선물" line={lines["S&P500 선물"]} data={data?.esFut ?? null} onSelect={setChart} sub="ES Futures" />
                 <IndexCard label="나스닥 선물" line={lines["나스닥 선물"]} data={data?.nqFut ?? null} onSelect={setChart} sub="NQ Futures" />
                 <IndexCard label="다우 선물" line={lines["다우 선물"]}   data={data?.yjFut ?? null} onSelect={setChart} sub="YM Futures" />

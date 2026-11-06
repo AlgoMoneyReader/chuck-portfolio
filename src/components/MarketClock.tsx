@@ -84,7 +84,7 @@ export function MarketClockStrip() {
   if (!clocks.length) return <div className="h-[52px]" />;
   const c0 = clocks.find(c => c.def.key === sel);
   return (
-    <div ref={box} className="relative">
+    <div ref={box} className="relative" data-tour="clock">
     {/* 휴대폰: 8칸 한 줄, 한국시간 기준 — 장중(초록)은 마감까지 남은 시간, 장 밖은 다음 개장 시각 */}
     <div className="md:hidden grid grid-cols-8 gap-1 rounded-xl border border-navy-border bg-navy-card px-1.5 py-2">
       {clocks.map(c => (

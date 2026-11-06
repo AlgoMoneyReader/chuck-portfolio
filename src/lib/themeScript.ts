@@ -1,10 +1,12 @@
 // 서버 컴포넌트(layout)에서 쓰는 값이라 "use client" 모듈(theme.tsx)과 분리해 둔다
 export type Theme = "dark" | "light";
+export type ThemePref = Theme | "system";
 export const THEME_KEY = "theme";
 export const THEME_COLOR: Record<Theme, string> = { dark: "#04091A", light: "#F4F6FB" };
 
 // layout <head> 에 그대로 넣는 스크립트 — 첫 페인트 전에 data-theme 를 박아 깜빡임을 막는다
-export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("${THEME_KEY}");if(t==="light"||t==="dark"){document.documentElement.dataset.theme=t;}}catch(e){}})();`;
+// 직접 고른 적이 없으면(또는 '시스템') 폰·PC의 라이트/다크 설정을 따른다
+export const THEME_INIT_SCRIPT = `(function(){try{var t=null;try{t=localStorage.getItem("${THEME_KEY}");}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.dataset.theme=t;var c=t==="light"?"${"#F4F6FB"}":"${"#04091A"}";var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",c);}catch(e){}})();`;
 
 // ── 글꼴·글자 크기 (My > 설정) ─────────────────────────────────────────────
 export const FONT_KEY = "font";

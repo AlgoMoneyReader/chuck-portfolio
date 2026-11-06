@@ -38,7 +38,7 @@ function Account() {
   if (loading) return <span className="w-16 h-7 rounded-lg bg-white/5 animate-pulse" />;
   if (!user) {
     return (
-      <button onClick={() => signIn("kakao", path)}
+      <button data-tour="login" onClick={() => signIn("kakao", path)}
         className="ml-1 h-8 px-3 rounded-lg bg-gold text-navy text-xs font-bold hover:bg-gold-light">로그인</button>
     );
   }

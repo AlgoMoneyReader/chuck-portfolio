@@ -15,7 +15,7 @@ export default function RequireLogin({ children, title = "로그인이 필요한
       <div className="card flex flex-col items-center text-center gap-3 py-10">
         <span className="w-12 h-12 rounded-2xl bg-navy-sub flex items-center justify-center text-gold"><FiLock size={22} /></span>
         <p className="text-base font-bold text-white">{title}</p>
-        <p className="text-xs text-gray-400">카카오로 3초 만에 시작하세요 (닉네임만 사용합니다)</p>
+        <p className="text-xs text-gray-400">카카오로 3초 만에 시작하세요</p>
         <LoginButtons next={path} />
       </div>
     );

@@ -30,7 +30,7 @@ export default function HomeTabs() {
   return (
     <div className="space-y-5">
       <MarketClockStrip />
-      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} />
+      <div data-tour="region"><RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} /></div>
       {m === "kr" && <Pills value={v} onChange={setV} items={[["market", "증시"], ["flow", "수급"]]} />}
 
       {view === "market" ? (

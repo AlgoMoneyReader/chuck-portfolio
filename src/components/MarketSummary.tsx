@@ -1451,7 +1451,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
               <MarketTab key={m} label={m} active={market === m} onClick={() => setMarket(m)} />
             ))}
           </div>}
-          {!krSectorOnly && <div className="flex gap-1.5 flex-wrap">
+          {!krSectorOnly && <div className="flex gap-1.5 flex-wrap" data-tour="flow-tabs">
             {(krMarket ? KR_MARKET_TABS : KR_TABS).map(t => (
               <MainTabBtn key={t.id} label={t.label} active={mainTab === t.id} onClick={() => setMainTab(t.id)} />
             ))}
@@ -1478,7 +1478,7 @@ export default function MarketSummary({ region: fixedRegion, krMarket, krSectorO
               <MarketTab key={t.id} label={t.label} active={usIndex === t.id} onClick={() => setUsIndex(t.id)} />
             ))}
           </div>}
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap" data-tour="flow-tabs">
             {US_CONTENT_TABS.map(t => (
               <MainTabBtn key={t.id} label={t.label} active={usContent === t.id} onClick={() => setUsContent(t.id)} />
             ))}

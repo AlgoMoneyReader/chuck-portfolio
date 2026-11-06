@@ -109,7 +109,7 @@ function CommunityTabs() {
   const [t, setT] = useQueryTab("t", ["insight", "board"] as const, "insight");
   return (
     <main className="max-w-3xl mx-auto px-4 py-5 space-y-4 animate-fade-in">
-      <Pills value={t} onChange={setT} items={[["insight", "알읽남 인사이트"], ["board", "커뮤니티"]]} />
+      <div data-tour="insight-tabs"><Pills value={t} onChange={setT} items={[["insight", "알읽남 인사이트"], ["board", "커뮤니티"]]} /></div>
       {t === "insight" ? <InsightFeed /> : <CommunityBoard />}
     </main>
   );

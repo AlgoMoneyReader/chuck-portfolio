@@ -64,7 +64,7 @@ export default function InsightFeed() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5" data-tour="insight-filter">
         {([["all", "전체"], ["reel", "릴스"], ["blog", "블로그"]] as const).map(([k, l]) => <button key={k} onClick={() => setFilter(k)} className={chip(filter === k)}>{l}</button>)}
       </div>
 

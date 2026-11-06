@@ -17,7 +17,7 @@ export default function FlowTabs() {
 
   return (
     <div className="space-y-5">
-      <RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} />
+      <div data-tour="flow-region"><RegionTabs value={m} onChange={setM} items={[["kr", "🇰🇷 국내"], ["us", "🇺🇸 미국"], ["asia", "🌏 아시아"]]} /></div>
       <StockSearchPanel />
       {m === "kr" ? (
         <>
