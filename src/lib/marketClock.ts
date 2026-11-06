@@ -58,6 +58,11 @@ export interface ClockState {
   short: string;
   holiday: string;            // 오늘이 휴장일·조기폐장일이면 그 이름              // 한 줄용(한국시간 기준): 장중이면 '마감 38분', 아니면 '23:30 개장' / '월 09:00 개장'
   barsKst: [number, number][]; // 오늘 정규장 구간(한국시간 분, 0~1440 넘으면 다음 날로 이어짐)
+  phase: "toClose" | "toLunch" | "lunch" | "closed"; // 장중(마감까지) · 오전장(점심까지) · 점심 휴장 · 장 밖
+  left: string;               // 남은 시간을 말로: '4시간 54분' / '54분'
+  leftShort: string;          // 칸이 좁을 때: '4:54' / '54분'
+  resumeKst: string;          // 점심 휴장 중이면 오후장 재개 시각(한국시간)
+  lunchKst: string;           // 점심 휴장 구간(한국시간), 없으면 ''
 }
 
 // 시간대의 UTC 대비 분 차이 (서머타임 반영)
@@ -100,7 +105,11 @@ export function clockOf(def: MarketDef, now = new Date()): ClockState {
   }
   const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m}분`);
   let short = "";
-  if (nowKind === "regular") short = `마감 ${hm(step)}`;
+  const phase: ClockState["phase"] = nowKind === "regular" ? (nextKind === "lunch" ? "toLunch" : "toClose") : nowKind === "lunch" ? "lunch" : "closed";
+  const left = step >= 60 ? `${Math.floor(step / 60)}시간${step % 60 ? ` ${step % 60}분` : ""}` : `${step}분`;
+  const resumeKst = phase === "lunch" && toOpen ? kstHHMM(new Date(Math.floor(now.getTime() / 60000) * 60000 + toOpen * 60000)) : "";
+  if (nowKind === "regular") short = phase === "toLunch" ? `${left} 후 점심` : `${left} 후 마감`;
+  else if (phase === "lunch") short = `점심 · ${resumeKst} 재개`;
   else if (toOpen) {
     const at = new Date(Math.floor(now.getTime() / 60000) * 60000 + toOpen * 60000);
     const sameDay = kstDay(at) === kstDay(now) || toOpen < 12 * 60;
@@ -116,7 +125,8 @@ export function clockOf(def: MarketDef, now = new Date()): ClockState {
     holiday: todayHol ? `${todayHol.name}${todayHol.early ? ` · ${todayHol.early}` : " 휴장"}` : "",
     open: !!cur && cur.kind !== "lunch", regular: cur?.kind === "regular",
     next: step ? `${nextLabel} ${fmtDur(step)}` : "",
-    short, barsKst,
+    short, barsKst, phase, left, leftShort: hm(step), resumeKst,
+    lunchKst: (() => { const l = def.sessions.find(x => x.kind === "lunch"); if (!l) return ""; const f = (m: number) => { const v = ((m % 1440) + 1440) % 1440; return `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`; }; return `${f(toMin(l.from) + shift)}~${f(toMin(l.to) + shift)}`; })(),
   };
 }
 

@@ -204,10 +204,9 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
   return (
     <>
       <div className="fixed inset-0 bg-black/70 z-40 animate-fade-in" onClick={onClose} />
-      <div className="fixed z-50 bottom-0 left-0 right-0 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4">
+      <div className="fixed z-50 bottom-0 left-0 right-0 sm:inset-0 sm:flex sm:items-center sm:justify-center sm:p-4" onClick={onClose}>
         <div
-          className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up sm:animate-fade-in flex flex-col"
-          style={{ height: "min(92vh, 720px)" }}
+          className="w-full sm:max-w-3xl bg-navy-card border border-navy-border rounded-t-3xl sm:rounded-2xl shadow-2xl animate-slide-up sm:animate-fade-in flex flex-col h-[min(80vh,660px)] sm:h-[min(92vh,720px)]"
           onClick={e => e.stopPropagation()}
         >
           {/* 헤더 */}
