@@ -25,7 +25,8 @@ const SYMBOL_MAP: Record<string, string> = {
 const KIS_INDEX: Record<string, string> = { KOSPI: "0001", KOSDAQ: "1001" };
 
 // KIS 업종 현재가 — 공식 전일 대비 값 (alliknam collect/kis.py index_price 와 동일 호출)
-async function kisIndexQuote(code: string): Promise<{ price: number; prev: number } | null> {
+type KisIdx = { price: number; prev: number; open: number | null; high: number | null; low: number | null; amountEok: number | null };
+async function kisIndexQuote(code: string): Promise<KisIdx | null> {
   try {
     const token = await getKisToken();
     const res = await fetch(
@@ -49,7 +50,9 @@ async function kisIndexQuote(code: string): Promise<{ price: number; prev: numbe
     const diff = parseFloat(String(j.output?.bstp_nmix_prdy_vrss ?? "").replace(/,/g, ""));
     // 장 시작 전 새벽엔 전일 대비가 0으로 초기화돼 들어온다 → 이 값은 쓰지 않고 일봉으로 계산
     if (!price || isNaN(diff) || diff === 0) return null;
-    return { price, prev: parseFloat((price - diff).toFixed(2)) };
+    const num = (k: string) => { const v = parseFloat(String(j.output?.[k] ?? "").replace(/,/g, "")); return isFinite(v) && v > 0 ? v : null; };
+    const pbmn = num("acml_tr_pbmn"); // 누적 거래대금(백만원)
+    return { price, prev: parseFloat((price - diff).toFixed(2)), open: num("bstp_nmix_oprc"), high: num("bstp_nmix_hgpr"), low: num("bstp_nmix_lwpr"), amountEok: pbmn != null ? Math.round(pbmn / 100) : null };
   } catch { return null; }
 }
 
@@ -123,6 +126,7 @@ export async function GET(request: Request) {
       const closes: (number | null)[] = quote.close ?? [];
       const highs:  (number | null)[] = quote.high  ?? [];
       const lows:   (number | null)[] = quote.low   ?? [];
+      const opens:  (number | null)[] = quote.open  ?? [];
 
       const intraday = ["1d", "5d"].includes(range);
 
@@ -143,12 +147,28 @@ export async function GET(request: Request) {
         .filter(d => d.close !== null);
 
       const meta = result.meta;
+      // 오늘 시가·고가·저가·거래량 + 52주 범위 (국내 지수는 KIS 공식값 우선)
+      const nz = (v: unknown) => (typeof v === "number" && isFinite(v) && v > 0 ? parseFloat(v.toFixed(2)) : null);
+      const lastDay = (t: number) => new Date((t + 9 * 3600) * 1000).toISOString().slice(0, 10);
+      const today = timestamps.length ? lastDay(timestamps[timestamps.length - 1]) : null;
+      const todayIdx = timestamps.map((t, i) => (lastDay(t) === today ? i : -1)).filter(i => i >= 0);
+      const firstOpen = intraday ? todayIdx.map(i => opens[i]).find(v => v != null) ?? null : null;
+      const stats = {
+        open:  kisQuote?.open ?? nz(firstOpen),
+        high:  kisQuote?.high ?? nz(meta.regularMarketDayHigh),
+        low:   kisQuote?.low  ?? nz(meta.regularMarketDayLow),
+        volume: nz(meta.regularMarketVolume),
+        amountEok: kisQuote?.amountEok ?? null,
+        high52: nz(meta.fiftyTwoWeekHigh),
+        low52:  nz(meta.fiftyTwoWeekLow),
+      };
       return NextResponse.json({
         label, symbol: ySym, data, intraday,
         currentPrice:  kisQuote?.price ?? meta.regularMarketPrice ?? null,
         previousClose: kisQuote?.prev ?? prevDayClose ?? (range === "1d" ? meta.chartPreviousClose : null) ?? meta.previousClose ?? meta.chartPreviousClose ?? null,
         currency:      meta.currency ?? "",
         marketState:   meta.marketState ?? "CLOSED",
+        stats,
       }, {
         headers: { "Cache-Control": "no-store, no-cache" },
       });

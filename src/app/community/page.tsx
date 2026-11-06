@@ -5,6 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import { FiEdit3, FiMessageSquare, FiHeart } from "react-icons/fi";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
+import { Suspense } from "react";
+import InsightFeed from "@/components/InsightFeed";
+import { Pills, useQueryTab } from "@/components/Segmented";
 
 const CATEGORIES = ["자유", "국내주식", "해외주식", "질문"] as const;
 const PAGE = 20;
@@ -14,7 +17,7 @@ interface Row {
   comment_count: number; like_count: number; profiles: { nickname: string } | null;
 }
 
-export default function CommunityPage() {
+function CommunityBoard() {
   const [cat, setCat] = useState<string>("전체");
   const [sort, setSort] = useState<"new" | "hot">("new");
   const [rows, setRows] = useState<Row[]>([]);
@@ -41,7 +44,7 @@ export default function CommunityPage() {
   useEffect(() => { setLoading(true); setErr(""); load(0); }, [load]);
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-5 space-y-4 animate-fade-in">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">커뮤니티</h1>
         <div className="flex gap-1 text-xs">
@@ -97,6 +100,21 @@ export default function CommunityPage() {
         className="fixed right-5 bottom-24 z-30 w-14 h-14 rounded-full bg-cyan-brand text-white shadow-lg flex items-center justify-center">
         <FiEdit3 size={22} />
       </Link>
+    </div>
+  );
+}
+
+// 커뮤니티: 첫 탭 '알읽남 인사이트'(릴스·블로그) / 둘째 탭 '커뮤니티'(게시판)
+function CommunityTabs() {
+  const [t, setT] = useQueryTab("t", ["insight", "board"] as const, "insight");
+  return (
+    <main className="max-w-3xl mx-auto px-4 py-5 space-y-4 animate-fade-in">
+      <Pills value={t} onChange={setT} items={[["insight", "알읽남 인사이트"], ["board", "커뮤니티"]]} />
+      {t === "insight" ? <InsightFeed /> : <CommunityBoard />}
     </main>
   );
+}
+
+export default function CommunityPage() {
+  return <Suspense fallback={null}><CommunityTabs /></Suspense>;
 }

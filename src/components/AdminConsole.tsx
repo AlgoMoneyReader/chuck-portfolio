@@ -75,11 +75,26 @@ export default function AdminConsole() {
   }).sort((a, b) => (b.last ?? b.created_at).localeCompare(a.last ?? a.created_at)), [profiles, ai, acts, quota]);
 
   const byFeature = useMemo(() => {
-    const m = new Map<string, { calls: number; tokens: number; cost: number; models: Set<string> }>();
+    // 기능별 합계 + 그 안에서 모델별(Opus·Gemini 등) 나눠 보기
+    type Agg = { calls: number; tokens: number; cost: number };
+    const add = (k: Agg, x: (typeof ai)[number]) => { k.calls++; k.tokens += x.input_tokens + x.output_tokens; k.cost += Number(x.cost_usd); };
+    const m = new Map<string, Agg & { models: Map<string, Agg> }>();
     for (const x of ai) {
-      const k = m.get(x.feature) ?? { calls: 0, tokens: 0, cost: 0, models: new Set<string>() };
-      k.calls++; k.tokens += x.input_tokens + x.output_tokens; k.cost += Number(x.cost_usd); k.models.add(x.model);
+      const k = m.get(x.feature) ?? { calls: 0, tokens: 0, cost: 0, models: new Map<string, Agg>() };
+      add(k, x);
+      const mm = k.models.get(x.model) ?? { calls: 0, tokens: 0, cost: 0 };
+      add(mm, x); k.models.set(x.model, mm);
       m.set(x.feature, k);
+    }
+    const sortAgg = <T extends Agg>(a: [string, T], b: [string, T]) => b[1].cost - a[1].cost || b[1].calls - a[1].calls;
+    return Array.from(m.entries()).sort(sortAgg).map(([f, v]) => [f, { ...v, models: Array.from(v.models.entries()).sort(sortAgg) }] as const);
+  }, [ai]);
+  const byModel = useMemo(() => {
+    const m = new Map<string, { calls: number; tokens: number; cost: number }>();
+    for (const x of ai) {
+      const k = m.get(x.model) ?? { calls: 0, tokens: 0, cost: 0 };
+      k.calls++; k.tokens += x.input_tokens + x.output_tokens; k.cost += Number(x.cost_usd);
+      m.set(x.model, k);
     }
     return Array.from(m.entries()).sort((a, b) => b[1].cost - a[1].cost || b[1].calls - a[1].calls);
   }, [ai]);
@@ -166,11 +181,21 @@ export default function AdminConsole() {
 
       {tab === "ai" && (
         <table className="w-full text-sm">
-          <thead><tr className="text-gray-500 text-xs"><th className="text-left font-normal py-1.5">기능</th><th className="text-right font-normal">호출</th><th className="text-right font-normal">토큰</th><th className="text-right font-normal">비용</th><th className="text-left font-normal pl-3">모델</th></tr></thead>
-          <tbody className="divide-y divide-navy-border/60 num">
-            {byFeature.map(([f, v]) => (
-              <tr key={f}><td className="py-2.5 text-white">{f}</td><td className="text-right text-gray-300">{v.calls}</td><td className="text-right text-gray-300">{tok(v.tokens)}</td>
-                <td className="text-right text-gold">${v.cost.toFixed(3)}</td><td className="pl-3 text-gray-500 text-xs">{Array.from(v.models).join(", ")}</td></tr>
+          <thead><tr className="text-gray-500 text-xs"><th className="text-left font-normal py-1.5">기능 · 모델</th><th className="text-right font-normal">호출</th><th className="text-right font-normal">토큰</th><th className="text-right font-normal">비용</th></tr></thead>
+          {byFeature.map(([f, v]) => (
+            <tbody key={f} className="num border-t border-navy-border/60">
+              <tr><td className="pt-2.5 pb-1 text-white font-semibold">{f}</td><td className="text-right text-gray-200 pt-2.5 pb-1">{v.calls}</td><td className="text-right text-gray-200 pt-2.5 pb-1">{tok(v.tokens)}</td>
+                <td className="text-right text-gold font-semibold pt-2.5 pb-1">${v.cost.toFixed(3)}</td></tr>
+              {v.models.map(([md, a], i) => (
+                <tr key={md} className="text-xs"><td className={`pl-4 text-gray-400 ${i === v.models.length - 1 ? "pb-2.5" : "pb-1"}`}><span className="text-gray-600 mr-1">└</span>{md}</td>
+                  <td className="text-right text-gray-500">{a.calls}</td><td className="text-right text-gray-500">{tok(a.tokens)}</td><td className="text-right text-gold/70">${a.cost.toFixed(3)}</td></tr>
+              ))}
+            </tbody>
+          ))}
+          <tbody className="num border-t-2 border-navy-border">
+            <tr><td colSpan={4} className="pt-3 pb-1 text-xs text-gray-500">모델별 합계</td></tr>
+            {byModel.map(([md, a]) => (
+              <tr key={md}><td className="py-1 text-gray-300">{md}</td><td className="text-right text-gray-300">{a.calls}</td><td className="text-right text-gray-300">{tok(a.tokens)}</td><td className="text-right text-gold">${a.cost.toFixed(3)}</td></tr>
             ))}
           </tbody>
         </table>
