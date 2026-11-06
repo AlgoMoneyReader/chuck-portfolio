@@ -86,9 +86,9 @@ export async function GET(req: Request) {
     }
   }
 
-  // ── 3) 블로그 새 글: 15분마다 확인. 처음엔 기준만 저장하고 보내지 않는다 ──
+  // ── 3) 블로그 새 글: 5분마다 확인(블로그 목록 캐시도 5분). 처음엔 기준만 저장하고 보내지 않는다 ──
   const blogAt = Number((await getState("blog_checked")) ?? 0);
-  if (Date.now() - blogAt > 15 * 60_000) {
+  if (Date.now() - blogAt > 4 * 60_000) {
     await setState("blog_checked", String(Date.now()));
     try {
       const j = await (await fetch(`${new URL(req.url).origin}/api/blog-feed`, { cache: "no-store", signal: AbortSignal.timeout(8000) })).json() as { items?: { title: string; url: string }[] };

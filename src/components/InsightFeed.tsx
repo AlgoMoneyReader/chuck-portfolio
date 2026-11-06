@@ -55,6 +55,14 @@ export default function InsightFeed() {
       setUrl(""); setCaption(""); load();
     }
   };
+  // 운영자: 방금 쓴 블로그 글을 기다리지 않고 바로 가져오기
+  const refreshBlog = async () => {
+    setMsg("블로그 불러오는 중…");
+    const r = await authFetch("/api/blog-feed", { method: "POST" }).then(x => x.json()).catch(() => null);
+    if (r?.items) { setBlogs(r.items); setMsg(`블로그 글 ${r.items.length}개 불러왔어요${r.error ? ` (오류: ${r.error})` : ""}`); }
+    else setMsg("불러오지 못했어요");
+  };
+
   const remove = async (id: number) => {
     if (!confirm("이 릴스를 내릴까요?")) return;
     const sb = getBrowserSupabase();
@@ -85,7 +93,10 @@ export default function InsightFeed() {
             <button onClick={add} className="px-4 py-1.5 rounded-lg bg-cyan-brand text-white text-sm font-bold">올리기</button>
             {msg && <span className="text-xs text-gold">{msg}</span>}
           </div>
-          <p className="text-[11px] text-gray-600">블로그 새 글은 자동으로 올라옵니다 (30분마다 확인)</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] text-gray-600">블로그 새 글은 자동으로 올라옵니다 (5분마다 확인)</p>
+            <button onClick={refreshBlog} className="ml-auto text-[11px] text-cyan-brand font-semibold">블로그 지금 불러오기</button>
+          </div>
         </div>
       )}
 
