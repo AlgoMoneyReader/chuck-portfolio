@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PricePoller from "@/components/PricePoller";
 import BottomTabBar from "@/components/BottomTabBar";
+import TourGuide from "@/components/TourGuide";
 import MarketTicker from "@/components/MarketTicker";
 import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -50,6 +51,7 @@ export default function RootLayout({
             </StickyHeader>
             {children}
             <BottomTabBar />
+            <TourGuide />
            </StockModalProvider>
           </ThemeProvider>
         </AuthProvider>

@@ -18,6 +18,7 @@ export default function BottomTabBar() {
   const pathname = usePathname() ?? "/";
   return (
     <nav
+      data-tour="bottomnav"
       className="fixed bottom-0 inset-x-0 z-30 bg-navy-sub/95 backdrop-blur-md border-t border-navy-border"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
