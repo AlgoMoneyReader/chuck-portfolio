@@ -12,6 +12,7 @@ import { useTheme, type Theme } from "@/lib/theme";
 import { useFontPref, loadFontCss } from "@/lib/fontPref";
 import { FONTS, FONT_SCALES, FONT_SCALE_LABELS } from "@/lib/themeScript";
 import { StockLink } from "@/components/StockModal";
+import { SiNaver } from "react-icons/si";
 
 const MENU = [
   { href: "/portfolio", Icon: FiPieChart, title: "My 포트폴리오", desc: "보유 종목 손익 · 관심 종목", admin: false },
@@ -266,6 +267,17 @@ function MeContent() {
               <span className="flex-1">
                 <span className="block text-sm font-semibold text-white">알읽남 인스타그램</span>
                 <span className="block text-xs text-gray-500 mt-0.5">@alliknam</span>
+              </span>
+              <FiChevronRight className="text-gray-600" />
+            </a>
+          </li>
+          <li>
+            <a href="https://blog.naver.com/alliknam" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-4 px-4 py-4 hover:bg-white/5">
+              <span className="w-10 h-10 rounded-xl bg-navy-sub flex items-center justify-center text-[#03C75A]"><SiNaver size={15} /></span>
+              <span className="flex-1">
+                <span className="block text-sm font-semibold text-white">알읽남 블로그</span>
+                <span className="block text-xs text-gray-500 mt-0.5">blog.naver.com/alliknam</span>
               </span>
               <FiChevronRight className="text-gray-600" />
             </a>
