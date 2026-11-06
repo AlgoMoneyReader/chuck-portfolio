@@ -14,6 +14,7 @@ interface ChartData {
   currency: string;
   marketState: string;
   intraday?: boolean;
+  stats?: { open: number | null; high: number | null; low: number | null; volume: number | null; amountEok: number | null; high52: number | null; low52: number | null };
 }
 interface FlowItem { type: string; label: string; netBuy: number; }
 interface Commentary { title: string; subtitle: string; summary?: string; reasons?: { title: string; body: string; sources: { title: string; url: string; source: string }[] }[]; bullets: string[]; updatedAt: string; }
@@ -275,6 +276,7 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
           {/* 차트 탭 */}
           {activeTab === "chart" && (
             <>
+              {chartData?.stats && <IndexStats s={chartData.stats} price={chartData.currentPrice} fmt={fmt} />}
               <div className="flex gap-1 px-5 pt-3 pb-1 shrink-0 overflow-x-auto scrollbar-none">
                 {TIMEFRAMES.map(([k, l]) => (
                   <button key={k} onClick={() => setTf(k)}
@@ -487,5 +489,37 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
         </div>
       </div>
     </>
+  );
+}
+
+// 지수 시세 요약: 시가·고가·저가·거래량(거래대금) + 52주 범위 막대
+function IndexStats({ s, price, fmt }: { s: NonNullable<ChartData["stats"]>; price: number | null; fmt: (p: number | null) => string }) {
+  const vol = (v: number) => v >= 1e8 ? `${(v / 1e8).toFixed(2)}억주` : v >= 1e4 ? `${Math.round(v / 1e4).toLocaleString("ko-KR")}만주` : v.toLocaleString("ko-KR");
+  const amt = (e: number) => e >= 10000 ? `${(e / 10000).toFixed(1)}조원` : `${e.toLocaleString("ko-KR")}억원`;
+  const cells: [string, string][] = [
+    ["시가", fmt(s.open)], ["고가", fmt(s.high)], ["저가", fmt(s.low)],
+    s.amountEok != null ? ["거래대금", amt(s.amountEok)] : ["거래량", s.volume != null ? vol(s.volume) : "-"],
+  ];
+  const lo = s.low52, hi = s.high52;
+  const pos = lo != null && hi != null && price != null && hi > lo ? Math.min(100, Math.max(0, (price - lo) / (hi - lo) * 100)) : null;
+  return (
+    <div className="px-5 pt-3 shrink-0 space-y-2.5">
+      <div className="grid grid-cols-4 gap-1.5">
+        {cells.map(([k, v]) => (
+          <div key={k} className="rounded-lg bg-navy-sub px-2 py-1.5 min-w-0">
+            <p className="text-[10px] text-gray-500">{k}</p>
+            <p key={v} className="text-[12px] sm:text-sm font-semibold text-white num truncate rounded animate-tick">{v}</p>
+          </div>
+        ))}
+      </div>
+      {pos != null && (
+        <div>
+          <div className="flex justify-between text-[10px] text-gray-500 num mb-1"><span>52주 저 {fmt(lo)}</span><span>52주 고 {fmt(hi)}</span></div>
+          <div className="relative h-1.5 rounded-full" style={{ background: "linear-gradient(90deg,#ef4444,#d4a017,#22c55e)" }}>
+            <span className="absolute top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white border-2 border-navy" style={{ left: `${pos}%` }} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
