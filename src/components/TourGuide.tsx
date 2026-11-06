@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 // 저장(이 기기): tour:v1:<id> = 끝/건너뜀, tour:off = '다시 보지 않기'(모든 안내 끔)
 
 interface Step { target: string; title: string; body: string }
-interface Tour { id: string; match: (p: string) => boolean; welcome?: boolean; steps: Step[] }
+interface Tour { id: string; match: (p: string) => boolean; welcome?: boolean; steps: Step[]; after?: string }
 
 const TOURS: Tour[] = [
   {
@@ -19,8 +19,18 @@ const TOURS: Tour[] = [
       { target: "index", title: "주요 지수", body: "지수 카드를 누르면 분봉·일봉 차트, 시가·고가·저가, 투자자별 수급과 AI 시황까지 볼 수 있어요." },
       { target: "search", title: "종목 검색", body: "국내·미국·아시아 종목을 이름이나 코드로 찾아보세요. 종목을 누르면 현황·수급·뉴스·공시를 한 번에 보여줘요." },
       { target: "radar", title: "AI 레이더 분석", body: "궁금한 종목을 AI가 실적·수급·뉴스로 분석해 리포트로 정리해 줘요." },
+      { target: "tab-me", title: "알림 · 앱처럼 쓰기", body: "My에서 알림을 켜면 지수가 ±2% 넘게 움직이거나 관심 종목이 ±5% 급등락할 때, 알읽남 새 인사이트가 올라올 때 휴대폰으로 알려드려요. 홈 화면에 추가하면 앱처럼 쓸 수 있어요." },
       { target: "bottomnav", title: "하단 메뉴", body: "매매동향(상승·하락·거래대금 순위), 뉴스, 경제 캘린더, 알읽남 인사이트(릴스·블로그)로 바로 이동해요." },
+      { target: "index", title: "팝업에서 좌우로 밀기", body: "종목·지수 창을 열면 차트가 아닌 곳을 좌우로 밀어 현황·수급·뉴스 등 옆 탭으로 넘길 수 있어요." },
       { target: "login", title: "카카오로 시작하기", body: "로그인하면 포트폴리오 관리와 AI 레이더를 쓸 수 있어요. 카카오에서 받는 건 닉네임 하나뿐이라 개인정보 걱정은 안 하셔도 돼요 (이메일·전화번호·친구 목록 모두 안 받아요)." },
+    ],
+  },
+  // 예전 안내를 이미 본 사람에게만: 새로 생긴 기능 소개 (홈 안내를 처음 보는 사람은 위 단계에 이미 들어 있음)
+  {
+    id: "new-2026-11", match: p => p === "/", after: "home",
+    steps: [
+      { target: "tab-me", title: "🆕 휴대폰 알림이 생겼어요", body: "My → 알림 켜기: 지수 ±2%·관심 종목 ±5% 급등락, 알읽남 새 릴스·블로그를 알림으로 받아보세요. (아이폰은 홈 화면에 추가 후)" },
+      { target: "index", title: "🆕 좌우로 밀어 탭 이동", body: "종목·지수 창에서 차트가 아닌 곳을 좌우로 밀면 옆 탭으로 넘어가요." },
     ],
   },
   {
@@ -73,8 +83,9 @@ export default function TourGuide() {
   // 페이지가 그려지고 잠시 뒤 시작 (데이터가 들어와 자리가 잡힌 다음)
   useEffect(() => {
     setPhase(null); setTour(null);
-    const t = TOURS.find(x => x.match(path));
-    if (!t || get(OFF) || get(KEY(t.id))) return;
+    // 이 화면에 맞는 안내 중 아직 안 본 첫 번째 (새 기능 안내는 기본 안내를 본 사람에게만)
+    const t = TOURS.find(x => x.match(path) && !get(KEY(x.id)) && (!x.after || get(KEY(x.after))));
+    if (!t || get(OFF)) return;
     if (t.welcome && sget("tour:later")) return;
     const timer = setTimeout(() => {
       if (document.querySelector('[role="dialog"], .fixed.inset-0.bg-black\\/70')) return; // 다른 팝업이 떠 있으면 다음에
@@ -104,6 +115,8 @@ export default function TourGuide() {
 
   const finish = useCallback(() => {
     if (tour) set(KEY(tour.id), "done");
+    // 기본 홈 안내를 끝까지 본(건너뛴) 사람은 새 기능 안내도 이미 본 것으로
+    if (tour?.id === "home") TOURS.filter(t => t.after === "home").forEach(t => set(KEY(t.id), "done"));
     if (never) set(OFF, "1");
     setPhase(null);
   }, [tour, never]);

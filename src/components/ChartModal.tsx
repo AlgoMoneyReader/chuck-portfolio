@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import TabSwipeHint from "./TabSwipeHint";
 import { useSwipeTabs } from "@/lib/useSwipeTabs";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "./CandleChart";
@@ -280,6 +281,8 @@ export default function ChartModal({ label, onClose, initialTab }: Props) {
               ))}
             </div>
           )}
+
+          {(isIndex || isFut) && <TabSwipeHint />}
 
           {/* 차트 탭 */}
           {activeTab === "chart" && (
