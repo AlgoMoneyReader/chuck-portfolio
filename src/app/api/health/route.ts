@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getKisToken } from "@/lib/fetchKisMaster";
+import { requestUser } from "@/lib/supabase/requestUser";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -14,7 +15,11 @@ async function check(fn: () => Promise<string>): Promise<string> {
   try { return await fn(); } catch (e) { return `실패: ${String(e).slice(0, 120)}`; }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  // 운영자만: 외부 API 호출(DART 대용량 파일 등)이 많아 아무나 부르면 한도·시간을 낭비한다
+  const me = await requestUser(req);
+  const { data: admin } = me ? await me.sb.rpc("is_admin") : { data: false };
+  if (!me || admin !== true) return NextResponse.json({ error: "운영자만 볼 수 있습니다" }, { status: 403 });
   const env = Object.fromEntries(ENV.map(k => [k, process.env[k] ? "있음" : "없음"]));
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
