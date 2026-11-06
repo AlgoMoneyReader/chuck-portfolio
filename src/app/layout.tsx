@@ -13,9 +13,11 @@ import { ThemeProvider } from "@/lib/theme";
 import { THEME_INIT_SCRIPT, FONT_INIT_SCRIPT } from "@/lib/themeScript";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://alliknam.vercel.app"),
   title: "알읽남 - 증시 레이더",
   description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더",
   openGraph: { title: "알읽남 - 증시 레이더", description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더", siteName: "알읽남 증시 레이더", locale: "ko_KR", type: "website" },
+  twitter: { card: "summary_large_image", title: "알읽남 - 증시 레이더", description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더" },
   applicationName: "알읽남",
   appleWebApp: { capable: true, title: "알읽남", statusBarStyle: "black" },
 };
