@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import TabSwipeHint from "./TabSwipeHint";
 import { useSwipeTabs } from "@/lib/useSwipeTabs";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
@@ -825,6 +826,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
               className={`shrink-0 pb-2.5 text-sm font-semibold border-b-2 ${tab === t ? "text-white border-white" : "text-gray-500 border-transparent"}`}>{t}</button>
           ))}
         </div>
+        {tabs.length > 2 && <TabSwipeHint />}
       </div>
 
       <div key={tab} className="px-4 py-4 animate-fade-in">

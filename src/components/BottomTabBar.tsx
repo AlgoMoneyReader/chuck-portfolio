@@ -26,7 +26,7 @@ export default function BottomTabBar() {
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match(pathname);
           return (
-            <Link key={href} href={href}
+            <Link key={href} href={href} data-tour={`tab-${href.slice(1) || "home"}`}
               className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition-colors ${
                 active ? "text-gold" : "text-gray-500 hover:text-gray-300"
               }`}>
