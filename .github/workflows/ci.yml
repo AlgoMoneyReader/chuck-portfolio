@@ -8,7 +8,8 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 이 지원하는 우분투로 고정 (ubuntu-latest 가 26.04 로 바뀌며 브라우저 설치 실패)
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
