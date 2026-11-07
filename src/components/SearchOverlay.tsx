@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FiSearch, FiX } from "react-icons/fi";
 import master from "@/data/stock_master.json";
-import { logActivity } from "@/lib/activity";
+import { logActivity, trackSearch } from "@/lib/activity";
 import { US_POPULAR } from "@/data/usPopular";
 import { searchAsia } from "@/data/asiaStocks";
 import { useStockModal } from "./StockModal";
@@ -65,6 +65,7 @@ export default function SearchOverlay({ onClose }: { onClose: () => void }) {
 
   const go = (s: S) => {
     logActivity("search", { q: q.trim() || null, code: s.code, name: s.name, from: "상단 검색" });
+    trackSearch(q.trim() || s.name);
     try { localStorage.setItem(RECENT_KEY, JSON.stringify([s, ...readRecent().filter(r => r.code !== s.code)].slice(0, 8))); } catch { /* 무시 */ }
     onClose();
     // 국내·미국 모두 종목 팝업(현황·정보·뉴스·공시·레이더)

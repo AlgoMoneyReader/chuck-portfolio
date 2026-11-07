@@ -9,7 +9,7 @@ import { isStandalone, openInstallGuide } from "./InstallGuide";
 
 // My > 알림 설정 — 새 인사이트 · 지수 ±2% · 관심 종목 ±5%
 const PREF_KEY = "push:prefs";
-const DEFAULT: PushPrefs = { insight: true, idx: true, watch: true };
+const DEFAULT: PushPrefs = { insight: true, idx: true, watch: true, close: true };
 
 function keyBytes(b64: string): Uint8Array {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -126,6 +126,7 @@ export default function PushSettings() {
         <div className="mt-2 pl-14 divide-y divide-navy-border/40">
           <Row k="idx" title="지수 급등락" desc={"코스피·코스닥·S&P500·나스닥이 ±2% 넘게 움직일 때 (2%·3%·4%… 구간마다)"} />
           <Row k="watch" title="관심 종목 급등락" desc={user ? "관심 종목이 ±5% 넘게 움직일 때 (종목별 하루 한 번)" : "로그인하면 켤 수 있어요"} disabled={!user} />
+          <Row k="close" title="장 마감 요약" desc="국내 장 마감(15:40쯤)·미국 장 마감(아침 6시쯤)에 지수·외국인 수급 한 줄 요약" />
           <Row k="insight" title="새 인사이트" desc="알읽남 릴스·블로그 새 글이 올라올 때" />
           {on && <button onClick={test} className="mt-2 pt-2 text-xs text-cyan-brand font-semibold">테스트 알림 보내기</button>}
         </div>

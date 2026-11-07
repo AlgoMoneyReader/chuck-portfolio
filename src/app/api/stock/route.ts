@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { naverRealtime } from "@/lib/krLive";
 
 // Korean stock tickers use .KS suffix on Yahoo Finance
 // e.g. 삼성전자 = 005930.KS
@@ -25,7 +26,14 @@ async function fetchStockQuote(rawTicker: string) {
 
   const meta = result.meta;
   const price = meta.regularMarketPrice;
-  const prevClose = meta.chartPreviousClose ?? meta.previousClose;
+  // 전일 종가: range=5d 의 chartPreviousClose 는 '5일 전' 종가라 틀린다 → 일봉으로 직접 (마지막 봉이 오늘이면 그 앞 봉)
+  const ts: number[] = result.timestamp ?? [];
+  const cl: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+  const bars = ts.map((t, i) => ({ t, c: cl[i] })).filter(b => b.c != null) as { t: number; c: number }[];
+  const day = (t: number) => new Date((t + (meta.gmtoffset ?? 0)) * 1000).toISOString().slice(0, 10);
+  const lastIsToday = meta.regularMarketTime && bars.length ? day(bars[bars.length - 1].t) === day(meta.regularMarketTime) : true;
+  const prevBar = lastIsToday ? bars[bars.length - 2] : bars[bars.length - 1];
+  const prevClose = prevBar?.c ?? meta.previousClose ?? meta.chartPreviousClose;
   const change = price - prevClose;
   const changePct = (change / prevClose) * 100;
 
@@ -63,6 +71,18 @@ export async function GET(req: NextRequest) {
     tickerList.forEach((ticker, i) => {
       if (results[i]) data[ticker] = results[i] as NonNullable<typeof results[typeof i]>;
     });
+    // 국내 종목은 네이버 실시간 시세로 덮어쓴다 (Yahoo 국내 시세는 지연)
+    const kr = tickerList.map(t => [t, t.split(".")[0]] as const).filter(([t, c]) => /^[0-9][0-9A-Z]{5}$/.test(c) && (!t.includes(".") || /\.(KS|KQ)$/i.test(t)));
+    if (kr.length) {
+      const live = await naverRealtime(kr.map(([, c]) => c)).catch(() => ({} as Awaited<ReturnType<typeof naverRealtime>>));
+      for (const [t, c] of kr) {
+        const l = live[c], d = data[t];
+        if (!l) continue;
+        const prev = l.price - l.change;
+        data[t] = { ...(d ?? { ticker: t, yahooTicker: t, name: t, currency: "KRW", marketState: "", volume: 0, marketCap: undefined, fiftyTwoWeekHigh: undefined, fiftyTwoWeekLow: undefined }),
+          price: l.price, prevClose: prev, change: l.change, changePct: l.changePct, volume: l.volume } as typeof data[string];
+      }
+    }
     return NextResponse.json({ data, timestamp: new Date().toISOString() });
   } catch {
     return NextResponse.json({ error: "종목 데이터 조회 실패" }, { status: 500 });
