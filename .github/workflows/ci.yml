@@ -1,0 +1,35 @@
+# 배포 전 자동 점검 — PR 을 열면 타입 검사 · 린트 · 빌드 · 주요 화면 열어보기
+name: 배포 전 점검
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: 타입 검사
+        run: npx tsc --noEmit -p .
+      - name: 린트
+        run: npm run lint
+      - name: 빌드
+        run: npm run build
+      - name: 브라우저 설치
+        run: npx playwright install --with-deps chromium
+      - name: 주요 화면 열어보기
+        run: |
+          npm start -- -p 3000 > server.log 2>&1 &
+          npx wait-on -t 60000 http://localhost:3000
+          BASE=http://localhost:3000 node scripts/smoke.mjs
+      - name: 서버 로그 (실패 시)
+        if: failure()
+        run: tail -n 100 server.log || true

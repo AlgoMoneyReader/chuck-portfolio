@@ -18,7 +18,7 @@ interface Comment { id: number; user_id: string; body: string; created_at: strin
 export default function PostPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [liked, setLiked] = useState(false);
@@ -84,7 +84,7 @@ export default function PostPage({ params }: { params: { id: string } }) {
   if (loading) return <main className="max-w-3xl mx-auto px-4 py-10"><div className="h-40 bg-navy-card rounded-xl animate-pulse" /></main>;
   if (!post) return <main className="max-w-3xl mx-auto px-4 py-10 text-center text-sm text-gray-500">글을 찾을 수 없습니다</main>;
 
-  const mine = user?.id === post.user_id;
+  const mine = user?.id === post.user_id || isAdmin; // 운영자는 문제 글을 지울 수 있다
 
   return (
     <main className="max-w-3xl mx-auto px-4 py-5 space-y-4 animate-fade-in">
@@ -114,7 +114,7 @@ export default function PostPage({ params }: { params: { id: string } }) {
             <div className="flex items-center gap-2 text-[11px] text-gray-500">
               <span className="text-gray-300 font-semibold">{c.profiles?.nickname ?? "알 수 없음"}</span>
               <span>{relTime(c.created_at)}</span>
-              {user?.id === c.user_id && <button onClick={() => removeComment(c.id)} className="ml-auto text-signal-red">삭제</button>}
+              {(user?.id === c.user_id || isAdmin) && <button onClick={() => removeComment(c.id)} className="ml-auto text-signal-red">삭제</button>}
             </div>
             <p className="text-sm text-gray-200 mt-1 whitespace-pre-wrap break-words">{c.body}</p>
           </div>

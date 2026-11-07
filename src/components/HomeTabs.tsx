@@ -4,12 +4,14 @@ import { defaultRegion } from "@/lib/krSession";
 import LiveMarketPulse from "./LiveMarketPulse";
 import AfterHoursWidget, { AsiaTopWidget } from "./AfterHoursWidget";
 import MarketMap from "./MarketMap";
-import FlowBoard from "./FlowBoard";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OPEN_CHART_EVENT } from "./MarketTicker";
 import { Pills, RegionTabs, useQueryTab } from "./Segmented";
 import { MarketClockStrip } from "./MarketClock";
+import dynamic from "next/dynamic";
+// 수급 보드(차트 라이브러리 포함)는 '수급' 탭을 열 때만 불러온다 — 첫 화면을 가볍게
+const FlowBoard = dynamic(() => import("./FlowBoard"), { ssr: false, loading: () => <div className="card h-64 animate-pulse" /> });
 
 // 증시 탭: 국내/미국 → (국내) 증시/수급 → (수급) 코스피/코스닥/코스피200
 export default function HomeTabs() {

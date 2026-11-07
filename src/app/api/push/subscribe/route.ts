@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const db = adminDb();
   if (!db) return NextResponse.json({ error: "알림 기능이 아직 설정되지 않았습니다" }, { status: 503 });
-  const body = await req.json().catch(() => null) as { subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; prefs?: { insight?: boolean; idx?: boolean; watch?: boolean; close?: boolean } } | null;
+  const body = await req.json().catch(() => null) as { subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } }; prefs?: { insight?: boolean; idx?: boolean; watch?: boolean; close?: boolean; dart?: boolean } } | null;
   const s = body?.subscription;
   const endpoint = s?.endpoint ?? "", p256dh = s?.keys?.p256dh ?? "", auth = s?.keys?.auth ?? "";
   // 브라우저 푸시 서버 주소만 받는다
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const p = body?.prefs ?? {};
   const row = {
     endpoint, p256dh, auth, user_id: me?.user.id ?? null,
-    insight: p.insight !== false, idx: p.idx !== false, watch: !!me && p.watch !== false, close: p.close !== false,
+    insight: p.insight !== false, idx: p.idx !== false, watch: !!me && p.watch !== false, close: p.close !== false, dart: !!me && p.dart !== false,
     ua: (req.headers.get("user-agent") ?? "").slice(0, 200), updated_at: new Date().toISOString(),
   };
   const { error } = await db.from("push_subs").upsert(row, { onConflict: "endpoint" });

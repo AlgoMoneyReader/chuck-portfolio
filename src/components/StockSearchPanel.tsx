@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import staticMaster from "@/data/stock_master.json";
 import { US_POPULAR } from "@/data/usPopular";
 import { searchAsia } from "@/data/asiaStocks";
 import { useStockModal } from "./StockModal";
@@ -132,19 +131,20 @@ function InlineChart({ sym }: { sym: string }) {
 }
 
 export default function StockSearchPanel({ initialTicker = "", initialName = "" }: { initialTicker?: string; initialName?: string } = {}) {
-  // ── 전종목 마스터: 정적 JSON 직접 import (0ms, 네트워크 없음) ──────────────
-  // KRX KIND에서 수집한 KOSPI+KOSDAQ 2,610개 — src/data/stock_master.json
-  // 업데이트: scripts/generate-stock-master.py 실행 후 커밋
+  // ── 전종목 마스터: KRX KIND 에서 수집한 KOSPI+KOSDAQ 약 2,600개 (src/data/stock_master.json, 약 190KB)
+  // 첫 화면을 가볍게 하려고 화면이 뜬 뒤 따로 불러온다 (업데이트: scripts/generate-stock-master.py 실행 후 커밋)
   const stockModal = useStockModal();
-  const [allStocks] = useState<SearchResult[]>(() => {
-    const stocks = (staticMaster.stocks as SearchResult[]).filter(
-      (s) => s.type !== "spac" && s.type !== "preferred"
-    );
-    console.log(`[검색창] 정적 마스터 로드: ${stocks.length}개 (KRX ${staticMaster.generated})`);
-    return stocks;
-  });
-  const masterLoaded = true;        // 정적 import → 항상 즉시 로드됨
-  const masterFetching = false;     // 로딩 없음
+  const [allStocks, setAllStocks] = useState<SearchResult[]>([]);
+  const [masterFetching, setMasterFetching] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    import("@/data/stock_master.json").then(m => {
+      if (!alive) return;
+      setAllStocks(((m.default ?? m) as { stocks: SearchResult[] }).stocks.filter(s => s.type !== "spac" && s.type !== "preferred"));
+    }).finally(() => { if (alive) setMasterFetching(false); });
+    return () => { alive = false; };
+  }, []);
+  const masterLoaded = allStocks.length > 0;
 
   // ── 검색 상태 ────────────────────────────────────────────────────────────
   const [searchQuery,   setSearchQuery]   = useState("");

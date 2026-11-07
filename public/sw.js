@@ -18,6 +18,8 @@ self.addEventListener("push", e => {
 self.addEventListener("notificationclick", e => {
   e.notification.close();
   const url = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin).href;
+  // 바깥 사이트(DART 공시 원문 등)는 새 창으로
+  if (!url.startsWith(self.location.origin)) { e.waitUntil(self.clients.openWindow(url)); return; }
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const w of wins) {

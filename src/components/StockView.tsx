@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import StockTalk from "./StockTalk";
 import ShareStock from "./ShareStock";
 import TabSwipeHint from "./TabSwipeHint";
 import { useSwipeTabs } from "@/lib/useSwipeTabs";
@@ -17,12 +18,13 @@ import { ASIA_MARKETS, ASIA_STOCKS, type AsiaMkt } from "@/data/asiaStocks";
 // 아시아 종목(일본 .T · 대만 .TW · 홍콩 .HK · 중국 .SS/.SZ)
 const ASIA_RE = /\.(T|TW|TWO|HK|SS|SZ)$/i;
 const asiaMktOf = (c: string): AsiaMkt | null => { const m = ASIA_RE.exec(c)?.[1]?.toUpperCase(); return m === "T" ? "JP" : m === "TW" || m === "TWO" ? "TW" : m === "HK" ? "HK" : m === "SS" || m === "SZ" ? "CN" : null; };
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import dynamic from "next/dynamic";
 import CandleChart, { TIMEFRAMES, type Timeframe } from "@/components/CandleChart";
 import { useAuth } from "@/components/AuthProvider";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { relTime } from "@/lib/time";
 import { useChartColors } from "@/lib/theme";
+const EarnChart = dynamic(() => import("./EarnChart"), { ssr: false, loading: () => <div className="h-full rounded-lg bg-navy-sub/50 animate-pulse" /> });
 
 interface Overview {
   session?: { key: string; label: string; short: string; extended: boolean };
@@ -48,7 +50,7 @@ interface Overview {
   errors: string[];
 }
 
-type Tab = "현황" | "수급" | "정보" | "뉴스" | "공시" | "레이더";
+type Tab = "현황" | "수급" | "정보" | "뉴스" | "공시" | "레이더" | "토론";
 
 const won = (n: number | null | undefined) => (n == null ? "—" : n.toLocaleString("ko-KR"));
 const eok = (n: number | null | undefined) => {
@@ -156,18 +158,7 @@ function EarningsSection({ code, kis }: { code: string; kis: Overview["financial
             ))}
           </div>
           <div className="h-52 -mx-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
-                <XAxis dataKey="short" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis yAxisId="v" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={44} tickFormatter={v => eok(Number(v))} />
-                <YAxis yAxisId="p" orientation="right" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={34} tickFormatter={v => `${Math.round(Number(v))}%`} />
-                <Tooltip content={<EarnTooltip />} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                <Bar yAxisId="v" dataKey="sales" name="매출" fill="#5B8CFF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Bar yAxisId="v" dataKey="op" name="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Line yAxisId="p" dataKey="opm" name="영업이익률" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3, fill: dotFill, stroke: "#F59E0B" }} isAnimationActive={false} connectNulls />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <EarnChart rows={rows} fmt={v => eok(v)} tooltip={<EarnTooltip />} dotFill={dotFill} />
           </div>
 
           <div className="overflow-x-auto -mx-4 md:-mx-6 scrollbar-none">
@@ -629,18 +620,7 @@ function UsInfoTab({ ticker, price }: { ticker: string; price: number | null }) 
             return <p className="text-sm text-gray-300 leading-relaxed">최근 분기({L.label}) 매출 <b className="text-white">{usdBig(L.sales)}</b> · 영업이익 <b className="text-white">{usdBig(L.op)}</b>{L.qoq != null && <> · 직전 분기 대비 <b className={tone(L.qoq)}>{pct(L.qoq)}</b></>}</p>;
           })()}
           <div className="h-52 -mx-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={rows} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1A2545" vertical={false} />
-                <XAxis dataKey="short" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
-                <YAxis yAxisId="v" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={48} tickFormatter={v => usdBig(Number(v))} />
-                <YAxis yAxisId="p" orientation="right" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} width={34} tickFormatter={v => `${Math.round(Number(v))}%`} />
-                <Tooltip formatter={(v, n) => (n === "영업이익률" ? `${Number(v).toFixed(1)}%` : usdBig(Number(v)))} contentStyle={{ background: "rgb(var(--c-navy-card))", border: "1px solid rgb(var(--c-navy-border))", borderRadius: 12, fontSize: 12 }} />
-                <Bar yAxisId="v" dataKey="sales" name="매출" fill="#5B8CFF" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Bar yAxisId="v" dataKey="op" name="영업이익" fill="#1D9E75" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                <Line yAxisId="p" dataKey="opm" name="영업이익률" stroke="#F59E0B" strokeWidth={2} isAnimationActive={false} connectNulls />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <EarnChart rows={rows} fmt={v => usdBig(v)} />
           </div>
           <div className="overflow-x-auto -mx-4 md:-mx-6 scrollbar-none">
             <table className="text-xs num whitespace-nowrap">
@@ -728,7 +708,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   const cur = asiaInfo ? asiaInfo.currency : "$";
   const name = isUS ? (nameProp || asiaName || usItem?.name || code) : (d?.name ?? nameProp ?? code);
   const mk = isUS ? "US" : (d?.marketCode ?? (marketProp === "KQ" ? "KQ" : marketProp === "KS" ? "KS" : loading ? null : "KS"));
-  const tabs: Tab[] = asia ? ["현황", "뉴스"] : isUS ? ["현황", "정보", "뉴스", "공시", "레이더"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더"];
+  const tabs: Tab[] = asia ? ["현황", "뉴스", "토론"] : isUS ? ["현황", "정보", "뉴스", "공시", "레이더", "토론"] : ["현황", "수급", "정보", "뉴스", "공시", "레이더", "토론"];
 
   useEffect(() => { setTab("현황"); setX(null); setD(null); }, [code]);
   // 휴대폰: 좌우로 밀어 옆 탭 (차트·가로 스크롤 표에서 시작한 밀기는 무시)
@@ -841,6 +821,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
         )
           : tab === "정보" ? (isUS ? <UsInfoTab ticker={code} price={x?.price ?? null} /> : <OverviewTab d={d!} />)
           : tab === "수급" && !isUS ? <FlowTab code={code} market={d!.marketCode} />
+          : tab === "토론" ? <StockTalk code={code} name={name} />
           : tab === "레이더" ? <RadarReport code={code} name={name} market={isUS ? "US" : d!.marketCode} />
           : tab === "뉴스" ? <ListTab key={`news-${code}`} kind="news" url={`/api/stock-news?name=${encodeURIComponent(newsName)}`} />
           : <ListTab key={`dart-${code}`} kind="dart" url={isUS ? `/api/us-filings?ticker=${encodeURIComponent(code)}` : `/api/stock-disclosures?code=${code}`} />}

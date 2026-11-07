@@ -22,6 +22,8 @@
   - 다크/라이트 테마: `html[data-theme]`. 첫 방문은 기기 설정을 따름 (`src/lib/themeScript.ts`, `src/lib/theme.tsx`)
 - Supabase (인증·DB, RLS). 운영자 판별은 SQL 함수 `public.is_admin()`. 새 테이블 SQL 은 `supabase/*.sql` 에 두고
   `supabase/setup-all.sql` 에도 덧붙인 뒤 **사용자에게 SQL Editor 에서 실행해 달라고 안내**한다.
+  배포 묶음마다 `supabase/update-YYYY-MM-DD.sql` 하나로 모아 "이 파일 하나만 실행"하게 한다.
+- 화면 오류는 `client_errors`(운영자 화면 '사용자 화면 오류')에 자동으로 모인다 — 버그 제보가 오면 먼저 여기서 확인
 - 차트: lightweight-charts 4.2.3 (`src/components/CandleChart.tsx`), recharts
 - AI: `src/lib/gemini.ts` 의 `gemini()` — `cheapFirst` 옵션이면 Gemini 먼저, 실패 시 Claude.
   비용이 큰 기능은 `unstable_cache` 로 서버 캐시를 둔다. AI 사용량은 관리자 화면에 기능·모델별로 기록된다.
@@ -47,6 +49,8 @@
 ## 확인 방법
 
 - `npx tsc --noEmit -p .` → `npx next lint` → `npx next build`
+- 주요 화면 자동 점검: `npx next start -p 3520` 띄운 뒤 `BASE=http://localhost:3520 node scripts/smoke.mjs`
+  (PR 을 열면 GitHub Actions `.github/workflows/ci.yml` 이 같은 점검을 돌린다 — 배포(머지) 전에 결과 확인)
 - 화면 확인은 Playwright(사전 설치됨)로 스크린샷. 외부 API 가 막힌 환경에선 `page.route()` 로 응답을 흉내 내고,
   **그 경우 실제 데이터로는 확인 못 했다고 사용자에게 분명히 말한다.**
 - 다시 빌드한 뒤 스크린샷 스타일이 깨지면 예전 `next-server` 가 남은 것 — `pkill -f next-server` 후 새 포트로 띄운다.

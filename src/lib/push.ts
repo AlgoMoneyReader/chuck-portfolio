@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { VAPID_PUBLIC_KEY } from "./pushConfig";
 
 export interface PushPayload { title: string; body: string; url?: string; tag?: string }
-export interface SubRow { endpoint: string; p256dh: string; auth: string; user_id: string | null; insight: boolean; idx: boolean; watch: boolean; close?: boolean }
+export interface SubRow { endpoint: string; p256dh: string; auth: string; user_id: string | null; insight: boolean; idx: boolean; watch: boolean; close?: boolean; dart?: boolean }
 
 let admin: SupabaseClient | null = null;
 /** service_role 키로 RLS 를 건너뛰는 서버 전용 클라이언트. 키가 없으면 null (알림 기능 꺼짐) */
@@ -60,7 +60,7 @@ export async function sendTo(subs: SubRow[], payload: PushPayload): Promise<numb
   return ok;
 }
 
-export async function subsWhere(col: "insight" | "idx" | "watch" | "close"): Promise<SubRow[]> {
+export async function subsWhere(col: "insight" | "idx" | "watch" | "close" | "dart"): Promise<SubRow[]> {
   const { data } = await adminDb()!.from("push_subs").select("endpoint,p256dh,auth,user_id,insight,idx,watch").eq(col, true);
   return (data ?? []) as SubRow[];
 }
