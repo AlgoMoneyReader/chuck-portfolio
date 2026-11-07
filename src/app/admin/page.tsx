@@ -1,5 +1,6 @@
 import AdminGate from "@/components/AdminGate";
 import AdminHealth from "@/components/AdminHealth";
+import AdminStats from "@/components/AdminStats";
 import DeadlineCountdown from "@/components/DeadlineCountdown";
 import PortfolioManager from "@/components/PortfolioManager";
 import AdminConsole from "@/components/AdminConsole";
@@ -17,6 +18,9 @@ export default function AdminPage() {
           <span className="text-xs text-gray-500">래미안 엘라비네 자금 조달 현황</span>
         </div>
       </div>
+
+      {/* 방문자 · 인기 종목 · 알림 구독 */}
+      <AdminStats />
 
       {/* 회원 · AI 사용 현황 */}
       <AdminConsole />

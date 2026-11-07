@@ -62,7 +62,7 @@ export default function AddToPortfolio({ code, name, market, price }: { code: st
   return (
     <>
       <button onClick={start} aria-label="내 포트폴리오에 추가" title="내 포트폴리오에 추가"
-        className="w-10 h-10 rounded-full flex items-center justify-center bg-navy-card text-gray-400 hover:text-gold">
+        className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-navy-card text-gray-400 hover:text-gold">
         <FiBriefcase size={17} />
       </button>
       {open && typeof document !== "undefined" && createPortal(

@@ -3,6 +3,7 @@ import { adminDb, claim, getState, pushReady, sendTo, setState, subsWhere, type 
 import { MARKETS, clockOf } from "@/lib/marketClock";
 import { yahooDaily } from "@/lib/yahooDaily";
 import { naverRealtime } from "@/lib/krLive";
+import { holidayOn } from "@/lib/marketHolidays";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -17,6 +18,8 @@ const INDEXES = [
   { sym: "^IXIC", name: "나스닥", chart: "NASDAQ", mkt: "US" },
 ] as const;
 const IDX_PCT = 2, WATCH_PCT = 5;
+// 이미 보낸 알림인지 (기록은 남기지 않음) — 데이터를 다 모은 뒤 claim 으로 확정
+async function alreadySent(key: string) { const { data } = await adminDb()!.from("push_log").select("key").eq("key", key).maybeSingle(); return !!data; }
 
 type Q = { changePct: number; price: number };
 const dayIn = (tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -86,7 +89,29 @@ export async function GET(req: Request) {
     }
   }
 
-  // ── 3) 블로그 새 글: 5분마다 확인(블로그 목록 캐시도 5분). 처음엔 기준만 저장하고 보내지 않는다 ──
+  // ── 3) 장 마감 요약: 국내 15:35~17:30 · 미국 마감 직후(한국 아침) 하루 한 번 ──
+  const origin = new URL(req.url).origin;
+  const kst = new Date(Date.now() + 9 * 3600_000), kMin = kst.getUTCHours() * 60 + kst.getUTCMinutes(), kDay = kst.getUTCDay();
+  const krYmd = dayIn("Asia/Seoul"), krHol = holidayOn("KR", krYmd);
+  if (kDay >= 1 && kDay <= 5 && !(krHol && !krHol.early) && kMin >= 15 * 60 + 35 && kMin <= 17 * 60 + 30 && !(await alreadySent(`close:KR:${krYmd}`))) {
+    const q = await yahooDaily(["^KS11", "^KQ11"]);
+    const flow = await fetch(`${origin}/api/investor-flow?market=KOSPI`, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+      .then(r => r.json()).catch(() => null) as { flow?: { type: string; netBuy: number }[] } | null;
+    const f = flow?.flow?.find(x => x.type === "foreign")?.netBuy, ins = flow?.flow?.find(x => x.type === "institution")?.netBuy;
+    const eok = (v: number) => (Math.abs(v) >= 10000 ? `${v >= 0 ? "+" : "-"}${(Math.abs(v) / 10000).toFixed(1)}조` : `${v >= 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}억`);
+    const part = (sym: string, nm: string) => { const d = q[sym]; return d ? `${nm} ${fmt(d.price)} (${d.changePct >= 0 ? "+" : ""}${d.changePct.toFixed(2)}%)` : ""; };
+    const body = [part("^KS11", "코스피"), part("^KQ11", "코스닥")].filter(Boolean).join(" · ") + (f != null ? `\n외국인 ${eok(f)}${ins != null ? ` · 기관 ${eok(ins)}` : ""} (코스피)` : "");
+    if (q["^KS11"] && (await claim(`close:KR:${krYmd}`))) { const n = await sendTo(await subsWhere("close"), { title: "📊 오늘 국내 증시 마감", body, url: "/?m=kr", tag: "close-kr" }); log.push(`close KR → ${n}`); }
+  }
+  const etYmd = dayIn("America/New_York"), etDay = new Date(`${etYmd}T12:00:00Z`).getUTCDay(), usHol = holidayOn("US", etYmd);
+  if (etDay >= 1 && etDay <= 5 && !(usHol && !usHol.early) && kMin >= 5 * 60 + 15 && kMin <= 8 * 60 + 30 && !usOpen && !(await alreadySent(`close:US:${etYmd}`))) {
+    const q = await yahooDaily(["^GSPC", "^IXIC", "^DJI"]);
+    const part = (sym: string, nm: string) => { const d = q[sym]; return d ? `${nm} ${d.changePct >= 0 ? "+" : ""}${d.changePct.toFixed(2)}%` : ""; };
+    const body = [part("^GSPC", "S&P500"), part("^IXIC", "나스닥"), part("^DJI", "다우")].filter(Boolean).join(" · ");
+    if (q["^GSPC"] && (await claim(`close:US:${etYmd}`))) { const n = await sendTo(await subsWhere("close"), { title: "🇺🇸 간밤 미국 증시 마감", body, url: "/?m=us", tag: "close-us" }); log.push(`close US → ${n}`); }
+  }
+
+  // ── 4) 블로그 새 글: 5분마다 확인(블로그 목록 캐시도 5분). 처음엔 기준만 저장하고 보내지 않는다 ──
   const blogAt = Number((await getState("blog_checked")) ?? 0);
   if (Date.now() - blogAt > 4 * 60_000) {
     await setState("blog_checked", String(Date.now()));

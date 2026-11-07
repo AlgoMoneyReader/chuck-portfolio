@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import BottomTabBar from "@/components/BottomTabBar";
 import TourGuide from "@/components/TourGuide";
 import InstallGuide from "@/components/InstallGuide";
+import VisitTracker from "@/components/VisitTracker";
 import MarketTicker from "@/components/MarketTicker";
 import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -54,6 +55,7 @@ export default function RootLayout({
             <BottomTabBar />
             <TourGuide />
             <InstallGuide />
+            <VisitTracker />
            </StockModalProvider>
           </ThemeProvider>
         </AuthProvider>

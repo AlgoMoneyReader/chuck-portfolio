@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ShareStock from "./ShareStock";
 import TabSwipeHint from "./TabSwipeHint";
 import { useSwipeTabs } from "@/lib/useSwipeTabs";
 import { useMarketPoll } from "@/lib/useMarketPoll";
 import AddToPortfolio from "@/components/AddToPortfolio";
 import { krSession } from "@/lib/krSession";
 import RadarReport from "@/components/RadarReport";
-import { logActivity } from "@/lib/activity";
+import { logActivity, trackStock } from "@/lib/activity";
 import { useRouter } from "next/navigation";
 import { FiChevronLeft, FiHeart, FiX, FiExternalLink } from "react-icons/fi";
 import { US_POPULAR } from "@/data/usPopular";
@@ -735,10 +736,10 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
 
   // 국내: 종목 개요(이름·시장·PER 등)
   useEffect(() => {
-    if (isUS) { logActivity("view", { code, name }); return; }
+    if (isUS) { logActivity("view", { code, name }); trackStock(code, name); return; }
     setLoading(true);
     fetch(`/api/stock-overview?code=${code}`, { cache: "no-store" })
-      .then(r => r.json()).then(j => { setD(j.error ? null : j); if (!j.error) logActivity("view", { code, name: j.name }); }).finally(() => setLoading(false));
+      .then(r => r.json()).then(j => { setD(j.error ? null : j); if (!j.error) { logActivity("view", { code, name: j.name }); trackStock(code, j.name); } }).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, isUS]);
 
@@ -782,7 +783,7 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
   return (
     <div className={modal ? "" : "max-w-3xl mx-auto animate-fade-in"} {...swipe}>
       <div className={`sticky z-20 border-b border-navy-border px-4 pt-3 ${modal ? "top-0 bg-navy rounded-t-2xl" : "bg-navy/95 backdrop-blur"}`} style={modal ? undefined : { top: "var(--hdr, 115px)" }}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {!modal && <button onClick={() => router.back()} aria-label="뒤로" className="-ml-1 p-1 text-gray-300"><FiChevronLeft size={22} /></button>}
           <div className="min-w-0 flex-1">
             <p className="text-base font-bold text-white truncate">{name} <span className="text-xs font-normal text-gray-500">{code}{isUS && usItem ? ` · ${usItem.ko.split(" ")[0]}` : ""}{asiaInfo ? ` · ${asiaInfo.flag} ${asiaInfo.label}` : ""}</span></p>
@@ -809,14 +810,15 @@ export default function StockView({ code: rawCode, market: marketProp, name: nam
             })()}
           </div>
           {!isUS && d && <AddToPortfolio code={code} name={d.name} market={d.marketCode} price={q?.price} />}
+          {!asia && <ShareStock code={code} name={name} isUS={isUS} />}
           <button onClick={toggleFav} aria-label="관심종목"
-            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${fav ? "bg-pink-500/15 text-pink-400" : "bg-navy-card text-gray-500"}`}>
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${fav ? "bg-pink-500/15 text-pink-400" : "bg-navy-card text-gray-500"}`}>
             <FiHeart size={18} className={fav ? "fill-current" : ""} />
           </button>
           {modal && (
             <>
               <a href={`/stock/${code}`} aria-label="전체 화면으로 보기" title="전체 화면으로 보기" className="hidden sm:flex w-10 h-10 rounded-full items-center justify-center bg-navy-card text-gray-400 hover:text-white shrink-0"><FiExternalLink size={16} /></a>
-              <button onClick={onClose} aria-label="닫기" className="w-10 h-10 rounded-full flex items-center justify-center bg-navy-card text-gray-400 hover:text-white shrink-0"><FiX size={20} /></button>
+              <button onClick={onClose} aria-label="닫기" className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-navy-card text-gray-400 hover:text-white shrink-0"><FiX size={20} /></button>
             </>
           )}
         </div>
