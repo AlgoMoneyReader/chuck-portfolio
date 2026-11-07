@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/push";
 import { isOfftopic } from "@/lib/newsFilter";
 import master from "@/data/stock_master.json";
 
@@ -122,7 +123,9 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
   for (const m of Array.from(xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g))) {
     const block = m[1];
     const rawTitle = decode(/<title[^>]*>([\s\S]*?)<\/title>/.exec(block)?.[1] ?? "");
-    const title = f.google ? rawTitle.replace(/\s+-\s+[^-]+$/, "") : rawTitle;
+    // 구글 뉴스 제목 끝의 ' - 매체명' 제거 (기사 원제에 이미 붙어 있으면 두 번 붙어 오므로 반복)
+    let title = rawTitle;
+    if (f.google) { for (let k = 0; k < 2 && /\s+[-|]\s+[^-|]{1,20}$/.test(title); k++) title = title.replace(/\s+[-|]\s+[^-|]{1,20}$/, ""); }
     const url = decode(/<link[^>]*>([\s\S]*?)<\/link>/.exec(block)?.[1] ?? /<link[^>]+href="([^"]+)"/.exec(block)?.[1] ?? "");
     const date = decode(/<pubDate>([\s\S]*?)<\/pubDate>/.exec(block)?.[1] ?? /<dc:date>([\s\S]*?)<\/dc:date>/.exec(block)?.[1] ?? "");
     if (title.length < 8 || !url || EXCLUDE.some(w => title.includes(w)) || isOfftopic(title)) continue;
@@ -141,6 +144,28 @@ async function fetchFeed(f: Feed): Promise<NewsItem[]> {
     });
   }
   return out;
+}
+
+// 구글 뉴스 RSS 는 기사가 수정·재수집되면 그 시각을 발행 시각처럼 준다 (어제 기사가 '51분 전'으로 뜨는 문제).
+// 기사를 처음 본 시각을 Supabase(news_seen)에 남겨 두고, 더 이른 시각을 발행 시각으로 쓴다.
+async function fixDates(items: NewsItem[]) {
+  const db = adminDb();
+  if (!db || !items.length) return;
+  try {
+    const keyOf = (t: string) => t.replace(/\s+/g, "").slice(0, 120);
+    const keys = Array.from(new Set(items.map(i => keyOf(i.title))));
+    const { data, error } = await db.from("news_seen").select("key,first_seen").in("key", keys);
+    if (error) return; // 테이블이 아직 없으면(supabase/news.sql 미실행) 그대로
+    const seen = new Map((data ?? []).map(r => [r.key as string, r.first_seen as string]));
+    const now = new Date().toISOString();
+    const fresh: { key: string; first_seen: string }[] = [];
+    for (const it of items) {
+      const k = keyOf(it.title), first = seen.get(k);
+      if (first) { if (!it.publishedAt || first < it.publishedAt) it.publishedAt = new Date(first).toISOString(); }
+      else { const t = it.publishedAt && it.publishedAt < now ? it.publishedAt : now; fresh.push({ key: k, first_seen: t }); seen.set(k, t); }
+    }
+    if (fresh.length) await db.from("news_seen").upsert(fresh, { onConflict: "key", ignoreDuplicates: true });
+  } catch { /* 보정 실패해도 뉴스는 보여준다 */ }
 }
 
 let cache: { at: number; body: object } | null = null;
@@ -170,6 +195,7 @@ export async function GET(request: Request) {
     }
   });
 
+  await fixDates(items);
   items.sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
   const body = { items: items.slice(0, 120), sourceStats, fetchedAt: new Date().toISOString() };
   if (items.length) cache = { at: Date.now(), body };
