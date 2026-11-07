@@ -9,12 +9,12 @@ import { Suspense } from "react";
 import InsightFeed from "@/components/InsightFeed";
 import { Pills, useQueryTab } from "@/components/Segmented";
 
-const CATEGORIES = ["자유", "국내주식", "해외주식", "질문"] as const;
+const CATEGORIES = ["자유", "국내주식", "해외주식", "질문", "종목토론"] as const;
 const PAGE = 20;
 
 interface Row {
   id: number; title: string; category: string; created_at: string;
-  comment_count: number; like_count: number; profiles: { nickname: string } | null;
+  comment_count: number; like_count: number; profiles: { nickname: string } | null; stock_name?: string | null;
 }
 
 function CommunityBoard() {
@@ -28,7 +28,7 @@ function CommunityBoard() {
   const load = useCallback(async (offset: number) => {
     const sb = getBrowserSupabase();
     if (!sb) { setErr("Supabase 미설정"); setLoading(false); return; }
-    let q = sb.from("posts").select("id,title,category,created_at,comment_count,like_count,profiles(nickname)");
+    let q = sb.from("posts").select("*,profiles(nickname)");
     if (cat !== "전체") q = q.eq("category", cat);
     q = sort === "hot"
       ? q.order("like_count", { ascending: false }).order("created_at", { ascending: false })
@@ -76,7 +76,7 @@ function CommunityBoard() {
             <li key={r.id}>
               <Link href={`/community/${r.id}`} className="block px-4 py-3.5 hover:bg-white/5">
                 <div className="flex items-center gap-2 text-[11px] text-gray-500">
-                  <span className="text-cyan-brand">{r.category}</span>
+                  <span className="text-cyan-brand">{r.category}{r.stock_name ? ` · ${r.stock_name}` : ""}</span>
                   <span>{r.profiles?.nickname ?? "알 수 없음"}</span>
                   <span>· {relTime(r.created_at)}</span>
                 </div>

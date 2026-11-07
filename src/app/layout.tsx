@@ -5,6 +5,7 @@ import BottomTabBar from "@/components/BottomTabBar";
 import TourGuide from "@/components/TourGuide";
 import InstallGuide from "@/components/InstallGuide";
 import VisitTracker from "@/components/VisitTracker";
+import ErrorReporter from "@/components/ErrorReporter";
 import MarketTicker from "@/components/MarketTicker";
 import StickyHeader from "@/components/StickyHeader";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -19,6 +20,12 @@ export const metadata: Metadata = {
   openGraph: { title: "알읽남 - 증시 레이더", description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더", siteName: "알읽남 증시 레이더", locale: "ko_KR", type: "website" },
   twitter: { card: "summary_large_image", title: "알읽남 - 증시 레이더", description: "알고리즘이 읽어주는 시장 · 실시간 수급·시황·뉴스·실적 캘린더" },
   applicationName: "알읽남",
+  keywords: ["주식", "증시", "코스피", "코스닥", "나스닥", "실시간 시세", "외국인 순매수", "기관 수급", "NXT", "애프터마켓", "경제 캘린더", "알읽남"],
+  // 검색엔진 소유 확인: Vercel 환경변수에 값만 넣으면 됨 (네이버 서치어드바이저 · 구글 서치콘솔 'HTML 태그' 방식의 content 값)
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.NAVER_SITE_VERIFICATION ? { "naver-site-verification": process.env.NAVER_SITE_VERIFICATION } : undefined,
+  },
   appleWebApp: { capable: true, title: "알읽남", statusBarStyle: "black" },
 };
 
@@ -56,6 +63,7 @@ export default function RootLayout({
             <TourGuide />
             <InstallGuide />
             <VisitTracker />
+            <ErrorReporter />
            </StockModalProvider>
           </ThemeProvider>
         </AuthProvider>

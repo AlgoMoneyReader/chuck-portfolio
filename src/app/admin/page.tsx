@@ -1,6 +1,7 @@
 import AdminGate from "@/components/AdminGate";
 import AdminHealth from "@/components/AdminHealth";
 import AdminStats from "@/components/AdminStats";
+import AdminErrors from "@/components/AdminErrors";
 import DeadlineCountdown from "@/components/DeadlineCountdown";
 import PortfolioManager from "@/components/PortfolioManager";
 import AdminConsole from "@/components/AdminConsole";
@@ -24,6 +25,9 @@ export default function AdminPage() {
 
       {/* 회원 · AI 사용 현황 */}
       <AdminConsole />
+
+      {/* 사용자 화면 오류 */}
+      <AdminErrors />
 
       {/* 서버 설정 점검 */}
       <AdminHealth />

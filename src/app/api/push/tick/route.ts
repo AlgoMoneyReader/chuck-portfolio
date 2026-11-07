@@ -4,10 +4,11 @@ import { MARKETS, clockOf } from "@/lib/marketClock";
 import { yahooDaily } from "@/lib/yahooDaily";
 import { naverRealtime } from "@/lib/krLive";
 import { holidayOn } from "@/lib/marketHolidays";
+import { dartGet } from "@/lib/dart";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // Supabase pg_cron 이 5분마다 부른다 (supabase/push.sql).
 // 비밀키 없이 공개돼 있어도 안전하게: ① 1분 안에 다시 부르면 바로 끝 ② 같은 알림은 push_log 로 한 번만 보낸다
@@ -111,7 +112,47 @@ export async function GET(req: Request) {
     if (q["^GSPC"] && (await claim(`close:US:${etYmd}`))) { const n = await sendTo(await subsWhere("close"), { title: "🇺🇸 간밤 미국 증시 마감", body, url: "/?m=us", tag: "close-us" }); log.push(`close US → ${n}`); }
   }
 
-  // ── 4) 블로그 새 글: 5분마다 확인(블로그 목록 캐시도 5분). 처음엔 기준만 저장하고 보내지 않는다 ──
+  // ── 4) 관심 종목 새 공시: 평일 07~21시, 10분마다 DART 오늘 공시 목록(전체)을 받아 관심 종목만 ──
+  const dartAt = Number((await getState("dart_checked")) ?? 0);
+  if (kDay >= 1 && kDay <= 5 && kMin >= 7 * 60 && kMin <= 21 * 60 && Date.now() - dartAt > 9 * 60_000 && process.env.DART_API_KEY) {
+    await setState("dart_checked", String(Date.now()));
+    try {
+      const last = (await getState("dart_last")) ?? "";
+      const today = krYmd.replace(/-/g, "");
+      const fresh: { rcept_no: string; stock_code: string; corp_name: string; report_nm: string }[] = [];
+      for (let page = 1; page <= 3; page++) {
+        const j = await dartGet("list.json", { bgn_de: today, end_de: today, page_no: String(page), page_count: "100", sort: "date", sort_mth: "desc" }) as { status?: string; list?: { rcept_no: string; stock_code: string; corp_name: string; report_nm: string }[]; total_page?: number };
+        const rows = j.list ?? [];
+        let reached = false;
+        for (const r of rows) { if (last && r.rcept_no <= last) { reached = true; break; } fresh.push(r); }
+        if (reached || page >= (j.total_page ?? 1) || !rows.length) break;
+      }
+      const maxNo = fresh.reduce((m, r) => (r.rcept_no > m ? r.rcept_no : m), last);
+      if (maxNo) await setState("dart_last", maxNo);
+      // 처음 한 번은 기준만 잡고 보내지 않는다 (오늘 이미 나온 공시를 한꺼번에 보내지 않게)
+      const listed = last ? fresh.filter(r => /^[0-9][0-9A-Z]{5}$/.test((r.stock_code ?? "").trim())) : [];
+      if (listed.length) {
+        const subs = (await subsWhere("dart")).filter(s => s.user_id);
+        const users = Array.from(new Set(subs.map(s => s.user_id!)));
+        if (users.length) {
+          const codes = Array.from(new Set(listed.map(r => r.stock_code.trim())));
+          const { data: wl } = await adminDb()!.from("watchlist").select("user_id,code").in("user_id", users).in("code", codes);
+          for (const w of (wl ?? []) as { user_id: string; code: string }[]) {
+            for (const r of listed.filter(x => x.stock_code.trim() === w.code)) {
+              if (!(await claim(`dart:${r.rcept_no}:${w.user_id}`))) continue;
+              const n = await sendTo(subs.filter(s => s.user_id === w.user_id), {
+                title: `📑 ${r.corp_name} 공시`, body: r.report_nm.replace(/\s+/g, " ").trim().slice(0, 120),
+                url: `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept_no}`, tag: `dart-${r.rcept_no}`,
+              });
+              log.push(`공시 ${r.corp_name} → ${n}`);
+            }
+          }
+        }
+      }
+    } catch (e) { log.push(`dart 실패: ${String(e).slice(0, 60)}`); }
+  }
+
+  // ── 5) 블로그 새 글: 5분마다 확인(블로그 목록 캐시도 5분). 처음엔 기준만 저장하고 보내지 않는다 ──
   const blogAt = Number((await getState("blog_checked")) ?? 0);
   if (Date.now() - blogAt > 4 * 60_000) {
     await setState("blog_checked", String(Date.now()));
